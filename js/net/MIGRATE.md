@@ -4,6 +4,12 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### Published names refuse empty segments
+
+`Origin.Producer.createBroadcast` and `dynamic` take the name as a plain `string` and throw on a leading, trailing, or doubled `/` rather than relying on `Path.from` to collapse it, so a name has one spelling.
+Pass the canonical name (`room/cam`, not `/room/cam/` or `room//cam`); a `Path.Valid` is already canonical and still works.
+Scope roots and subscription paths keep normalizing.
+
 ### Published names refuse navigation segments
 
 Broadcast creation and route publication now refuse literal `.` and `..` segments, including segments in the producer's root.

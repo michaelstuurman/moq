@@ -26,11 +26,25 @@ pub type PathOwned = Path<'static>;
 pub trait AsPath {
 	/// Borrow `self` as a [`Path`], normalizing slashes only when needed.
 	fn as_path(&self) -> Path<'_>;
+
+	/// Whether [`as_path`](Self::as_path) keeps the input as written, with no leading, trailing, or doubled `/` to drop.
+	fn is_normalized(&self) -> bool {
+		true
+	}
+}
+
+// Normalization only removes slashes, so a string without an empty segment is already normal.
+fn is_normalized(s: &str) -> bool {
+	!(s.starts_with('/') || s.ends_with('/') || s.contains("//"))
 }
 
 impl<'a> AsPath for &'a str {
 	fn as_path(&self) -> Path<'a> {
 		Path::new(self)
+	}
+
+	fn is_normalized(&self) -> bool {
+		is_normalized(self)
 	}
 }
 
@@ -51,11 +65,19 @@ impl AsPath for String {
 	fn as_path(&self) -> Path<'_> {
 		Path::new(self)
 	}
+
+	fn is_normalized(&self) -> bool {
+		is_normalized(self)
+	}
 }
 
 impl<'a> AsPath for &'a String {
 	fn as_path(&self) -> Path<'a> {
 		Path::new(self)
+	}
+
+	fn is_normalized(&self) -> bool {
+		is_normalized(self)
 	}
 }
 

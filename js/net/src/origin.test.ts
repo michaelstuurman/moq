@@ -2534,3 +2534,20 @@ test("published names refuse navigation segments", () => {
 		origin.close();
 	}
 });
+
+test("published names refuse empty segments", () => {
+	const origin = new Producer();
+	try {
+		for (const name of ["/room/cam", "room/cam/", "room//cam", "/"]) {
+			expect(() => origin.createBroadcast(name)).toThrow("empty segment");
+			expect(() => origin.dynamic(name)).toThrow("empty segment");
+		}
+		// A scope root is a prefix, normalized like a subscription, so it never refuses a name below it.
+		const scoped = origin.scope(Path.from("room/"), new Path.Patterns([Path.Pattern.all()]));
+		scoped.createBroadcast("cam").close();
+		// The root path has no segments, so none of them is empty.
+		origin.createBroadcast("").close();
+	} finally {
+		origin.close();
+	}
+});

@@ -1344,6 +1344,14 @@ fn publish_path(path: &Path) -> Result<(), Error> {
 	Ok(())
 }
 
+// Checked before normalization, which would otherwise give one name several spellings.
+fn publish_input(path: &impl AsPath) -> Result<(), Error> {
+	if !path.is_normalized() {
+		return Err(Error::EmptySegment);
+	}
+	Ok(())
+}
+
 /// What `scope` lets a route at `claim` serve: see [`RouteEntry::reach`].
 fn reach(scope: &Patterns, claim: &Pattern) -> Vec<Pattern> {
 	scope
@@ -2152,9 +2160,11 @@ impl Producer {
 	/// [`Error::BoundsExceeded`] if the full rooted path exceeds
 	/// [`Path::MAX_PARTS`], [`Error::InvalidPath`] if it holds a segment no
 	/// pattern can spell (`*` or `**`), [`Error::NavigationSegment`] for a literal `.` or `..`,
+	/// [`Error::EmptySegment`] for a string with a leading, trailing, or doubled `/`,
 	/// or [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
 	pub fn create_broadcast(&self, path: impl AsPath) -> Result<broadcast::Producer, Error> {
+		publish_input(&path)?;
 		let full = self.root.join(path.as_path()).to_owned();
 		let (broadcast, announcer) = self.create_withheld(full)?;
 		Ok(broadcast.with_announcer(announcer))
@@ -2519,6 +2529,7 @@ struct Announcing {
 impl Announcing {
 	/// The requested prefix as-is, refused when its subtree does not overlap the scope.
 	fn new(producer: &Producer, prefix: impl AsPath) -> Result<Self, Error> {
+		publish_input(&prefix)?;
 		let requested = producer.root.join(prefix.as_path()).to_owned();
 		publish_path(&requested)?;
 		if requested.parts().count() > Path::MAX_PARTS {
@@ -13064,6 +13075,30 @@ mod tests {
 		for path in ["room/.pro/cam", "room/a..b", "room/cam"] {
 			producer.create_broadcast(path).unwrap();
 		}
+	}
+
+	#[moq_clock::test]
+	async fn published_names_refuse_empty_segments() {
+		let producer = origin(1).produce();
+		for path in ["/room/cam", "room/cam/", "room//cam", "/"] {
+			assert!(
+				matches!(producer.create_broadcast(path), Err(Error::EmptySegment)),
+				"created {path}"
+			);
+			assert!(
+				matches!(producer.create_broadcast(path.to_string()), Err(Error::EmptySegment)),
+				"created owned {path}"
+			);
+			assert!(
+				matches!(producer.dynamic(path), Err(Error::EmptySegment)),
+				"served {path}"
+			);
+		}
+		// A scope root is a prefix, normalized like a subscription, so it never refuses a name below it.
+		let scoped = producer.scope("room/", &Patterns::from_iter([Pattern::all()])).unwrap();
+		scoped.create_broadcast("cam").unwrap();
+		// The root path has no segments, so none of them is empty.
+		producer.create_broadcast("").unwrap();
 	}
 
 	#[moq_clock::test]

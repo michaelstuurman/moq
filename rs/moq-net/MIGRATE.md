@@ -9,6 +9,12 @@ How to update your code for each breaking change, newest first.
 Rename `moq_net::stats::Refusal` to `moq_net::stats::RefusalKind`, so it no longer shares a name with `moq_auth::Refusal`; its variants and `Refusals` are unchanged.
 Replace `moq_net::time::now()` with `moq_net::time::Instant::now()`, the one way to read the clock.
 
+### Published names refuse empty segments
+
+`origin::Producer::create_broadcast` and `dynamic` refuse a string name with a leading, trailing, or doubled `/` with `Error::EmptySegment`, instead of collapsing it, so a name has one spelling.
+Pass the canonical name (`room/cam`, not `/room/cam/` or `room//cam`); a `Path` is already canonical and still works.
+`AsPath` gains a provided `is_normalized` method. Scope roots and subscription paths keep normalizing.
+
 ### Published names refuse navigation segments
 
 Broadcast creation and route publication now refuse literal `.` and `..` segments, including segments in the producer's root.
