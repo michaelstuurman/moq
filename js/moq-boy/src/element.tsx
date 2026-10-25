@@ -43,6 +43,11 @@ export default class MoqBoy extends HTMLElement {
 	readonly games = new Moq.Signals.Signal<ReadonlyMap<string, Game>>(new Map());
 
 	readonly #signals = new Moq.Signals.Effect();
+	// Set when the element is connected to the DOM.
+	readonly #connected = new Moq.Signals.Signal(false);
+	// The path attributes holding an invalid path, which idle the element until each is fixed.
+	readonly #refused = new Moq.Signals.Signal<ReadonlySet<Observed>>(new Set());
+	// Whether to run: connected, with nothing refused.
 	readonly #enabled = new Moq.Signals.Signal(false);
 	readonly #prefix = new Moq.Signals.Signal<Moq.Path.Valid>(DEFAULT_PREFIX);
 	readonly #gamePrefixOverride = new Moq.Signals.Signal<Moq.Path.Valid | undefined>(undefined);
@@ -53,6 +58,10 @@ export default class MoqBoy extends HTMLElement {
 	constructor() {
 		super();
 		cleanup.register(this, this.#signals);
+
+		this.#signals.run((effect) => {
+			this.#enabled.set(effect.get(this.#connected) && effect.get(this.#refused).size === 0);
+		});
 
 		// One origin, both directions: viewer broadcasts are published into it and the
 		// relay's announced games arrive in it, with no risk of echoing either back.
@@ -70,7 +79,7 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	connectedCallback() {
-		this.#enabled.set(true);
+		this.#connected.set(true);
 
 		// Render the UI into a Shadow DOM (reuse existing on reconnect).
 		const shadow = this.shadowRoot ?? this.attachShadow({ mode: "open" });
@@ -78,27 +87,36 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	disconnectedCallback() {
-		this.#enabled.set(false);
+		this.#connected.set(false);
 		this.#dispose?.();
 		this.#dispose = undefined;
 	}
 
-	// A path attribute with an empty segment throws before it reaches discovery: refused, never defaulted.
 	attributeChangedCallback(name: Observed, _oldValue: string | null, newValue: string | null) {
-		switch (name) {
-			case "url":
-				this.connection.url.set(newValue ? new URL(newValue) : undefined);
-				break;
-			case "prefix":
-				this.#prefix.set(newValue === null ? DEFAULT_PREFIX : Moq.Path.from(newValue));
-				break;
-			case "prefix-game":
-				this.#gamePrefixOverride.set(newValue === null ? undefined : Moq.Path.from(newValue));
-				break;
-			case "prefix-viewer":
-				this.#viewerPrefixOverride.set(newValue === null ? undefined : Moq.Path.from(newValue));
-				break;
+		if (name === "url") {
+			this.connection.url.set(newValue ? new URL(newValue) : undefined);
+			return;
 		}
+
+		// Refused until parsed, so an invalid path leaves the element idle and the error rethrown.
+		this.#refuse(name, true);
+		const path = newValue === null ? undefined : Moq.Path.from(newValue);
+		this.#refuse(name, false);
+
+		if (name === "prefix") {
+			this.#prefix.set(path ?? DEFAULT_PREFIX);
+		} else if (name === "prefix-game") {
+			this.#gamePrefixOverride.set(path);
+		} else {
+			this.#viewerPrefixOverride.set(path);
+		}
+	}
+
+	#refuse(name: Observed, refused: boolean) {
+		const next = new Set(this.#refused.peek());
+		if (refused) next.add(name);
+		else next.delete(name);
+		this.#refused.set(next);
 	}
 
 	/** The relay URL, mirrored by the `url` attribute. */
@@ -117,6 +135,7 @@ export default class MoqBoy extends HTMLElement {
 
 	set prefixPath(value: string) {
 		this.#prefix.set(Moq.Path.from(value));
+		this.#refuse("prefix", false);
 	}
 
 	/** The path prefix for game broadcasts, mirrored by the `prefix-game` attribute. */
@@ -126,6 +145,7 @@ export default class MoqBoy extends HTMLElement {
 
 	set prefixGame(value: string) {
 		this.#gamePrefixOverride.set(Moq.Path.from(value));
+		this.#refuse("prefix-game", false);
 	}
 
 	/** The path prefix for viewer broadcasts, mirrored by the `prefix-viewer` attribute. */
@@ -135,6 +155,7 @@ export default class MoqBoy extends HTMLElement {
 
 	set prefixViewer(value: string) {
 		this.#viewerPrefixOverride.set(Moq.Path.from(value));
+		this.#refuse("prefix-viewer", false);
 	}
 
 	#runDiscovery(effect: Moq.Signals.Effect) {

@@ -169,6 +169,11 @@ export default class MoqPublish extends HTMLElement {
 	#eitherEnabled: Signal<boolean>;
 
 	// Set when the element is connected to the DOM.
+	#connected = new Signal(false);
+	// Set while the `name` attribute is an invalid path, which idles the element instead of running
+	// it at the root or the previous name.
+	#refused = new Signal(false);
+	// Whether to run: connected, with nothing refused.
 	#enabled = new Signal(false);
 
 	// Whether to advertise the broadcast, driven by the `announce` mode.
@@ -186,6 +191,10 @@ export default class MoqPublish extends HTMLElement {
 		super();
 
 		cleanup.register(this, this.signals);
+
+		this.signals.run((effect) => {
+			this.#enabled.set(effect.get(this.#connected) && !effect.get(this.#refused));
+		});
 
 		this.connection = new Moq.Connection({
 			enabled: this.#enabled,
@@ -327,11 +336,11 @@ export default class MoqPublish extends HTMLElement {
 	}
 
 	connectedCallback() {
-		this.#enabled.set(true);
+		this.#connected.set(true);
 	}
 
 	disconnectedCallback() {
-		this.#enabled.set(false);
+		this.#connected.set(false);
 	}
 
 	attributeChangedCallback(name: Observed, oldValue: string | null, newValue: string | null) {
@@ -342,8 +351,10 @@ export default class MoqPublish extends HTMLElement {
 		} else if (name === "versions") {
 			this.connection.versions.set(parseVersions(newValue));
 		} else if (name === "name") {
-			// An invalid path throws: refused, never replaced by the root.
+			// Refused until parsed, so an invalid path leaves the element idle and the error rethrown.
+			this.#refused.set(true);
 			this.#name.set(Moq.Path.from(newValue ?? ""));
+			this.#refused.set(false);
 		} else if (name === "source") {
 			this.controls.source.set(parseSource(newValue));
 		} else if (name === "announce") {
@@ -474,6 +485,7 @@ export default class MoqPublish extends HTMLElement {
 
 	set name(value: string | Moq.Path.Valid) {
 		this.#name.set(Moq.Path.from(value));
+		this.#refused.set(false);
 	}
 
 	/** What to capture: a built-in source, a file, or nothing. Mirrored by the `source` attribute. */

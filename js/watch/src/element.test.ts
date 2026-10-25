@@ -1,9 +1,43 @@
 import { expect, mock, spyOn, test } from "bun:test";
+import * as Moq from "@moq/net";
 
-// Stand-ins for the only DOM globals the module body touches: the base class and the registry it
-// writes to. No element is constructed here, so nothing else is reached.
+// Stand-ins for the DOM globals the element touches. Like a browser, setting an attribute to a new
+// value calls back into `attributeChangedCallback`, so reflection loops are exercised.
 const registry = new Map<string, CustomElementConstructor>();
-globalThis.HTMLElement = class {} as unknown as typeof HTMLElement;
+globalThis.HTMLElement = class {
+	readonly style = {};
+	readonly #attributes = new Map<string, string>();
+
+	setAttribute(name: string, value: string) {
+		const old = this.#attributes.get(name) ?? null;
+		this.#attributes.set(name, value);
+		if (old !== value) this.attributeChangedCallback(name, old, value);
+	}
+
+	removeAttribute(name: string) {
+		const old = this.#attributes.get(name) ?? null;
+		this.#attributes.delete(name);
+		if (old !== null) this.attributeChangedCallback(name, old, null);
+	}
+
+	attributeChangedCallback(_name: string, _old: string | null, _value: string | null) {}
+	querySelector() {
+		return null;
+	}
+	appendChild() {}
+	getBoundingClientRect() {
+		return { width: 0, height: 0 };
+	}
+} as unknown as typeof HTMLElement;
+globalThis.MutationObserver = class {
+	observe() {}
+	disconnect() {}
+} as unknown as typeof MutationObserver;
+globalThis.ResizeObserver = class {
+	observe() {}
+	disconnect() {}
+} as unknown as typeof ResizeObserver;
+globalThis.document = { createElement: () => ({ style: {} }) } as unknown as Document;
 globalThis.customElements = {
 	define: (name: string, ctor: CustomElementConstructor) => {
 		registry.set(name, ctor);
@@ -63,3 +97,34 @@ for (const [value, expected] of [
 		expect(set).toHaveBeenCalledWith(expected);
 	});
 }
+
+// A refused name idles the element rather than watching the root or the previous name.
+test("an invalid name attribute idles the element until a valid one arrives", async () => {
+	const Element = require("./element").default;
+	// Effects rerun in a later task, so each check waits one out.
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+	const el = new Element();
+	try {
+		// Invalid markup, parsed before the element connects and before reflection first runs.
+		expect(() => el.setAttribute("name", "/room")).toThrow();
+		el.connectedCallback();
+		await settle();
+		expect(el.connection.enabled.peek()).toBe(false);
+
+		el.setAttribute("name", "room");
+		await settle();
+		expect(el.connection.enabled.peek()).toBe(true);
+		expect(el.name).toBe(Moq.Path.from("room"));
+
+		expect(() => el.setAttribute("name", "room//cam")).toThrow();
+		await settle();
+		expect(el.connection.enabled.peek()).toBe(false);
+
+		el.setAttribute("name", "room/cam");
+		await settle();
+		expect(el.connection.enabled.peek()).toBe(true);
+		expect(el.name).toBe(Moq.Path.from("room/cam"));
+	} finally {
+		el.signals.close();
+	}
+});

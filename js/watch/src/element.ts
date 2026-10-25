@@ -210,6 +210,11 @@ export default class MoqWatch extends HTMLElement {
 	#captionsOverlayEl?: HTMLDivElement;
 
 	// Set when the element is connected to the DOM.
+	#connected = new Signal(false);
+	// Set while the `name` attribute is an invalid path, which idles the element instead of running
+	// it at the root or the previous name.
+	#refused = new Signal(false);
+	// Whether to run: connected, with nothing refused.
 	#enabled = new Signal(false);
 
 	// Stashed volume to restore on unmute.
@@ -227,6 +232,10 @@ export default class MoqWatch extends HTMLElement {
 		super();
 
 		cleanup.register(this, this.signals);
+
+		this.signals.run((effect) => {
+			this.#enabled.set(effect.get(this.#connected) && !effect.get(this.#refused));
+		});
 
 		this.connection = new Moq.Connection({
 			enabled: this.#enabled,
@@ -322,6 +331,8 @@ export default class MoqWatch extends HTMLElement {
 		});
 
 		this.signals.run((effect) => {
+			// Keep a refused attribute visible, rather than overwrite it with the name still held.
+			if (effect.get(this.#refused)) return;
 			const name = effect.get(this.#name);
 			this.setAttribute("name", name.toString());
 		});
@@ -398,7 +409,7 @@ export default class MoqWatch extends HTMLElement {
 	// Annoyingly, we have to use these callbacks to figure out when the element is connected to the DOM.
 	// This wouldn't be so bad if there was a destructor for web components to clean up our effects.
 	connectedCallback() {
-		this.#enabled.set(true);
+		this.#connected.set(true);
 		this.style.display = "block";
 		this.style.position = "relative";
 
@@ -418,7 +429,7 @@ export default class MoqWatch extends HTMLElement {
 
 	disconnectedCallback() {
 		// Stop everything but don't actually cleanup just in case we get added back to the DOM.
-		this.#enabled.set(false);
+		this.#connected.set(false);
 	}
 
 	attributeChangedCallback(name: Observed, oldValue: string | null, newValue: string | null) {
@@ -431,8 +442,10 @@ export default class MoqWatch extends HTMLElement {
 		} else if (name === "versions") {
 			this.connection.versions.set(parseVersions(newValue));
 		} else if (name === "name") {
-			// An invalid path throws: refused, never replaced by the root.
+			// Refused until parsed, so an invalid path leaves the element idle and the error rethrown.
+			this.#refused.set(true);
 			this.#name.set(Moq.Path.from(newValue ?? ""));
+			this.#refused.set(false);
 		} else if (name === "paused") {
 			this.controls.paused.set(parseBoolean(newValue, false));
 		} else if (name === "volume") {
@@ -486,6 +499,7 @@ export default class MoqWatch extends HTMLElement {
 
 	set name(value: string | Moq.Path.Valid) {
 		this.#name.set(Moq.Path.from(value));
+		this.#refused.set(false);
 	}
 
 	/** Whether playback is paused, mirrored by the `paused` attribute. */
