@@ -69,7 +69,10 @@ async fn old_peer_keeps_hidden_paths(version: moq_net::Version) {
 		let cluster = cluster::Cluster::new(cluster::Options::new(cluster_config))
 			.expect("cluster init")
 			.with_connect(client_config, Default::default());
-		let node = cluster.origin.create_broadcast(Path::new(".hidden/test").unwrap()).expect("create hidden");
+		let node = cluster
+			.origin
+			.create_broadcast(Path::new(".hidden/test").unwrap())
+			.expect("create hidden");
 		node.announce(Default::default()).expect("announce hidden");
 		let cluster_run = tokio::spawn(cluster.clone().start().await.expect("cluster start").run());
 

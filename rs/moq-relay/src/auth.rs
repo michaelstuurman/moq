@@ -1441,7 +1441,10 @@ mod tests {
 		let mounted = Token::new("/room", &mounted).unwrap();
 		assert_eq!(
 			mounted.mounts,
-			[(Path::new(".svc").unwrap().to_owned(), Path::new(".svc/room").unwrap().to_owned())]
+			[(
+				Path::new(".svc").unwrap().to_owned(),
+				Path::new(".svc/room").unwrap().to_owned()
+			)]
 		);
 		assert!(wide.covered_by(&wide));
 		assert!(narrow.covered_by(&wide));
@@ -1487,7 +1490,10 @@ mod tests {
 		// The same alias still names the same root.
 		assert_eq!(token.recheck(&aliased).unwrap().root, token.root);
 		// A grant without the alias is relative to what was dialed, not to the old root.
-		assert_eq!(token.recheck(&everything()).unwrap().root, Path::new("vanity/room").unwrap().to_owned());
+		assert_eq!(
+			token.recheck(&everything()).unwrap().root,
+			Path::new("vanity/room").unwrap().to_owned()
+		);
 	}
 }
 

@@ -2454,7 +2454,11 @@ mod tests {
 		let busy = Error::Session(SessionError::TooManyRequests);
 		assert_eq!(handle.retry(id, &busy), Some(RETRY_INITIAL));
 
-		let mut gate = Gate::new(handle.clone(), crate::Path::new("room").unwrap().to_owned(), Direction::Publish);
+		let mut gate = Gate::new(
+			handle.clone(),
+			crate::Path::new("room").unwrap().to_owned(),
+			Direction::Publish,
+		);
 		let waiter = kio::Waiter::noop();
 		assert!(
 			gate.poll_ready(&waiter).is_pending(),
@@ -2492,7 +2496,11 @@ mod tests {
 	fn an_empty_token_never_holds_a_request() {
 		let handle = Link::new(true);
 		let _setup = handle.present(Bytes::new(), true).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").unwrap().to_owned(), Direction::Subscribe);
+		let mut gate = Gate::new(
+			handle,
+			crate::Path::new("room").unwrap().to_owned(),
+			Direction::Subscribe,
+		);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 
@@ -2502,7 +2510,11 @@ mod tests {
 		let first = handle.present(Bytes::from_static(b"first"), false).unwrap();
 		handle.granted(first.presented.id, Grant::all());
 		let _unanswered = handle.present(Bytes::from_static(b"renewal"), false).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").unwrap().to_owned(), Direction::Subscribe);
+		let mut gate = Gate::new(
+			handle,
+			crate::Path::new("room").unwrap().to_owned(),
+			Direction::Subscribe,
+		);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 

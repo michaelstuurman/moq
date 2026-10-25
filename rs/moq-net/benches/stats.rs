@@ -4,9 +4,9 @@
 //!
 //! Run with `cargo bench -p moq-net --bench stats`.
 
-use moq_net::Path;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use futures::FutureExt;
+use moq_net::Path;
 use moq_net::{announce, broadcast, fuzz, origin, stats, transport};
 
 /// `(broadcasts, tiers)` shapes; every broadcast records under every tier.
@@ -25,11 +25,17 @@ fn registry(broadcasts: usize, tiers: usize) -> Registry {
 	let registry = stats::Registry::new(stats::Config::new());
 	let (producer, driver) = origin::Producer::new(origin::Config::default());
 	let publishers = (0..broadcasts)
-		.map(|i| producer.publish(Path::try_from(format!("room/{i}")).unwrap(), origin::Route::default()).unwrap())
+		.map(|i| {
+			producer
+				.publish(Path::try_from(format!("room/{i}")).unwrap(), origin::Route::default())
+				.unwrap()
+		})
 		.collect();
 	let cursors = (0..tiers)
 		.map(|t| {
-			let session = registry.tier(stats::Tier::new(Path::try_from(format!("tier{t}")).unwrap())).session(Path::new("root").unwrap());
+			let session = registry
+				.tier(stats::Tier::new(Path::try_from(format!("tier{t}")).unwrap()))
+				.session(Path::new("root").unwrap());
 			let mut cursor = producer.consume().with_stats(session).announced();
 			// Each announce the cursor replays records under its tier.
 			while cursor.next().now_or_never().flatten().is_some() {}
@@ -109,7 +115,8 @@ fn session_report(c: &mut Criterion) {
 				let contexts: Vec<_> = (0..labels)
 					.flat_map(|label| {
 						let handle = handle.clone();
-						(0..sessions).map(move |_| handle.session(Path::try_from(format!("project/key/{label}")).unwrap()))
+						(0..sessions)
+							.map(move |_| handle.session(Path::try_from(format!("project/key/{label}")).unwrap()))
 					})
 					.collect();
 				let wires: Vec<_> = contexts
@@ -166,7 +173,10 @@ fn retag(c: &mut Criterion) {
 						session.retag(tier.clone(), Path::new("project/moved").unwrap());
 					}
 					for session in moving.iter().rev() {
-						session.retag(tier.clone(), Path::try_from(format!("project/key/{}", labels - 1)).unwrap());
+						session.retag(
+							tier.clone(),
+							Path::try_from(format!("project/key/{}", labels - 1)).unwrap(),
+						);
 					}
 				});
 			});

@@ -16,8 +16,8 @@
 //!
 //! Run with `cargo bench -p moq-net --features fuzz --bench announce`.
 
-use moq_net::Path;
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use moq_net::Path;
 use moq_net::{
 	Hop, Hops, PathOwned, announce,
 	fuzz::{AnnounceWriter, Announced, decode_announces, encode_announces},

@@ -3073,7 +3073,10 @@ mod session_tests {
 
 		/// The `cam` broadcast a rendition of `room` references as `./cam`, under `route`.
 		fn sibling(origin: &moq_net::origin::Producer, route: moq_net::origin::Route) -> Self {
-			let publisher = Self::build(origin.create_broadcast(Path::new("cam").unwrap()).unwrap(), video_rendition());
+			let publisher = Self::build(
+				origin.create_broadcast(Path::new("cam").unwrap()).unwrap(),
+				video_rendition(),
+			);
 			publisher.broadcast.announce(route).unwrap();
 			publisher
 		}

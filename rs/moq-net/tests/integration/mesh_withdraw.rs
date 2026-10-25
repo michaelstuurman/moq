@@ -7,8 +7,8 @@
 //! withdrawn; a relay that selects them in turn re-advertises each stale path, and
 //! the cluster walks all of them before it converges (path hunting).
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::{collections::HashMap, time::Duration};
 
@@ -225,7 +225,9 @@ async fn partial_mesh_withdraw_retracts_once() {
 	let mut watched: Vec<_> = nodes.iter().map(|node| watch(node.consume().announced())).collect();
 
 	for publisher in [5, 13, 22, 26, 32] {
-		let broadcast = nodes[publisher].create_broadcast(Path::try_from(format!("room/{publisher}")).unwrap()).unwrap();
+		let broadcast = nodes[publisher]
+			.create_broadcast(Path::try_from(format!("room/{publisher}")).unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sim::idle().await;
 		for (relay, watched) in watched.iter_mut().enumerate() {
@@ -741,7 +743,9 @@ async fn hop_limit_falls_back_to_a_forwardable_route() {
 		// Three hops at the relay once the sender is appended: in the cap, but full.
 		let _cheap = far.dynamic_route(Path::new("room").unwrap(), route(100, 2, 1)).unwrap();
 		// Two hops at the relay, so it has room for the relay's own.
-		let pricey = near.dynamic_route(Path::new("room").unwrap(), route(200, 1, 50)).unwrap();
+		let pricey = near
+			.dynamic_route(Path::new("room").unwrap(), route(200, 1, 50))
+			.unwrap();
 		moq_clock::sim::idle().await;
 		let started = drain(&mut sent);
 		assert_eq!(

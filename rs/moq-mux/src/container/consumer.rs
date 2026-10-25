@@ -969,10 +969,10 @@ impl<F: Container> std::ops::Deref for GroupBuffer<F> {
 
 #[cfg(test)]
 mod tests {
-	use moq_net::Path;
 	use super::Container as ContainerTrait;
 	use super::*;
 	use crate::catalog::hang::Container;
+	use moq_net::Path;
 	use std::time::Duration;
 
 	use bytes::Bytes;

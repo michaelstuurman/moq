@@ -84,7 +84,9 @@ mod tests {
 
 	/// A broadcast at [`PATH`] whose one track, `video`, has three finished groups.
 	fn finished(origin: &moq_net::origin::Producer) -> (moq_net::broadcast::Producer, moq_net::track::Producer) {
-		let broadcast = origin.publish(Path::new(PATH).unwrap(), moq_net::origin::Route::default()).unwrap();
+		let broadcast = origin
+			.publish(Path::new(PATH).unwrap(), moq_net::origin::Route::default())
+			.unwrap();
 		let track = broadcast.create_track("video", None).unwrap();
 		for _ in 0..3 {
 			let mut group = track.append_group().unwrap();
@@ -113,7 +115,11 @@ mod tests {
 		let linger = tokio::spawn(Linger::new([broadcast], track, Duration::from_secs(30)).wait());
 
 		moq_clock::sleep(Duration::from_secs(29)).await;
-		let late = origin.consume().request_broadcast(Path::new(PATH).unwrap(), None).await.unwrap();
+		let late = origin
+			.consume()
+			.request_broadcast(Path::new(PATH).unwrap(), None)
+			.await
+			.unwrap();
 		let video = late.track("video").unwrap();
 		for sequence in 0..3 {
 			let mut group = video.fetch_group(sequence, None).await.unwrap();

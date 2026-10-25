@@ -432,7 +432,11 @@ impl Publish {
 	/// The programs aren't known until the PAT arrives, so each broadcast is created then and
 	/// announced once its catalog has named a servable track, and [`announce`](Self::announce) has
 	/// nothing to do.
-	pub fn ts_programs(origin: moq_net::origin::Producer, name: moq_net::PathOwned, config: moq_mux::catalog::Config) -> Self {
+	pub fn ts_programs(
+		origin: moq_net::origin::Producer,
+		name: moq_net::PathOwned,
+		config: moq_mux::catalog::Config,
+	) -> Self {
 		Self {
 			source: Source::Stream {
 				decoder: PublishDecoder::TsPrograms(Box::new(ts::Programs::new(origin, name, config))),
@@ -1041,7 +1045,10 @@ pub(crate) mod tests {
 	/// A source for the broadcast at `path`, resolved through `origin`.
 	async fn resolved(origin: &moq_net::origin::Producer, path: &str) -> moq_mux::Source {
 		let consumer = origin.consume();
-		let broadcast = consumer.request_broadcast(moq_net::Path::new(path).unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(moq_net::Path::new(path).unwrap(), None)
+			.await
+			.unwrap();
 		moq_mux::Source::new(consumer, broadcast)
 	}
 
@@ -1304,10 +1311,15 @@ pub(crate) mod tests {
 			// the lead holds; the jump is in the copy after it.
 			const WAIT: Duration = Duration::from_secs(10);
 			decoder.decode_chunk(&lead).unwrap();
-			let consumer = tokio::time::timeout(WAIT, remote.consume().routed_broadcast(moq_net::Path::new("pt.hang").unwrap()))
-				.await
-				.unwrap()
-				.unwrap();
+			let consumer = tokio::time::timeout(
+				WAIT,
+				remote
+					.consume()
+					.routed_broadcast(moq_net::Path::new("pt.hang").unwrap()),
+			)
+			.await
+			.unwrap()
+			.unwrap();
 			let mut catalogs = hang::catalog::Catalog::<()>::subscribe(&consumer).await.unwrap();
 			let catalog = tokio::time::timeout(WAIT, catalogs.next())
 				.await

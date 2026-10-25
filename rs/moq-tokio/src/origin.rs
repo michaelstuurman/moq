@@ -57,7 +57,9 @@ mod tests {
 		let origin = spawn();
 		let mut announced = origin.consume().announced();
 
-		let broadcast = origin.create_broadcast(Path::new("cam").unwrap()).expect("create broadcast");
+		let broadcast = origin
+			.create_broadcast(Path::new("cam").unwrap())
+			.expect("create broadcast");
 		broadcast.announce(Default::default()).expect("create broadcast");
 
 		let (update, active) = next_update(&mut announced).await.expect("announce");

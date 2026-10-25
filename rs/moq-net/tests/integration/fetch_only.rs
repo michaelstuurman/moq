@@ -6,8 +6,8 @@
 //! fetchable, and a relay's fetch-only demand puts no live subscription upstream to race
 //! the fetches that report where the track ends.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

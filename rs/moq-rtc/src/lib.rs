@@ -154,7 +154,9 @@ mod tests {
 		origin: &moq_net::origin::Producer,
 		epoch: moq_net::Epoch,
 	) -> (Box<dyn Bridge>, moq_mux::catalog::Producer) {
-		let mut broadcast = origin.create_broadcast(Path::new("source").unwrap()).expect("create source broadcast");
+		let mut broadcast = origin
+			.create_broadcast(Path::new("source").unwrap())
+			.expect("create source broadcast");
 		broadcast
 			.announce(moq_net::origin::Route::default().with_epoch(epoch))
 			.expect("announce source broadcast");
@@ -168,7 +170,8 @@ mod tests {
 	/// Publish a replacement instance of `source`, returning once the origin serves it.
 	async fn take_over(origin: &moq_net::origin::Producer) -> (Box<dyn Bridge>, moq_mux::catalog::Producer) {
 		let epoch = moq_net::Epoch::mint();
-		let mut instances = moq_mux::follow::Instances::new(&origin.consume(), Path::new("source").unwrap(), Some(&epoch)).unwrap();
+		let mut instances =
+			moq_mux::follow::Instances::new(&origin.consume(), Path::new("source").unwrap(), Some(&epoch)).unwrap();
 		let (mut new, catalog) = publish_opus(origin, epoch);
 		push(&mut *new, 20_000, NEW_PACKET);
 		let started = tokio::time::timeout(TIMEOUT, instances.next())
@@ -205,7 +208,9 @@ mod tests {
 				let origin = whep_origin.clone();
 				let sessions = sessions_tx.clone();
 				async move {
-					let response = server::whep::accept(&server, &origin, Path::new("source").unwrap(), &offer).await.unwrap();
+					let response = server::whep::accept(&server, &origin, Path::new("source").unwrap(), &offer)
+						.await
+						.unwrap();
 					let answer = response.answer.clone();
 					sessions.send(tokio::spawn(response.run())).await.unwrap();
 					answer
@@ -284,7 +289,10 @@ mod tests {
 			.await
 			.expect("WHIP negotiation timed out")
 			.expect("the ingest origin closed");
-		let ingested = ingested.request_broadcast(Path::new("ingested").unwrap(), None).await.unwrap();
+		let ingested = ingested
+			.request_broadcast(Path::new("ingested").unwrap(), None)
+			.await
+			.unwrap();
 		let mut played = opus_output(&ingested).await;
 		assert_eq!(next_payload(&mut played).await, OPUS_PACKET);
 
@@ -391,7 +399,11 @@ mod tests {
 		// Each client call resolves once its session ends, so the test drives them aside.
 		let whip_client = tokio::spawn({
 			let client = client.clone();
-			async move { client.publish(whip, source_consumer, Path::new("source").unwrap()).await }
+			async move {
+				client
+					.publish(whip, source_consumer, Path::new("source").unwrap())
+					.await
+			}
 		});
 		let (whip_id, whip_task) = tokio::time::timeout(TIMEOUT, sources_rx.recv())
 			.await

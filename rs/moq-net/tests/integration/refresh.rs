@@ -1,8 +1,8 @@
 #![cfg(feature = "async")]
 
 //! Refresh joins traverse real protocol hops, judged independently from each cache.
-use moq_net::Path;
 use crate::support::harness::{MockConnectOptions, connect_mock, peer, spawn, subscribed};
+use moq_net::Path;
 use moq_net::{Hop, Version, origin, track};
 use std::time::Duration;
 
@@ -46,7 +46,11 @@ async fn json_snapshot_refresh_crosses_a_two_relay_cluster() {
 			links.push(connect_mock(options).await);
 		}
 		reader.consume().routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = reader.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = reader
+			.consume()
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let remote = remote.track("state").unwrap();
 		let mut baseline = remote.subscribe(None).await.unwrap();
 		assert_eq!(baseline.info().refresh, Some(ratio));
@@ -165,7 +169,11 @@ async fn ratio_joins_cross_two_relays() {
 			links.push(connect_mock(options).await);
 		}
 		b.consume().routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = b.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = b
+			.consume()
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let remote = remote.track("data").unwrap();
 		let mut baseline = remote.subscribe(None).await.unwrap();
 		assert_eq!(baseline.info().refresh, (name == "moq-lite-07-wip").then_some(1));

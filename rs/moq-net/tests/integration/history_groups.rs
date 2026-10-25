@@ -8,8 +8,8 @@
 //! would drop the older group for good. The mock holds the publisher's group streams and
 //! releases them newest first to make that race deterministic.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -223,7 +223,10 @@ async fn a_late_subscriber_receives_the_relays_cached_history() {
 	let first_pair = connect_mock(options).await;
 	let consumer = first.consume();
 	consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bcast").unwrap(), None)
+		.await
+		.unwrap();
 	let subscription = Subscription::default().with_max_delay(FOREVER).with_range(0..);
 	let first_subscription = subscription.clone();
 	let first_reader = moq_clock::sim::spawn(async move {
@@ -261,7 +264,10 @@ async fn a_late_subscriber_receives_the_relays_cached_history() {
 	let late_pair = connect_mock(options).await;
 	let consumer = late.consume();
 	consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bcast").unwrap(), None)
+		.await
+		.unwrap();
 	let mut late_sub = remote.track("history").unwrap().subscribe(subscription).await.unwrap();
 	moq_clock::timeout(TIMEOUT, read_history(&mut late_sub))
 		.await

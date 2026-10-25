@@ -284,7 +284,9 @@ mod tests {
 	async fn a_broadcast_resolves_through_a_lazy_client_session() {
 		let pub_origin = moq_tokio::origin::spawn();
 
-		let mut source = pub_origin.create_broadcast(Path::new("cam").unwrap()).expect("create broadcast");
+		let mut source = pub_origin
+			.create_broadcast(Path::new("cam").unwrap())
+			.expect("create broadcast");
 		source
 			.announce(moq_net::origin::Route::default())
 			.expect("announce broadcast");
@@ -313,14 +315,19 @@ mod tests {
 	#[tokio::test]
 	async fn offers_ride_the_routers_scope_watch() {
 		let pub_origin = moq_tokio::origin::spawn();
-		let other = pub_origin.create_broadcast(Path::new("other").unwrap()).expect("create broadcast");
+		let other = pub_origin
+			.create_broadcast(Path::new("other").unwrap())
+			.expect("create broadcast");
 		other
 			.announce(moq_net::origin::Route::default())
 			.expect("announce broadcast");
 		let (sub_origin, _connection, accept) = lazy_client(pub_origin).await;
 
 		let _router = super::router(crate::server::Server::new(Default::default()), sub_origin.consume());
-		let missing = sub_origin.consume().follow(Path::new("missing").unwrap()).expect("follow");
+		let missing = sub_origin
+			.consume()
+			.follow(Path::new("missing").unwrap())
+			.expect("follow");
 		moq_clock::timeout(TIMEOUT, missing.synced())
 			.await
 			.expect("sync timed out");

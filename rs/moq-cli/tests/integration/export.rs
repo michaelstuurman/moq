@@ -558,7 +558,11 @@ async fn the_same_instance_within_the_follow_continues() {
 	}
 	export.output_past(0).await;
 	assert!(split < LONG.len(), "the capture has a tail after the export joined");
-	let old = relay.origin.request_broadcast(Path::new("demo").unwrap(), None).await.unwrap();
+	let old = relay
+		.origin
+		.request_broadcast(Path::new("demo").unwrap(), None)
+		.await
+		.unwrap();
 	assert_eq!(old.info().epoch.as_ref(), Some(&epoch));
 	let clock = catalog.snapshot().clock;
 	connection.abort(moq_net::Error::Cancel);

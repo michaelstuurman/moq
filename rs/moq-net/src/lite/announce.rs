@@ -1008,7 +1008,8 @@ mod tests {
 	#[test]
 	fn unknown_announce_type_is_skipped() {
 		let mut body = Vec::new();
-		Path::new("room/cam").unwrap()
+		Path::new("room/cam")
+			.unwrap()
 			.encode(&mut Encoder::new(&mut body, Version::Lite06.into()), Version::Lite06)
 			.unwrap();
 		Hops::new()
@@ -1075,7 +1076,8 @@ mod tests {
 	fn announce_request_rejects_a_bad_hidden_flag() {
 		let mut buf = Vec::new();
 		let mut body = Vec::new();
-		Path::new("room").unwrap()
+		Path::new("room")
+			.unwrap()
 			.encode(&mut Encoder::new(&mut body, Version::Lite07.into()), Version::Lite07)
 			.unwrap();
 		body.push(2);

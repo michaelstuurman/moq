@@ -249,10 +249,15 @@ async fn refused_only_stats_depth_one_has_root_totals_and_shared_embedder_metric
 		.await
 		.unwrap()
 		.unwrap();
-	let broadcast = tokio::time::timeout(TIMEOUT, relay.origin.request_broadcast(Path::new(".stats/node/test").unwrap(), None))
-		.await
-		.unwrap()
-		.unwrap();
+	let broadcast = tokio::time::timeout(
+		TIMEOUT,
+		relay
+			.origin
+			.request_broadcast(Path::new(".stats/node/test").unwrap(), None),
+	)
+	.await
+	.unwrap()
+	.unwrap();
 	let consumer = moq_stats::Consumer::new(broadcast, Default::default());
 	let mut totals = consumer.totals().await.unwrap();
 	tokio::time::timeout(TIMEOUT, async {
@@ -277,14 +282,22 @@ async fn refused_only_stats_depth_one_has_root_totals_and_shared_embedder_metric
 		1,
 		"embedder stats and metrics share the counter"
 	);
-	tokio::time::timeout(TIMEOUT, relay.origin.routed(Path::new(".stats/tenant/node/test").unwrap()))
-		.await
-		.unwrap()
-		.unwrap();
-	let broadcast = tokio::time::timeout(TIMEOUT, relay.origin.request_broadcast(Path::new(".stats/tenant/node/test").unwrap(), None))
-		.await
-		.unwrap()
-		.unwrap();
+	tokio::time::timeout(
+		TIMEOUT,
+		relay.origin.routed(Path::new(".stats/tenant/node/test").unwrap()),
+	)
+	.await
+	.unwrap()
+	.unwrap();
+	let broadcast = tokio::time::timeout(
+		TIMEOUT,
+		relay
+			.origin
+			.request_broadcast(Path::new(".stats/tenant/node/test").unwrap(), None),
+	)
+	.await
+	.unwrap()
+	.unwrap();
 	let consumer = moq_stats::Consumer::new(broadcast, Default::default());
 	let mut totals = consumer.totals().await.unwrap();
 	tokio::time::timeout(TIMEOUT, async {
@@ -316,7 +329,11 @@ async fn peer_zero_close_is_clean_and_application_close_counts_once() {
 		.await
 		.unwrap()
 		.unwrap();
-	let broadcast = relay.origin.request_broadcast(Path::new(".stats/node/test").unwrap(), None).await.unwrap();
+	let broadcast = relay
+		.origin
+		.request_broadcast(Path::new(".stats/node/test").unwrap(), None)
+		.await
+		.unwrap();
 	let consumer = moq_stats::Consumer::new(broadcast, Default::default());
 	let mut totals = consumer.totals().await.unwrap();
 	for (index, error) in [moq_net::Error::Cancel, moq_net::Error::App(42)]

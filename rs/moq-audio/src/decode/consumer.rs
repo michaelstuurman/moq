@@ -833,7 +833,10 @@ mod tests {
 		let _link = link(&publisher, &relay).await;
 		let consumer = relay.consume();
 		consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("bcast").unwrap(), None)
+			.await
+			.unwrap();
 
 		// A first reader warms the relay's copy with every group.
 		{

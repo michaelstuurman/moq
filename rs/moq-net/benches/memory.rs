@@ -144,7 +144,10 @@ impl Link {
 
 		let consumer = subscriber.consume();
 		consumer.routed(Path::new("bench").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("bench").unwrap(), None)
+			.await
+			.unwrap();
 		let mut subscribers = Vec::new();
 		for index in 0..streams {
 			let track = remote.track(&format!("{index}")).unwrap();

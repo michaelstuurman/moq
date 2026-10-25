@@ -8,8 +8,8 @@
 //! last until those groups drain: a relay cancels its upstream subscription once nobody
 //! subscribes, and the publisher then resets every group still on the wire.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

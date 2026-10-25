@@ -11,8 +11,8 @@
 //! so a reader that starts at frame 0 must not be refused as lagged and left with
 //! no catalog.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -168,10 +168,15 @@ impl Topology {
 
 	/// A new reader on `R`: a fresh broadcast request and a floorless subscription.
 	async fn reader(&self) -> Reader {
-		let remote = moq_clock::timeout(READ_TIMEOUT, self.subscriber.consume().request_broadcast(Path::new("live").unwrap(), None))
-			.await
-			.expect("request hung")
-			.expect("request refused");
+		let remote = moq_clock::timeout(
+			READ_TIMEOUT,
+			self.subscriber
+				.consume()
+				.request_broadcast(Path::new("live").unwrap(), None),
+		)
+		.await
+		.expect("request hung")
+		.expect("request refused");
 		let sub = moq_clock::timeout(READ_TIMEOUT, remote.track("catalog.json").unwrap().subscribe(None))
 			.await
 			.expect("subscribe hung")

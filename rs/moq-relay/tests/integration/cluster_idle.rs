@@ -52,7 +52,9 @@ async fn spawn_peer() -> (u16, tokio::runtime::Runtime) {
 	let (bound, port) = tokio::sync::oneshot::channel();
 	runtime.spawn(async move {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(Path::new("peer").unwrap()).expect("create broadcast");
+		let broadcast = origin
+			.create_broadcast(Path::new("peer").unwrap())
+			.expect("create broadcast");
 		broadcast.announce(Default::default()).expect("announce");
 
 		let mut config = moq_tokio::listen::Config::default();

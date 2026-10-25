@@ -8,8 +8,8 @@
 //! anonymous dial: the accepting side already stamps one, and the dialing side
 //! has to as well.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

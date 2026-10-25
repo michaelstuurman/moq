@@ -68,9 +68,13 @@ async fn next_broadcast(
 			moq_net::announce::Event::End(_) | moq_net::announce::Event::Update(_) => {}
 		}
 	}
-	let broadcast = running(child, "the broadcast", consumer.request_broadcast(Path::new("camera").unwrap(), None))
-		.await
-		.expect("announced broadcast resolves");
+	let broadcast = running(
+		child,
+		"the broadcast",
+		consumer.request_broadcast(Path::new("camera").unwrap(), None),
+	)
+	.await
+	.expect("announced broadcast resolves");
 	let mut catalogs = running(
 		child,
 		"the catalog",

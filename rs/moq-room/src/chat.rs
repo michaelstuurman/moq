@@ -296,7 +296,10 @@ mod tests {
 		let _link = link(&publisher, &relay).await;
 		let consumer = relay.consume();
 		consumer.routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 
 		// A first reader warms the relay's copy with the first window.
 		{

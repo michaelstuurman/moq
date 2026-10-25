@@ -2,11 +2,11 @@
 
 //! Control counters cross real protocol drivers, including legacy multiplexing.
 
-use moq_net::Path;
 use crate::support::{
 	harness::{MockConnectOptions, connect_mock, now, spawn, subscribed},
 	mock::create_mock_session_pair,
 };
+use moq_net::Path;
 use moq_net::{
 	Timescale, Timestamp, origin,
 	stats::{Control, Registry, Tier},
@@ -47,7 +47,11 @@ async fn control_classes_cross_lite_and_ietf_sessions_without_counting_payload()
 			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		subscriber.consume().routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = subscriber.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = subscriber
+			.consume()
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let mut sub = remote.track("video").unwrap().subscribe(None).await.unwrap();
 		subscribed(&track).await;
 		let mut group = track.append_group().unwrap();

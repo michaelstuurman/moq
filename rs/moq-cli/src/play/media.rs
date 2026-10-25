@@ -1657,7 +1657,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_refused_broadcast_ends_the_player() {
 		let origin = moq_tokio::origin::spawn();
-		let handler = origin.dynamic_route(moq_net::Path::empty(), Default::default()).unwrap();
+		let handler = origin
+			.dynamic_route(moq_net::Path::empty(), Default::default())
+			.unwrap();
 		let recorder = Recorder::default();
 		let player = tokio::spawn(media(&origin, Duration::from_millis(50), recorder.clone()).run());
 		let request = handler.requested_broadcast().await.unwrap();

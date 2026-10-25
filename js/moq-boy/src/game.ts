@@ -317,9 +317,7 @@ export class Game {
 		const viewerId = Math.random().toString(36).slice(2, 8);
 		this.viewerId.set(viewerId);
 
-		const viewerBroadcast = origin.createBroadcast(
-			Moq.Path.from(this.#viewerPrefix, this.sessionId, viewerId),
-		);
+		const viewerBroadcast = origin.createBroadcast(Moq.Path.from(this.#viewerPrefix, this.sessionId, viewerId));
 		viewerBroadcast.announce({ epoch: Moq.Epoch.mint() });
 		effect.cleanup(() => {
 			viewerBroadcast.close();

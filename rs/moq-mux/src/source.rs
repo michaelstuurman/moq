@@ -451,7 +451,9 @@ pub(crate) async fn resolved(origin: &moq_net::origin::Producer, path: &str) -> 
 #[cfg(test)]
 pub(crate) async fn announced(broadcast: &moq_net::broadcast::Consumer) -> Source {
 	let origin = produce_origin();
-	let dynamic = origin.dynamic_route(moq_net::Path::new("").unwrap(), Default::default()).unwrap();
+	let dynamic = origin
+		.dynamic_route(moq_net::Path::new("").unwrap(), Default::default())
+		.unwrap();
 	let served = broadcast.clone();
 	tokio::spawn(async move {
 		while let Ok(request) = dynamic.requested_broadcast().await {
@@ -466,8 +468,8 @@ pub(crate) async fn announced(broadcast: &moq_net::broadcast::Consumer) -> Sourc
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use moq_net::Path;
 	use hang::catalog::{H264, VideoConfig};
+	use moq_net::Path;
 	use moq_net::path::Relative;
 
 	/// Let the origin's driver run the fronts that requests and announcements
@@ -484,7 +486,9 @@ mod tests {
 		let _catalog = origin.publish(Path::new("pub").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "pub").await;
-		let dynamic = origin.dynamic_route(Path::new("media").unwrap(), Default::default()).unwrap();
+		let dynamic = origin
+			.dynamic_route(Path::new("media").unwrap(), Default::default())
+			.unwrap();
 		let binding = source.bind(Some(&Relative::new("media")), None).unwrap();
 		let request = dynamic.requested_broadcast().await.unwrap();
 
@@ -556,7 +560,10 @@ mod tests {
 		let _old = origin.publish(Path::new("live").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let consumer = origin.consume();
-		let first = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let first = consumer
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 
 		let new = origin.publish(Path::new("live").unwrap(), Default::default()).unwrap();
 		let _late = new.create_track("late", None).unwrap();
@@ -577,8 +584,12 @@ mod tests {
 		use crate::container::test_util::Link;
 
 		let healthy = produce_origin();
-		let _catalog = healthy.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
-		let _sibling = healthy.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let _catalog = healthy
+			.publish(Path::new("a/pub").unwrap(), Default::default())
+			.unwrap();
+		let _sibling = healthy
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		let stalled = produce_origin();
 		let subscriber = produce_origin();
 		let _healthy = Link::lazy(&healthy, &subscriber, true).await;
@@ -602,7 +613,9 @@ mod tests {
 		let binding = source.bind(Some(&Relative::new("./late")), None).unwrap();
 		settle().await;
 		assert!(binding.poll_broadcast(&kio::Waiter::noop()).is_pending());
-		let _late = healthy.publish(Path::new("a/late").unwrap(), Default::default()).unwrap();
+		let _late = healthy
+			.publish(Path::new("a/late").unwrap(), Default::default())
+			.unwrap();
 		let late = tokio::time::timeout(timeout, binding.broadcast())
 			.await
 			.expect("the later sibling resolves")
@@ -615,7 +628,9 @@ mod tests {
 	async fn a_source_keeps_the_sibling_it_resolved() {
 		let origin = produce_origin();
 		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
-		let _old = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let _old = origin
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let sibling = Relative::new("./source");
@@ -624,7 +639,9 @@ mod tests {
 			.await
 			.expect("the sibling resolves");
 
-		let new = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let new = origin
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		let _late = new.create_track("late", None).unwrap();
 		settle().await;
 		assert!(source.resolve(Some(&sibling), None).await.unwrap().is_clone(&first));
@@ -673,8 +690,12 @@ mod tests {
 		let origin = produce_origin();
 		let (old_epoch, new_epoch) = (moq_net::Epoch::mint(), moq_net::Epoch::mint());
 		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
-		let _old = origin.publish(Path::new("a/source").unwrap(), route(&old_epoch)).unwrap();
-		let _new = origin.publish(Path::new("a/source").unwrap(), route(&new_epoch)).unwrap();
+		let _old = origin
+			.publish(Path::new("a/source").unwrap(), route(&old_epoch))
+			.unwrap();
+		let _new = origin
+			.publish(Path::new("a/source").unwrap(), route(&new_epoch))
+			.unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let rel = Relative::new("./source");
@@ -695,13 +716,17 @@ mod tests {
 		let origin = produce_origin();
 		let (old_epoch, new_epoch) = (moq_net::Epoch::mint(), moq_net::Epoch::mint());
 		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
-		let _old = origin.publish(Path::new("a/source").unwrap(), route(&old_epoch)).unwrap();
+		let _old = origin
+			.publish(Path::new("a/source").unwrap(), route(&old_epoch))
+			.unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let rel = Relative::new("./source");
 		let first = source.resolve(Some(&rel), Some(&old_epoch)).await.unwrap();
 
-		let _new = origin.publish(Path::new("a/source").unwrap(), route(&new_epoch)).unwrap();
+		let _new = origin
+			.publish(Path::new("a/source").unwrap(), route(&new_epoch))
+			.unwrap();
 		settle().await;
 		// A rendition added later names the replacement: it fails, and the pin stays.
 		let binding = source.bind(Some(&rel), Some(&new_epoch)).unwrap();
@@ -750,7 +775,9 @@ mod tests {
 	async fn an_epochless_route_reads_an_epoch_reference_best_effort() {
 		let origin = produce_origin();
 		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
-		let _sibling = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let _sibling = origin
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let epoch = moq_net::Epoch::mint();
@@ -765,11 +792,15 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn self_references_keep_the_catalog_broadcast_after_replacement() {
 		let origin = produce_origin();
-		let old = origin.publish(Path::new("a/live").unwrap(), Default::default()).unwrap();
+		let old = origin
+			.publish(Path::new("a/live").unwrap(), Default::default())
+			.unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/live").await;
 		drop(old);
-		let _replacement = origin.publish(Path::new("a/live").unwrap(), Default::default()).unwrap();
+		let _replacement = origin
+			.publish(Path::new("a/live").unwrap(), Default::default())
+			.unwrap();
 		settle().await;
 
 		for reference in [None, Some(""), Some("live"), Some("./live"), Some("../a/live")] {
@@ -986,7 +1017,9 @@ mod tests {
 	async fn dot_resolves_output_parent() {
 		let origin = produce_origin();
 
-		let _catalog = origin.create_broadcast(Path::new("a/source/transcode").unwrap()).unwrap();
+		let _catalog = origin
+			.create_broadcast(Path::new("a/source/transcode").unwrap())
+			.unwrap();
 		_catalog.announce(Default::default()).unwrap();
 
 		let referenced = origin.create_broadcast(Path::new("a/source").unwrap()).unwrap();

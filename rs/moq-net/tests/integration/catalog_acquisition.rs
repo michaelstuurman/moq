@@ -2,8 +2,8 @@
 
 //! Initial catalog acquisition while the same publisher gains a second session.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use moq_net::{Error, Hop, Version, origin};
 use support::harness::{MockConnectOptions, MockPair, connect_mock};
@@ -34,7 +34,11 @@ async fn acquisition(version: &str, carries_epoch: bool) {
 		.announce(origin::Route::default().with_epoch(moq_net::Epoch::mint()))
 		.unwrap();
 	let _old = link(version, &publisher, &subscriber, 100).await;
-	let remote = subscriber.consume().routed_broadcast(Path::new("live").unwrap()).await.unwrap();
+	let remote = subscriber
+		.consume()
+		.routed_broadcast(Path::new("live").unwrap())
+		.await
+		.unwrap();
 	let mut announced = subscriber.consume().follow(Path::new("live").unwrap()).unwrap();
 	let old_cost = match announced.next().await {
 		Some(moq_net::announce::Event::Start(announce)) => announce.route.cost,

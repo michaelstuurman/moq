@@ -35,7 +35,11 @@ async fn one_stream_credit_serves_every_backlogged_group() {
 		options.client_subscribe = Some(viewer.clone());
 		let _pair = connect_mock(options).await;
 
-		let remote = viewer.consume().routed_broadcast(Path::new("live").unwrap()).await.unwrap();
+		let remote = viewer
+			.consume()
+			.routed_broadcast(Path::new("live").unwrap())
+			.await
+			.unwrap();
 		let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(30));
 		let mut subscribers = Vec::new();
 		for i in 0..tracks.len() {

@@ -148,7 +148,9 @@ impl Drop for Publisher {
 async fn publish_version(port: u16, version: &str) -> Publisher {
 	let url: Url = format!("tcp://127.0.0.1:{port}").parse().expect("parse url");
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast(Path::new(PATH).unwrap()).expect("create broadcast");
+	let broadcast = origin
+		.create_broadcast(Path::new(PATH).unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 

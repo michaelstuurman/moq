@@ -4764,7 +4764,8 @@ mod tests {
 		assert!(announced.ready.is_empty());
 
 		let consumer = origin.consume();
-		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("room/7").unwrap(), None).await });
+		let request =
+			moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("room/7").unwrap(), None).await });
 
 		let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 		assert_eq!(ready.as_str(), "room/7");
@@ -4816,7 +4817,10 @@ mod tests {
 			announced: &mut Announced,
 		) -> (crate::broadcast::Consumer, SourceServe) {
 			let consumer = origin.consume();
-			let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await });
+			let request =
+				moq_clock::sim::spawn(
+					async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await },
+				);
 			let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 			announced.ready.try_push(ready).unwrap();
 			announced.poll_serve(subscriber, &kio::Waiter::noop());
@@ -4878,7 +4882,8 @@ mod tests {
 		announced.poll_serve(&subscriber, &kio::Waiter::noop());
 
 		let consumer = origin.consume();
-		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await });
+		let request =
+			moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await });
 		let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 		announced.ready.try_push(ready).unwrap();
 		announced.poll_serve(&subscriber, &kio::Waiter::noop());
@@ -5070,7 +5075,9 @@ mod tests {
 		let origin = origin::Config::new(relay).produce();
 		let assigned = crate::Hop::new(777).unwrap();
 
-		let local = origin.publish(Path::new("room/host").unwrap(), origin::Route::default()).unwrap();
+		let local = origin
+			.publish(Path::new("room/host").unwrap(), origin::Route::default())
+			.unwrap();
 		let track = local.create_track("video", crate::track::Info::timed()).unwrap();
 		let mut group = track.append_group().unwrap();
 		group.write_frame(crate::Timestamp::ZERO, b"local".as_ref()).unwrap();
@@ -5079,7 +5086,10 @@ mod tests {
 		// The peer's own subscription, excluding the hop the server minted for
 		// it, is served from the local front before anything is announced back.
 		let peer = origin.consume().excluding(assigned);
-		let resolved = peer.request_broadcast(Path::new("room/host").unwrap(), None).await.expect("resolves");
+		let resolved = peer
+			.request_broadcast(Path::new("room/host").unwrap(), None)
+			.await
+			.expect("resolves");
 		let mut sub = resolved
 			.track("video")
 			.unwrap()

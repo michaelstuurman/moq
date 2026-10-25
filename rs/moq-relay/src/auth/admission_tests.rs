@@ -1,8 +1,8 @@
 //! Admission and lease behavior for a gateway embedding the relay.
 
-use moq_net::Path;
 use crate::{auth, cluster};
 use moq_auth::{Grant, Pattern, Patterns, Role, Transport, lease};
+use moq_net::Path;
 
 fn patterns(texts: &[&str]) -> Patterns {
 	texts.iter().map(|text| text.parse::<Pattern>().unwrap()).collect()

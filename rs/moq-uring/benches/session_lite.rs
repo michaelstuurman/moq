@@ -112,7 +112,9 @@ mod linux {
 				});
 			});
 
-			let broadcast = pub_origin.create_broadcast(Path::new("bench").unwrap()).expect("create broadcast");
+			let broadcast = pub_origin
+				.create_broadcast(Path::new("bench").unwrap())
+				.expect("create broadcast");
 			broadcast.announce(Default::default()).expect("create broadcast");
 			let track = broadcast.create_track("data", timed()).expect("create track");
 
@@ -176,7 +178,10 @@ mod linux {
 					});
 					let bc = {
 						let consumer = sub_origin.consume();
-						consumer.routed(Path::new("bench").unwrap()).await.expect("broadcast announced");
+						consumer
+							.routed(Path::new("bench").unwrap())
+							.await
+							.expect("broadcast announced");
 						consumer
 							.request_broadcast(Path::new("bench").unwrap(), None)
 							.await

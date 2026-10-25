@@ -250,7 +250,9 @@ fn room_url(scheme: &str, port: u16) -> url::Url {
 /// round-trips. Returns both sessions so the caller can watch them close.
 async fn connect_and_round_trip(url: &url::Url) -> (moq_tokio::Connection, moq_tokio::Connection) {
 	let pub_origin = moq_tokio::origin::spawn();
-	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
+	let broadcast = pub_origin
+		.create_broadcast(Path::new("test").unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -547,7 +549,9 @@ async fn a_moved_tier_retags_the_live_session() {
 
 	// A publisher whose track stays open across the move, and a subscriber to it.
 	let pub_origin = moq_tokio::origin::spawn();
-	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
+	let broadcast = pub_origin
+		.create_broadcast(Path::new("test").unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let pub_session = tokio::time::timeout(
@@ -692,7 +696,9 @@ async fn a_rechecked_grant_resizes_live_sessions() {
 		let pub_origin = moq_tokio::origin::spawn();
 		let mut tracks = Vec::new();
 		for path in ["alice/audio", "alice/video"] {
-			let broadcast = pub_origin.create_broadcast(Path::new(path).unwrap()).expect("create broadcast");
+			let broadcast = pub_origin
+				.create_broadcast(Path::new(path).unwrap())
+				.expect("create broadcast");
 			let track = broadcast.create_track("media", timed()).expect("create track");
 			broadcast.announce(Default::default()).expect("announce broadcast");
 			tracks.push((broadcast, track));
@@ -788,10 +794,13 @@ async fn a_rechecked_grant_resizes_live_sessions() {
 
 		// Undeafen: the path is announced again and a new subscription flows.
 		script.on_revalidate(Answer::Grant(grant(Duration::from_secs(3600))));
-		let broadcast = tokio::time::timeout(TIMEOUT, sub_consumer.routed_broadcast(Path::new("alice/audio").unwrap()))
-			.await
-			.expect("the undeafened path was never announced again")
-			.expect("announced broadcast resolves");
+		let broadcast = tokio::time::timeout(
+			TIMEOUT,
+			sub_consumer.routed_broadcast(Path::new("alice/audio").unwrap()),
+		)
+		.await
+		.expect("the undeafened path was never announced again")
+		.expect("announced broadcast resolves");
 		let mut audio = broadcast
 			.track("media")
 			.unwrap()
@@ -882,7 +891,9 @@ async fn http_routes_hold_a_lease() {
 
 	// A publisher whose group stays open, so a fetch of it keeps streaming.
 	let pub_origin = moq_tokio::origin::spawn();
-	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
+	let broadcast = pub_origin
+		.create_broadcast(Path::new("test").unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");

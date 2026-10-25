@@ -59,13 +59,19 @@ async fn prepare(tracks: usize, frames: usize) -> (moq_mux::Source, moq_mux::cat
 	catalog.finish().unwrap();
 	let (origin, driver) = moq_net::origin::Producer::new(Default::default());
 	let driver = tokio::spawn(moq_net::time::run(driver));
-	let dynamic = origin.dynamic_route(moq_net::Path::empty(), Default::default()).unwrap();
+	let dynamic = origin
+		.dynamic_route(moq_net::Path::empty(), Default::default())
+		.unwrap();
 	let requests = tokio::spawn(async move {
 		while let Ok(request) = dynamic.requested_broadcast().await {
 			request.accept(consumer.clone());
 		}
 	});
-	let resolved = origin.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let resolved = origin
+		.consume()
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let source = moq_mux::Source::new(origin.consume(), resolved);
 	let fixture = Fixture {
 		_published: Box::new((broadcast, catalog, publishers)),
@@ -223,13 +229,19 @@ async fn prepare_video(
 	catalog.finish().unwrap();
 	let (origin, driver) = moq_net::origin::Producer::new(Default::default());
 	let driver = tokio::spawn(moq_net::time::run(driver));
-	let dynamic = origin.dynamic_route(moq_net::Path::empty(), Default::default()).unwrap();
+	let dynamic = origin
+		.dynamic_route(moq_net::Path::empty(), Default::default())
+		.unwrap();
 	let requests = tokio::spawn(async move {
 		while let Ok(request) = dynamic.requested_broadcast().await {
 			request.accept(consumer.clone());
 		}
 	});
-	let resolved = origin.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let resolved = origin
+		.consume()
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let source = moq_mux::Source::new(origin.consume(), resolved);
 	(
 		source,

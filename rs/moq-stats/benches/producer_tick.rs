@@ -289,7 +289,11 @@ impl Presence {
 		let names: Vec<String> = (0..labels).map(|index| format!("room/{index:05}")).collect();
 		let sessions: Vec<_> = names
 			.iter()
-			.map(|label| registry.tier(stats::Tier::default()).session(Path::new(label.as_str()).unwrap()))
+			.map(|label| {
+				registry
+					.tier(stats::Tier::default())
+					.session(Path::new(label.as_str()).unwrap())
+			})
 			.collect();
 		// One set of wire counters per connection, independently of held presence tracks.
 		let wire = sessions

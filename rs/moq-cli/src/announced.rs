@@ -210,7 +210,9 @@ mod tests {
 			let broadcasts = ["demo/a", "demo/b", "other/c"]
 				.into_iter()
 				.map(|path| {
-					let broadcast = origin.create_broadcast(moq_net::Path::new(path).unwrap()).expect("broadcast");
+					let broadcast = origin
+						.create_broadcast(moq_net::Path::new(path).unwrap())
+						.expect("broadcast");
 					broadcast.announce(Default::default()).expect("announce");
 					(path, broadcast)
 				})

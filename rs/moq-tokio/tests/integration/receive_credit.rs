@@ -79,7 +79,9 @@ async fn setup_through(
 	let version: moq_net::Version = version.parse().expect("version");
 
 	let publisher = moq_tokio::origin::spawn();
-	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).expect("broadcast");
+	let broadcast = publisher
+		.create_broadcast(Path::new("room").unwrap())
+		.expect("broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 
 	let mut config = moq_tokio::listen::Config::default();
@@ -429,7 +431,9 @@ async fn reversed(version: &str) -> Reversed {
 	);
 
 	let publisher = moq_tokio::origin::spawn();
-	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).expect("broadcast");
+	let broadcast = publisher
+		.create_broadcast(Path::new("room").unwrap())
+		.expect("broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let subscriber = moq_tokio::origin::spawn();
 	let session = |conn: driver::Connection| {

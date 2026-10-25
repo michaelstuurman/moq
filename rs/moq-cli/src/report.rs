@@ -648,7 +648,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn an_ended_feedback_reader_stops_after_draining() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("viewer.echo").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("viewer.echo").unwrap())
+			.unwrap();
 		let track = broadcast.create_track(hang::echo::TRACK, None).unwrap();
 		let mut feedback = moq_json::snapshot::Producer::<serde_json::Value>::new(track, Default::default());
 		broadcast.announce(Default::default()).unwrap();
@@ -692,7 +694,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_hidden_prefix_finds_its_feedback() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new(".viewers/alice.echo").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new(".viewers/alice.echo").unwrap())
+			.unwrap();
 		let track = broadcast.create_track(hang::echo::TRACK, None).unwrap();
 		let mut feedback = moq_json::snapshot::Producer::<serde_json::Value>::new(track, Default::default());
 		broadcast.announce(Default::default()).unwrap();

@@ -11,9 +11,15 @@ use moq_tokio::moq_net;
 /// publisher's demand to go unused.
 async fn release(unannounce: bool, settle: bool) {
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.publish(Path::new("a/b").unwrap(), moq_net::origin::Route::default()).unwrap();
+	let broadcast = origin
+		.publish(Path::new("a/b").unwrap(), moq_net::origin::Route::default())
+		.unwrap();
 	let track = broadcast.create_track("t", None).unwrap();
-	let consumer = origin.consume().request_broadcast(Path::new("a/b").unwrap(), None).await.unwrap();
+	let consumer = origin
+		.consume()
+		.request_broadcast(Path::new("a/b").unwrap(), None)
+		.await
+		.unwrap();
 	let sub = consumer.track("t").unwrap().subscribe(None).await.unwrap();
 	crate::wanted(track.demand()).await.unwrap();
 

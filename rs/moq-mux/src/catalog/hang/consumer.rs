@@ -131,7 +131,9 @@ mod test {
 	/// resolves against.
 	fn publish_catalog(published: Catalog<()>) -> Result<Option<Catalog>> {
 		let origin = crate::source::produce_origin();
-		let broadcast = origin.create_broadcast(Path::new("a/pub").unwrap()).expect("broadcast should create");
+		let broadcast = origin
+			.create_broadcast(Path::new("a/pub").unwrap())
+			.expect("broadcast should create");
 		let track = broadcast
 			.create_track(hang::Catalog::DEFAULT_NAME, hang::Catalog::default_track_info())
 			.expect("catalog track should create");
@@ -170,7 +172,9 @@ mod test {
 			.expect("catalog track should create");
 
 		let origin = crate::source::produce_origin();
-		let dynamic = origin.dynamic_route(Path::new("").unwrap(), Default::default()).unwrap();
+		let dynamic = origin
+			.dynamic_route(Path::new("").unwrap(), Default::default())
+			.unwrap();
 		let requesting = origin.consume().request_broadcast(Path::new("a/pub").unwrap(), None);
 		let served = broadcast.consume();
 		// The handler hands its route back: dropping it would retract the route and end

@@ -7,8 +7,8 @@
 //! delivery through the model. The mock delivers queued datagrams
 //! deterministically, so every wait here is on an observable event.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -57,7 +57,10 @@ async fn connect_datagram_track() -> Fixture {
 
 	let consumer = consumer_origin.consume();
 	consumer.routed(Path::new("bench").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let subscriber = remote.track("datagrams").unwrap().subscribe(None).await.unwrap();
 	// The subscriber is handed over once TRACK_INFO answers, before its SUBSCRIBE reaches
 	// the publisher, and a datagram only goes to a subscription already there.
@@ -152,7 +155,10 @@ async fn ietf_delivers_datagrams_on(version: &str) {
 
 	let consumer = consumer_origin.consume();
 	consumer.routed(Path::new("bench").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let mut subscriber = remote.track("datagrams").unwrap().subscribe(None).await.unwrap();
 
 	// A group first, so the subscription's alias is bound before any datagram lands.
@@ -263,7 +269,10 @@ async fn a_fetched_datagram_is_refused_per_version() {
 
 		let consumer = nodes.last().unwrap().consume();
 		consumer.routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let err = match remote.track("datagrams").unwrap().fetch_group(sequence, None).await {
 			Ok(_) => panic!("{versions:?}: a datagram was fetched"),
 			Err(err) => err,

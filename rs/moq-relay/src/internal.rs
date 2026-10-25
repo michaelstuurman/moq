@@ -1211,7 +1211,9 @@ mod tests {
 	#[test]
 	fn request_metrics_never_open_a_session() {
 		let stats = moq_net::stats::Registry::new(Default::default());
-		let request = stats.tier(moq_net::stats::Tier::new(Path::new("http").unwrap())).request(Path::new("root").unwrap());
+		let request = stats
+			.tier(moq_net::stats::Tier::new(Path::new("http").unwrap()))
+			.request(Path::new("root").unwrap());
 		drop(request);
 		let body = render_metrics(&stats.snapshot(), &[], &[]);
 		assert!(body.contains("# TYPE moq_relay_requests_total counter"), "{body}");
@@ -1230,7 +1232,9 @@ mod tests {
 	fn wire_metrics_include_internal_sessions_and_keep_final_totals() {
 		let registry = moq_net::stats::Registry::new(Default::default());
 		for tier in ["internal", "edge"] {
-			let session = registry.tier(moq_net::stats::Tier::new(Path::new(tier).unwrap())).session(moq_net::Path::empty());
+			let session = registry
+				.tier(moq_net::stats::Tier::new(Path::new(tier).unwrap()))
+				.session(moq_net::Path::empty());
 			let source = moq_net::transport::Wire::new();
 			let guard = session.wire(source.clone());
 			source.set_sent_bytes(123);
@@ -1255,8 +1259,11 @@ mod tests {
 	#[tokio::test]
 	async fn announce_metrics_keep_retired_totals() {
 		let stats = moq_net::stats::Registry::new(Default::default());
-		let producer =
-			moq_tokio::origin::spawn().with_stats(stats.tier(moq_net::stats::Tier::new(Path::new("edge").unwrap())).session(Path::new("root").unwrap()));
+		let producer = moq_tokio::origin::spawn().with_stats(
+			stats
+				.tier(moq_net::stats::Tier::new(Path::new("edge").unwrap()))
+				.session(Path::new("root").unwrap()),
+		);
 		let broadcast = producer.create_broadcast(Path::new("demo/retired").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 
@@ -1309,7 +1316,9 @@ mod tests {
 
 		// Named-tier ingress: a tagged ingress producer writes, so subscriber
 		// `bytes` advance on the regional tier.
-		let regional_ctx = stats.tier(Tier::new(Path::new("region/sjc").unwrap())).session(Path::new("peer").unwrap());
+		let regional_ctx = stats
+			.tier(Tier::new(Path::new("region/sjc").unwrap()))
+			.session(Path::new("peer").unwrap());
 		let sub_origin = moq_tokio::origin::spawn().with_stats(regional_ctx.clone());
 		let sub_source = sub_origin.create_broadcast(Path::new("demo/x").unwrap()).unwrap();
 		sub_source.announce(Default::default()).unwrap();

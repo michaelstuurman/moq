@@ -776,8 +776,8 @@ pub(crate) fn build_video_transform(config: &VideoConfig) -> Option<VideoTransfo
 
 #[cfg(test)]
 mod tests {
-	use moq_net::Path;
 	use hang::catalog::{AudioCodec, Container, H264};
+	use moq_net::Path;
 	use moq_net::path::Relative;
 
 	use super::*;
@@ -878,12 +878,16 @@ mod tests {
 		let info = || hang::container::track_info(hang::catalog::PRIORITY.audio);
 
 		assert_eq!(read().await, None, "nothing announces the sibling yet");
-		let old = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let old = origin
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		let mut track = crate::container::Producer::new(old.create_track("audio", info()).unwrap(), wire());
 		track.write(raw_frame(0, b"old", true)).unwrap();
 		assert_eq!(read().await, Some(Some(0)), "the late announcement starts it");
 
-		let new = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let new = origin
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		let mut replacement = crate::container::Producer::new(new.create_track("audio", info()).unwrap(), wire());
 		replacement.write(raw_frame(1_000_000, b"new", true)).unwrap();
 		track.write(raw_frame(24_000, b"old", true)).unwrap();
@@ -922,7 +926,9 @@ mod tests {
 				.unwrap()
 				.unwrap();
 
-			let sibling = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+			let sibling = origin
+				.publish(Path::new("a/source").unwrap(), Default::default())
+				.unwrap();
 			let track = sibling
 				.create_track("audio", hang::container::track_info(hang::catalog::PRIORITY.audio))
 				.unwrap();
@@ -978,7 +984,9 @@ mod tests {
 		tokio::task::yield_now().await;
 		let source = crate::source::resolved(&origin, "a/pub").await;
 		let _link = Link::new(&remote, &origin).await;
-		let sibling = remote.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
+		let sibling = remote
+			.publish(Path::new("a/source").unwrap(), Default::default())
+			.unwrap();
 		let mut track = crate::container::Producer::new(
 			sibling
 				.create_track("audio", hang::container::track_info(hang::catalog::PRIORITY.audio))
@@ -1078,7 +1086,10 @@ mod tests {
 		broadcast.announce(Default::default()).unwrap();
 		let consumer = subscriber.consume();
 		consumer.routed(Path::new("room").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let source = crate::Source::new(consumer, remote);
 		let mut export = ExportSource::for_audio(&source, "audio", &audio(None), Duration::from_secs(1))
 			.unwrap()
@@ -1156,7 +1167,10 @@ mod tests {
 			broadcast.announce(Default::default()).unwrap();
 			let consumer = subscriber.consume();
 			consumer.routed(Path::new("room").unwrap()).await.unwrap();
-			let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+			let remote = consumer
+				.request_broadcast(Path::new("room").unwrap(), None)
+				.await
+				.unwrap();
 			let source = crate::Source::new(consumer, remote);
 
 			// MPEG-1 audio from TS: one 24 ms frame per group, a PES of five written at once.

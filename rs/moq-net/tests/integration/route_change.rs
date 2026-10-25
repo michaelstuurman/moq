@@ -16,8 +16,8 @@
 //! Two publishers sharing one explicit epoch, a redundant pair, are one source the
 //! same way.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -126,7 +126,10 @@ impl Topology {
 
 		let consumer = subscriber.consume();
 		consumer.routed(Path::new("live").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 		let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 		let sub = remote.track("video").unwrap().subscribe(prefs).await.unwrap();
 
@@ -389,7 +392,10 @@ async fn better_route_restarts(version: &str) {
 	let mut group = topology.track.append_group().unwrap();
 	group.write_frame(Timestamp::ZERO, payload(0, 0)).unwrap();
 	assert_eq!(next(&mut rx).await, (0, payload(0, 0)), "{version}");
-	let incumbent = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let incumbent = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 
 	topology.trigger(Trigger::BetterRoute).await;
 	match announced.next().await.expect("announced") {
@@ -405,7 +411,10 @@ async fn better_route_restarts(version: &str) {
 	assert_eq!(next(&mut rx).await, (0, payload(0, 1)), "{version}");
 
 	// A re-request resolves the better route on a fresh broadcast.
-	let replaced = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let replaced = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 	assert!(!replaced.is_clone(&incumbent), "{version}: joined the replaced front");
 	let sub = replaced.track("video").unwrap().subscribe(None).await.unwrap();
 	let mut fresh = read(sub);
@@ -532,7 +541,10 @@ async fn lagging_route_dies(version: Version) {
 	async fn subscribe(origin: &origin::Producer) -> track::Subscriber {
 		let consumer = origin.consume();
 		consumer.routed(Path::new("live").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 		let preferences = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 		remote.track("video").unwrap().subscribe(preferences).await.unwrap()
 	}
@@ -659,7 +671,10 @@ async fn undetected_outage(budget: Duration) -> BTreeMap<u64, Vec<String>> {
 
 	let consumer = e.consume();
 	consumer.routed(Path::new("live").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 	let prefs = track::Subscription::default().with_max_delay(budget);
 	let mut rx = read(remote.track("video").unwrap().subscribe(prefs).await.unwrap());
 	let m2_e = priced_link(version, &m2, &e, Some(1_000)).await;
@@ -805,7 +820,10 @@ async fn redundant_pair_fails_over(version: &str, loss: Loss) {
 	settle().await;
 
 	let consumer = subscriber.consume();
-	let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 	let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 	let mut rx = read(remote.track("video").unwrap().subscribe(prefs).await.unwrap());
 
@@ -915,7 +933,10 @@ async fn replaced_behind_a_relay(version: &str, epoch: Option<moq_net::Epoch>, r
 
 	let consumer = downstream.consume();
 	consumer.routed(Path::new("live").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 	let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 	let mut rx = read(remote.track("video").unwrap().subscribe(prefs).await.unwrap());
 
@@ -1031,7 +1052,10 @@ async fn producer_replaced(version: &str) {
 
 	let consumer = subscriber.consume();
 	consumer.routed(Path::new("live").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap();
 	let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 	let sub = remote.track("video").unwrap().subscribe(prefs).await.unwrap();
 	let mut rx = read(sub);

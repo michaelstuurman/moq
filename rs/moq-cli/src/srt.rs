@@ -102,7 +102,7 @@ pub async fn listen_import(
 		linger,
 		bandwidth,
 	} = target;
-let name = moq_net::PathOwned::try_from(name)?;
+	let name = moq_net::PathOwned::try_from(name)?;
 	let mut server = Server::bind(addr, latency).await?;
 	tracing::info!(%addr, %name, "SRT listening (import)");
 	notify_ready();

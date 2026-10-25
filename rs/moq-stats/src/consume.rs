@@ -255,7 +255,10 @@ mod tests {
 
 		let (_, active) = next_update(&mut announced).await.expect("announce");
 		assert!(active);
-		let consumer = egress.request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
+		let consumer = egress
+			.request_broadcast(Path::new(path).unwrap(), None)
+			.await
+			.expect("resolve");
 		let sub = consumer.track("video").unwrap().subscribe(None).await.unwrap();
 
 		Feed {

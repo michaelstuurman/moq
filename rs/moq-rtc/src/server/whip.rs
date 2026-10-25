@@ -222,8 +222,13 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
-		let broadcast = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer())
+			.await
+			.unwrap();
+		let broadcast = consumer
+			.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalog = broadcast
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -251,8 +256,13 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let _stale_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
-		let stale = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let _stale_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer())
+			.await
+			.unwrap();
+		let stale = consumer
+			.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -260,7 +270,9 @@ mod tests {
 			.await
 			.unwrap();
 
-		let _fresh_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
+		let _fresh_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer())
+			.await
+			.unwrap();
 		// The session binds a real UDP socket, so this runs on the wall clock.
 		let stale_viewer = tokio::time::timeout(std::time::Duration::from_millis(200), async {
 			loop {
@@ -272,7 +284,10 @@ mod tests {
 		})
 		.await;
 		assert!(stale_viewer.is_err(), "the stale viewer ended: {stale_viewer:?}");
-		let fresh = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let fresh = consumer
+			.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		assert!(!fresh.is_clone(&stale), "viewers reach the reconnected session");
 	}
 }

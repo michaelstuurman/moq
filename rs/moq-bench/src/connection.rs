@@ -985,15 +985,21 @@ mod tests {
 
 		// Our own broadcast: in the namespace, but excluded via the `own` set
 		// (paths relative to the namespace, matching the scoped announce consumer).
-		let _previous = origin.create_broadcast(Path::new("bench/previous/0/0").unwrap()).unwrap();
+		let _previous = origin
+			.create_broadcast(Path::new("bench/previous/0/0").unwrap())
+			.unwrap();
 		_previous.announce(Default::default()).unwrap();
 
-		let _own = origin.create_broadcast(Path::new("bench/current/9/9").unwrap()).unwrap();
+		let _own = origin
+			.create_broadcast(Path::new("bench/current/9/9").unwrap())
+			.unwrap();
 		_own.announce(Default::default()).unwrap();
 		let own = HashSet::from(["9/9".to_string()]);
 
 		// One legitimate peer under the bench namespace with a single finished group.
-		let peer = origin.create_broadcast(Path::new("bench/current/0/0").unwrap()).unwrap();
+		let peer = origin
+			.create_broadcast(Path::new("bench/current/0/0").unwrap())
+			.unwrap();
 		peer.announce(Default::default()).unwrap();
 		let track = peer.create_track(TRACK, timed()).unwrap();
 		let mut group = track.append_group().unwrap();

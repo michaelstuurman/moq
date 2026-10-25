@@ -45,7 +45,11 @@ async fn largest_quic_sequence_reaches_the_subscriber() {
 			.await
 			.unwrap()
 			.unwrap();
-		let remote = subscriber.consume().request_broadcast(Path::new("ladder").unwrap(), None).await.unwrap();
+		let remote = subscriber
+			.consume()
+			.request_broadcast(Path::new("ladder").unwrap(), None)
+			.await
+			.unwrap();
 		let mut sub = remote.track("data").unwrap().subscribe(None).await.unwrap();
 		for sequence in [5, 1 << 32, (1 << 53) - 1, (1 << 53) + 1, (1 << 62) - 1] {
 			// Timestamps stop at 2^61 - 1, the most lite-05/06 can zigzag as a first frame.
@@ -77,7 +81,9 @@ fn publish(
 	moq_net::track::Producer,
 ) {
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
+	let broadcast = origin
+		.create_broadcast(Path::new(name).unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI);
 	let track = broadcast.create_track("video", info).expect("create track");

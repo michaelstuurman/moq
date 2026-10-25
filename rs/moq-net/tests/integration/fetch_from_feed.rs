@@ -4,8 +4,8 @@
 //! subscription: a group the feed delivers is served, and one it never will is a miss,
 //! never a version error that a caller would retry forever.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

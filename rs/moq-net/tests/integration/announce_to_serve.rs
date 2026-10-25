@@ -10,8 +10,8 @@
 //! Deterministic: time is paused and the runtime is single-threaded, so settling
 //! is a virtual sleep.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -62,10 +62,13 @@ fn drain(announced: &mut moq_net::announce::Consumer) -> Vec<String> {
 
 /// How a request for the path answers.
 async fn request(consumer: &origin::Consumer) -> Result<moq_net::broadcast::Consumer, String> {
-	consumer.request_broadcast(Path::new(PATH).unwrap(), None).await.map_err(|err| match err {
-		Error::Unroutable => "unroutable".to_string(),
-		err => err.to_string(),
-	})
+	consumer
+		.request_broadcast(Path::new(PATH).unwrap(), None)
+		.await
+		.map_err(|err| match err {
+			Error::Unroutable => "unroutable".to_string(),
+			err => err.to_string(),
+		})
 }
 
 fn outcome(result: &Result<moq_net::broadcast::Consumer, String>) -> String {

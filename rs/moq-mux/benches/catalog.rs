@@ -112,7 +112,8 @@ impl Fanout {
 					black_box(rendition.jitter);
 					if let Some(reference) = &rendition.broadcast {
 						assert!(
-							moq_net::Path::new("room/catalog").unwrap()
+							moq_net::Path::new("room/catalog")
+								.unwrap()
 								.try_resolve(reference)
 								.unwrap()
 								.as_str()

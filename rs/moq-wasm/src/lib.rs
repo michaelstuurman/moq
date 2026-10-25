@@ -158,9 +158,10 @@ impl Session {
 		let session = self.inner.clone();
 		let consumer = self.consumer.clone();
 		future_to_promise(async move {
+			let path = moq_net::PathOwned::try_from(path).map_err(js_err)?;
 			let request = pin!(async {
-				consumer.routed(path.as_str()).await?;
-				consumer.request_broadcast(path.as_str(), None).await.ok()
+				consumer.routed(&path).await?;
+				consumer.request_broadcast(&path, None).await.ok()
 			});
 			// The origin outlives the session, so its wait alone never ends on a close.
 			let closed = pin!(session.closed());

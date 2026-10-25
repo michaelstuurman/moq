@@ -1,4 +1,3 @@
-use moq_net::Path;
 use super::origin::*;
 use super::producer::*;
 use super::server::{MoqServer, MoqServerConfig, MoqServerTls};
@@ -20,6 +19,7 @@ use crate::session::{
 	MoqBackoff, MoqCongestionControl, MoqConnectionPhase, MoqQuicConfig, MoqWebSocketConfig, moq_client_defaults,
 	moq_qlog_supported, moq_versions,
 };
+use moq_net::Path;
 
 use std::future::Future;
 use std::sync::Arc;

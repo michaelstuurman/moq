@@ -76,7 +76,9 @@ impl Room {
 		let (producer, driver) = origin::Producer::new(origin::Config::default());
 		let _sources = (0..broadcasts)
 			.map(|i| {
-				let broadcast = producer.publish(Path::try_from(format!("room/{i}")).unwrap(), origin::Route::default()).unwrap();
+				let broadcast = producer
+					.publish(Path::try_from(format!("room/{i}")).unwrap(), origin::Route::default())
+					.unwrap();
 				let track = broadcast.create_track("video", timed()).unwrap();
 				let mut group = track.append_group().unwrap();
 				group.write_frame(Timestamp::ZERO, b"frame".as_ref()).unwrap();
@@ -113,7 +115,9 @@ impl Room {
 	fn join(&mut self, n: usize) -> moq_net::track::Subscriber {
 		let session = moq_net::fuzz::excluding(self.producer.consume(), Hop::random());
 		let path = format!("room/{}", n % self.broadcasts);
-		let resolved = self.drive(session.request_broadcast(Path::try_from(path).unwrap(), None)).unwrap();
+		let resolved = self
+			.drive(session.request_broadcast(Path::try_from(path).unwrap(), None))
+			.unwrap();
 		let mut subscription = self.drive(resolved.track("video").unwrap().subscribe(None)).unwrap();
 		self.drive(subscription.recv_group())
 			.unwrap()

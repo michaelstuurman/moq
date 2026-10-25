@@ -7,8 +7,8 @@
 //! cannot tell that from media time, so its copy is untimed and every hop past it sees an
 //! untimed track that nothing can refuse.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

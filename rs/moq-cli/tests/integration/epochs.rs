@@ -83,7 +83,9 @@ struct Published {
 
 fn publish(origin: &origin::Producer, epoch: &Epoch, tag: &str) -> Published {
 	let route = origin::Route::default().with_epoch(epoch.clone());
-	let mut broadcast = origin.publish(Path::new("live/catalog.hang").unwrap(), route.clone()).unwrap();
+	let mut broadcast = origin
+		.publish(Path::new("live/catalog.hang").unwrap(), route.clone())
+		.unwrap();
 	let sibling = origin.publish(Path::new("live/media").unwrap(), route).unwrap();
 	let media = sibling
 		.create_track(
@@ -159,7 +161,10 @@ async fn replacement(version: &str) {
 	assert!(matches!(catalog_follow.next().await, Some(announce::Event::Start(_))));
 	assert!(matches!(media_follow.next().await, Some(announce::Event::Start(_))));
 
-	let held = viewer.request_broadcast(Path::new("live/catalog.hang").unwrap(), None).await.unwrap();
+	let held = viewer
+		.request_broadcast(Path::new("live/catalog.hang").unwrap(), None)
+		.await
+		.unwrap();
 	let old = moq_mux::Source::new(viewer.clone(), held);
 	let mut catalog = old.catalog::<()>(moq_mux::catalog::CatalogFormat::Hang).await.unwrap();
 	let snapshot = catalog.next().await.unwrap().unwrap();
@@ -255,7 +260,10 @@ async fn replacement(version: &str) {
 	// Fresh catalog handles start fresh pins instead of sharing the old Source's cache.
 	let fresh = moq_mux::Source::new(
 		viewer.clone(),
-		viewer.request_broadcast(Path::new("live/catalog.hang").unwrap(), None).await.unwrap(),
+		viewer
+			.request_broadcast(Path::new("live/catalog.hang").unwrap(), None)
+			.await
+			.unwrap(),
 	);
 	let mut fresh_catalog = fresh
 		.catalog::<()>(moq_mux::catalog::CatalogFormat::Hang)
@@ -283,7 +291,10 @@ async fn replacement(version: &str) {
 		changed(&mut media_follow).await;
 	})
 	.await;
-	let returned = viewer.request_broadcast(Path::new("live/media").unwrap(), None).await.unwrap();
+	let returned = viewer
+		.request_broadcast(Path::new("live/media").unwrap(), None)
+		.await
+		.unwrap();
 	let mut returned = returned.track("audio").unwrap().subscribe(None).await.unwrap();
 	write(&first.media, "A:3");
 	let returned_frame = read(&mut returned).await;

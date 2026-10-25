@@ -4,8 +4,8 @@
 //! no transport stats reads while nothing moves. A server holds thousands of these,
 //! so a fixed-interval timer per session adds up to whole cores.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::{
 	sync::{

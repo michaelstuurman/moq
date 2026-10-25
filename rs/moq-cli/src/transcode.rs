@@ -227,7 +227,8 @@ mod tests {
 		};
 		let old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let _old_dynamic = old.dynamic();
-		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
+		let mut derivatives =
+			moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),
@@ -274,7 +275,8 @@ mod tests {
 		let route = || moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint());
 		let mut old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let mut catalog = moq_mux::catalog::Producer::new(&mut old, Default::default()).unwrap();
-		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
+		let mut derivatives =
+			moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),

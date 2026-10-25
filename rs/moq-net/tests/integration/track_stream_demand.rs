@@ -8,8 +8,8 @@
 //! publisher watching its demand sees one `used` edge for a viewer, not `used`, `unused`,
 //! `used` with a round trip per hop in between.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
@@ -129,7 +129,10 @@ async fn one_used_edge(version: &str, relays: usize, reorder: bool) {
 		.await
 		.unwrap_or_else(|_| panic!("{label}: never announced"))
 		.unwrap();
-	let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("room").unwrap(), None)
+		.await
+		.unwrap();
 
 	let subscribing = remote.track("video").unwrap().subscribe(None);
 	if reorder {
@@ -225,7 +228,10 @@ async fn bare_handle_is_lazy(version: &str, relays: usize) {
 		.await
 		.unwrap_or_else(|_| panic!("{label}: never announced"))
 		.unwrap();
-	let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("room").unwrap(), None)
+		.await
+		.unwrap();
 
 	let handle = remote.track("video").unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;

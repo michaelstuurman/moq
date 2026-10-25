@@ -3,8 +3,8 @@
 //! A moq-lite-07 TRACKS listing over a session and through a relay: each hop syncs with
 //! what it holds at once, and the upstream's tracks follow as live adds.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

@@ -13,10 +13,10 @@
 #[path = "../tests/integration/support/mod.rs"]
 mod support;
 
-use moq_net::Path;
 use bytes::Bytes;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use futures::future::join_all;
+use moq_net::Path;
 use moq_net::{Hop, Session, Version, auth, origin};
 use std::time::Duration;
 use support::{harness, mock::create_mock_session_pair};
@@ -187,7 +187,11 @@ fn renewal(c: &mut Criterion) {
 						let auths = runtime
 							.block_on(async { [handle.add("a").await.unwrap().0, handle.add("b").await.unwrap().0] });
 						let broadcasts: Vec<_> = (0..routes)
-							.map(|route| origin.create_broadcast(Path::new(format!("room/{route}").as_str()).unwrap()).unwrap())
+							.map(|route| {
+								origin
+									.create_broadcast(Path::new(format!("room/{route}").as_str()).unwrap())
+									.unwrap()
+							})
 							.collect();
 						let mut swap = |auth: &auth::Auth, touched: usize| {
 							for broadcast in broadcasts.iter().take(touched) {
@@ -267,8 +271,9 @@ fn waiting(c: &mut Criterion) {
 								generation += 1;
 								let broadcasts: Vec<_> = (0..paths)
 									.map(|path| {
-										let broadcast =
-											publish.create_broadcast(Path::new(format!("{prefix}{path}").as_str()).unwrap()).unwrap();
+										let broadcast = publish
+											.create_broadcast(Path::new(format!("{prefix}{path}").as_str()).unwrap())
+											.unwrap();
 										broadcast.announce(Default::default()).unwrap();
 										broadcast
 									})

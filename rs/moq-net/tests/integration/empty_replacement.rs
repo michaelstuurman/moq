@@ -6,8 +6,8 @@
 //! contradicts a received group, which the relay treats as a protocol violation and closes
 //! the whole session.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

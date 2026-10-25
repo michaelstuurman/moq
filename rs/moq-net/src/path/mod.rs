@@ -549,7 +549,10 @@ impl TryFrom<String> for Path<'_> {
 		Ok(if s.is_empty() {
 			Path::empty()
 		} else {
-			Path(Repr::Shared { buf: s.into(), start: 0 })
+			Path(Repr::Shared {
+				buf: s.into(),
+				start: 0,
+			})
 		})
 	}
 }

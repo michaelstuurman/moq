@@ -6,8 +6,8 @@
 //! Each case runs publisher -> relay -> far over two mock sessions. moq-lite only:
 //! moq-transport's PUBLISH_DONE registry has no code for either error.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

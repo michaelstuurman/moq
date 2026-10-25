@@ -115,7 +115,9 @@ async fn connect_test(config: ConnectTest<'_>) {
 
 	// ── publisher (server) ──────────────────────────────────────────
 	let pub_origin = moq_tokio::origin::spawn();
-	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+	let broadcast = pub_origin
+		.create_broadcast(Path::new("test").unwrap())
+		.expect("failed to create broadcast");
 	broadcast
 		.announce(Default::default())
 		.expect("failed to create broadcast");
@@ -190,10 +192,13 @@ async fn connect_test(config: ConnectTest<'_>) {
 		.expect("origin closed");
 	assert_eq!(update.prefix.as_str(), "test");
 	assert!(active, "expected announce, got retraction");
-	let bc = tokio::time::timeout(TIMEOUT, sub_consumer.request_broadcast(Path::new("test").unwrap(), None))
-		.await
-		.expect("request timed out")
-		.expect("announced broadcast resolves");
+	let bc = tokio::time::timeout(
+		TIMEOUT,
+		sub_consumer.request_broadcast(Path::new("test").unwrap(), None),
+	)
+	.await
+	.expect("request timed out")
+	.expect("announced broadcast resolves");
 
 	let mut track_sub = bc
 		.track("video")
@@ -600,7 +605,9 @@ async fn iroh_connect_test(version: Option<&str>) {
 
 	// ── publisher (server) ──────────────────────────────────────────
 	let pub_origin = moq_tokio::origin::spawn();
-	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+	let broadcast = pub_origin
+		.create_broadcast(Path::new("test").unwrap())
+		.expect("failed to create broadcast");
 	broadcast
 		.announce(Default::default())
 		.expect("failed to create broadcast");
@@ -704,10 +711,13 @@ async fn iroh_connect_test(version: Option<&str>) {
 		.expect("origin closed");
 	assert_eq!(update.prefix.as_str(), "test");
 	assert!(active, "expected announce, got retraction");
-	let bc = tokio::time::timeout(TIMEOUT, sub_consumer.request_broadcast(Path::new("test").unwrap(), None))
-		.await
-		.expect("request timed out")
-		.expect("announced broadcast resolves");
+	let bc = tokio::time::timeout(
+		TIMEOUT,
+		sub_consumer.request_broadcast(Path::new("test").unwrap(), None),
+	)
+	.await
+	.expect("request timed out")
+	.expect("announced broadcast resolves");
 
 	let mut track_sub = bc
 		.track("video")
@@ -831,7 +841,9 @@ async fn quic_client_close_drains_finished_track() {
 			.expect("client runtime");
 		runtime.block_on(async move {
 			let origin = moq_tokio::origin::spawn();
-			let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+			let broadcast = origin
+				.create_broadcast(Path::new("test").unwrap())
+				.expect("failed to create broadcast");
 			broadcast.announce(Default::default()).expect("failed to announce");
 			let mut track = broadcast
 				.create_track("video", timed())
@@ -945,7 +957,9 @@ async fn quic_client_close_drains_migrated_predecessor() {
 			.expect("client runtime");
 		runtime.block_on(async move {
 			let origin = moq_tokio::origin::spawn();
-			let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+			let broadcast = origin
+				.create_broadcast(Path::new("test").unwrap())
+				.expect("failed to create broadcast");
 			broadcast.announce(Default::default()).expect("failed to announce");
 			let mut track = broadcast
 				.create_track("video", timed())
@@ -1087,7 +1101,9 @@ async fn quic_client_close_keeps_predecessor_handover() {
 			.expect("client runtime");
 		runtime.block_on(async move {
 			let origin = moq_tokio::origin::spawn();
-			let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+			let broadcast = origin
+				.create_broadcast(Path::new("test").unwrap())
+				.expect("failed to create broadcast");
 			broadcast.announce(Default::default()).expect("failed to announce");
 			// Never finished, so the predecessor serving it cannot drain.
 			let mut track = broadcast

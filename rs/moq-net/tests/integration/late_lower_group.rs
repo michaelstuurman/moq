@@ -7,8 +7,8 @@
 //! is dropped. Lite-06 and later encode a floor of group 0 as 0, which is the only
 //! spelling of both an omitted floor and group 0; the draft says that 0 is group 0.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

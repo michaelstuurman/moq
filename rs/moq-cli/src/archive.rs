@@ -250,7 +250,9 @@ pub async fn import(
 	let store = open(&args.store)?;
 	// A second handle lists the recording's timelines while the reader owns the first.
 	let listing = open(&args.store)?;
-	let broadcast = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
+	let broadcast = origin
+		.create_broadcast(moq_net::Path::new(&name)?)
+		.context("failed to create broadcast")?;
 	let mut timelines = store
 		.timelines()
 		.await
@@ -415,7 +417,10 @@ mod tests {
 		assert!(running.start(&epochless));
 		assert!(!running.done(&epochless));
 
-		let pinned = (moq_net::Path::new("live/b").unwrap().to_owned(), Some(moq_net::Epoch::mint()));
+		let pinned = (
+			moq_net::Path::new("live/b").unwrap().to_owned(),
+			Some(moq_net::Epoch::mint()),
+		);
 		assert!(running.start(&pinned));
 		assert!(!running.start(&pinned));
 		assert!(running.done(&pinned));
@@ -474,7 +479,10 @@ mod tests {
 		let hostile = format!("live/a/@{epoch}");
 		let nested = key(
 			&Path::from("rec"),
-			&(moq_net::Path::new(&hostile).unwrap().to_owned(), Some(moq_net::Epoch::mint())),
+			&(
+				moq_net::Path::new(&hostile).unwrap().to_owned(),
+				Some(moq_net::Epoch::mint()),
+			),
 		)
 		.unwrap();
 		assert!(nested.prefix_match(&victim).is_none(), "{nested} is under {victim}");

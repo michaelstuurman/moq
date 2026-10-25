@@ -30,7 +30,9 @@ fn origin_front_serves_media_with_only_explicit_polls() {
 	broadcast.announce(origin::Route::default()).unwrap();
 
 	// Resolving and subscribing pass through the origin's core front tasks.
-	let requesting = origin.consume().request_broadcast(Path::new("room/live").unwrap(), None);
+	let requesting = origin
+		.consume()
+		.request_broadcast(Path::new("room/live").unwrap(), None);
 	assert!(requesting.poll_ok(&waiter).is_pending());
 	driver.poll(now, &waiter).unwrap();
 	let receiving: broadcast::Consumer = ready(requesting.poll_ok(&waiter)).unwrap();
@@ -45,7 +47,10 @@ fn origin_front_serves_media_with_only_explicit_polls() {
 
 	// Driver teardown also works without any executor-owned tasks.
 	drop(driver);
-	assert!(matches!(origin.create_broadcast(Path::new("after-close").unwrap()), Err(Error::Closed)));
+	assert!(matches!(
+		origin.create_broadcast(Path::new("after-close").unwrap()),
+		Err(Error::Closed)
+	));
 }
 
 #[test]

@@ -103,7 +103,9 @@ mod tests {
 		drop(listener);
 
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
+		let broadcast = origin
+			.create_broadcast(Path::new("test").unwrap())
+			.expect("create broadcast");
 		let url = format!("http://user:pass@{address}/whep/test?jwt=secret")
 			.parse()
 			.expect("WHEP URL");

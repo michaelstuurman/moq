@@ -4,8 +4,8 @@
 //! reaches the next hop as finished. The served stream resets with `Old`, so a relay does
 //! not cache the frames it already has as the whole group.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

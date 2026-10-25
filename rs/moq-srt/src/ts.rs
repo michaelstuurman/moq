@@ -257,9 +257,9 @@ impl Subscriber {
 	reason = "tests read the host clock directly"
 )]
 mod tests {
-	use moq_net::Path;
 	use moq_mux::catalog::hang::Container;
 	use moq_mux::catalog::{CatalogFormat, Stream};
+	use moq_net::Path;
 	use tokio::time::timeout;
 
 	/// Build an origin producer, spawning its driver on the ambient runtime.
@@ -482,7 +482,10 @@ mod tests {
 			.await
 			.expect("announce timed out")
 			.expect("the broadcast is announced");
-		let broadcast = consumer.request_broadcast(Path::new(path).unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(Path::new(path).unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalog = moq_mux::catalog::Consumer::<ts::Ext>::new(&broadcast, CatalogFormat::Hang)
 			.await
 			.unwrap();
@@ -518,7 +521,10 @@ mod tests {
 		let origin = produce_origin();
 		let consumer = origin.consume();
 		let _stale = Publisher::new(&origin, "ingest", Default::default(), None).unwrap();
-		let stale = consumer.request_broadcast(Path::new("ingest").unwrap(), None).await.unwrap();
+		let stale = consumer
+			.request_broadcast(Path::new("ingest").unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -537,7 +543,10 @@ mod tests {
 		})
 		.await;
 		assert!(stale_viewer.is_err(), "the stale viewer ended: {stale_viewer:?}");
-		let fresh = consumer.request_broadcast(Path::new("ingest").unwrap(), None).await.unwrap();
+		let fresh = consumer
+			.request_broadcast(Path::new("ingest").unwrap(), None)
+			.await
+			.unwrap();
 		assert!(!fresh.is_clone(&stale), "viewers reach the reconnected caller");
 	}
 
@@ -559,9 +568,12 @@ mod tests {
 		assert_eq!(program(&origin, "ingest/1").await, (1, vec![0x0101]));
 		assert_eq!(program(&origin, "ingest/2").await, (2, vec![0x0201]));
 		assert!(
-			timeout(Duration::from_secs(1), origin.consume().routed(Path::new("ingest").unwrap()))
-				.await
-				.is_err(),
+			timeout(
+				Duration::from_secs(1),
+				origin.consume().routed(Path::new("ingest").unwrap())
+			)
+			.await
+			.is_err(),
 			"nothing is published on the bare path"
 		);
 		drop(publisher.finish(Duration::ZERO).unwrap());
@@ -578,7 +590,10 @@ mod tests {
 
 		let consumer = origin.consume();
 		consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
-		let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let start = tokio::time::Instant::now();
 		let wait = tokio::spawn(publisher.finish(linger).unwrap().wait());
 		tokio::time::sleep(linger / 2).await;
@@ -612,7 +627,10 @@ mod tests {
 
 		let consumer = origin.consume();
 		consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
-		let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let info = broadcast.track("0.avc3").unwrap().query().await.unwrap();
 		assert_eq!(info.max_age, Some(Duration::from_secs(3)));
 	}
@@ -662,7 +680,10 @@ mod tests {
 			.await
 			.expect("announce timed out")
 			.expect("the ingest broadcast is announced");
-		let broadcast = consumer.request_broadcast(Path::new("ingest").unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(Path::new("ingest").unwrap(), None)
+			.await
+			.unwrap();
 
 		publisher.feed(bytes::Bytes::from_static(BBB5S)).unwrap();
 

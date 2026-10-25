@@ -5,8 +5,8 @@
 //! catalog does not produce one, so a reader that never received the snapshot
 //! must still get it.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::{future::Future, time::Duration};
 
@@ -61,7 +61,10 @@ fn publish(origin: &origin::Producer) -> (broadcast::Producer, track::Producer) 
 async fn request(origin: &origin::Producer) -> broadcast::Consumer {
 	let consumer = origin.consume();
 	consumer.routed(Path::new("live").unwrap()).await.unwrap();
-	consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap()
+	consumer
+		.request_broadcast(Path::new("live").unwrap(), None)
+		.await
+		.unwrap()
 }
 
 /// Subscribe without a floor and expect the snapshot as group 0.

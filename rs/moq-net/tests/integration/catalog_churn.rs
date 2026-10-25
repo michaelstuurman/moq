@@ -9,8 +9,8 @@
 //! on, and every fetch gets the whole group written so far. A failing seed is
 //! shrunk to the ops it needs, which the report names.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -266,7 +266,10 @@ impl Topology {
 
 	/// A fresh request for the broadcast; `None` when refused, as with no route right now.
 	async fn request(&self, step: usize) -> Result<Option<moq_net::broadcast::Consumer>, Failure> {
-		let request = self.subscriber.consume().request_broadcast(Path::new("live").unwrap(), None);
+		let request = self
+			.subscriber
+			.consume()
+			.request_broadcast(Path::new("live").unwrap(), None);
 		match moq_clock::timeout(READ_TIMEOUT, request).await {
 			Ok(result) => Ok(result.ok()),
 			Err(_) => Err(stuck(format!("{step}: request hung"))),

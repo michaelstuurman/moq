@@ -5,8 +5,8 @@
 //! the session dying, ends the track cleanly but must not throw those groups away: a
 //! consumer that has not read them yet still gets them, then the clean end.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use moq_net::{Error, Hop, Timestamp};
 

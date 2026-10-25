@@ -2322,8 +2322,8 @@ impl Default for Redial {
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
 	use super::*;
-	use moq_net::Path;
 	use crate::Config as RelayConfig;
+	use moq_net::Path;
 
 	#[tokio::test]
 	async fn request_limits_follow_the_admitted_grant() {
@@ -2350,8 +2350,12 @@ mod tests {
 	#[tokio::test]
 	async fn only_a_peer_grant_discovers_hidden_routes() {
 		let cluster = new_cluster(Config::default()).expect("cluster");
-		let _hidden = cluster.origin.publish(Path::new(".stats/node").unwrap(), origin::Route::default());
-		let _visible = cluster.origin.publish(Path::new("room").unwrap(), origin::Route::default());
+		let _hidden = cluster
+			.origin
+			.publish(Path::new(".stats/node").unwrap(), origin::Route::default());
+		let _visible = cluster
+			.origin
+			.publish(Path::new("room").unwrap(), origin::Route::default());
 		let mut request = moq_auth::Request::new("test", moq_auth::Transport::Quic, "/");
 		request.tls = Some(moq_auth::Peer {
 			name: "edge0".into(),
@@ -2431,7 +2435,9 @@ mod tests {
 
 		let publisher = cluster.publisher(&token).expect("publish grant");
 		assert!(publisher.create_broadcast(Path::new(".svc/foo").unwrap()).is_err());
-		publisher.create_broadcast(Path::new("cam").unwrap()).expect("publish outside the mount");
+		publisher
+			.create_broadcast(Path::new("cam").unwrap())
+			.expect("publish outside the mount");
 
 		// A mount the origin refuses admits nothing rather than half a grant.
 		grant.mounts.insert(".svc/x".into(), ".other".into());
@@ -3079,10 +3085,13 @@ mod tests {
 		assert!(pool.used() > 0, "writes charge the constructed cache pool");
 
 		let consumer = cluster.origin.consume();
-		tokio::time::timeout(Duration::from_secs(2), consumer.request_broadcast(Path::new("cam").unwrap(), None))
-			.await
-			.expect("broadcast resolves")
-			.expect("broadcast present");
+		tokio::time::timeout(
+			Duration::from_secs(2),
+			consumer.request_broadcast(Path::new("cam").unwrap(), None),
+		)
+		.await
+		.expect("broadcast resolves")
+		.expect("broadcast present");
 
 		let stats_path = moq_net::Path::new(".stats/node/test").unwrap();
 		tokio::time::timeout(Duration::from_secs(5), consumer.routed(&stats_path))
@@ -3483,7 +3492,10 @@ mod tests {
 		let node = new_cluster(Config::default()).expect("node cluster");
 		let fingerprint = new_cluster(Config::default()).expect("fingerprint cluster");
 
-		let _from_node = node.origin.create_broadcast(Path::new("from-node").unwrap()).expect("create");
+		let _from_node = node
+			.origin
+			.create_broadcast(Path::new("from-node").unwrap())
+			.expect("create");
 		_from_node.announce(Default::default()).expect("announce");
 
 		let mut listen = moq_tokio::listen::Config::default();
@@ -3538,7 +3550,10 @@ mod tests {
 		// The dialer marks what the peer forwards: it entered at `node`, not here.
 		assert_eq!(update.route.source(), origin::Source::Peer(node.origin.hop()));
 
-		let _from_fp = fingerprint.origin.create_broadcast(Path::new("from-fingerprint").unwrap()).expect("create");
+		let _from_fp = fingerprint
+			.origin
+			.create_broadcast(Path::new("from-fingerprint").unwrap())
+			.expect("create");
 		_from_fp.announce(Default::default()).expect("announce");
 		let mut announced = node.origin.consume().announced();
 		loop {
@@ -3822,7 +3837,10 @@ mod tests {
 				let dialer = new_cluster(Config::default())
 					.expect("dialer cluster")
 					.with_connect(Default::default(), quic);
-				let broadcast = dialer.origin.create_broadcast(Path::new("from-dialer").unwrap()).expect("create");
+				let broadcast = dialer
+					.origin
+					.create_broadcast(Path::new("from-dialer").unwrap())
+					.expect("create");
 				broadcast.announce(Default::default()).expect("announce");
 				tokio::spawn(dialer.clone().supervise_remote(target, String::new()));
 				(dialer, broadcast)

@@ -217,7 +217,12 @@ impl Origin {
 	/// The callback fires a broadcast handle (> 0) for each instance serving the path, until a
 	/// single terminal code (`0` on close, negative on error). Returns a task handle for
 	/// cancellation via [`Self::consume_announced_close`].
-	pub fn consume_announced(&mut self, origin: Id, path: moq_net::PathOwned, on_broadcast: OnStatus) -> Result<Id, Error> {
+	pub fn consume_announced(
+		&mut self,
+		origin: Id,
+		path: moq_net::PathOwned,
+		on_broadcast: OnStatus,
+	) -> Result<Id, Error> {
 		let origin = self.active.get(origin).ok_or(Error::OriginNotFound)?;
 		origin.driver.check()?;
 		let driver = origin.driver.clone();
@@ -457,7 +462,11 @@ mod supervision_tests {
 			.unwrap();
 		let mut publish = crate::publish::Publish::default();
 		let broadcast = publish
-			.create(origins.create_broadcast(origin, Path::new("retained").unwrap()).unwrap())
+			.create(
+				origins
+					.create_broadcast(origin, Path::new("retained").unwrap())
+					.unwrap(),
+			)
 			.unwrap();
 		origins.close(origin).unwrap();
 		*trigger
@@ -471,7 +480,11 @@ mod supervision_tests {
 		));
 		let healthy = origins.create().unwrap();
 		let broadcast = publish
-			.create(origins.create_broadcast(healthy, Path::new("healthy").unwrap()).unwrap())
+			.create(
+				origins
+					.create_broadcast(healthy, Path::new("healthy").unwrap())
+					.unwrap(),
+			)
 			.unwrap();
 		publish.announce(broadcast, Default::default()).unwrap();
 	}

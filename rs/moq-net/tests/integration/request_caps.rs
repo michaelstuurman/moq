@@ -6,8 +6,8 @@
 //! limits size is granted back as requests close, so a client that keeps opening and closing
 //! requests within them never stalls.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -83,10 +83,13 @@ async fn closed_requests_are_granted_back() {
 		// A window of 8 requests, far fewer than the rounds below. Doubling the limit leaves
 		// room for an UNSUBSCRIBE still in flight when the next SUBSCRIBE lands.
 		let setup = setup(version, limits(0, 4), ROUNDS).await;
-		let broadcast = moq_clock::timeout(TIMEOUT, setup.client.consume().routed_broadcast(Path::new("bcast").unwrap()))
-			.await
-			.expect("announce timeout")
-			.unwrap();
+		let broadcast = moq_clock::timeout(
+			TIMEOUT,
+			setup.client.consume().routed_broadcast(Path::new("bcast").unwrap()),
+		)
+		.await
+		.expect("announce timeout")
+		.unwrap();
 
 		for round in 0..ROUNDS {
 			let track = broadcast.track(&format!("t{round}")).unwrap();

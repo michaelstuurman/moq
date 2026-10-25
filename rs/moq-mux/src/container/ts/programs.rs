@@ -460,7 +460,11 @@ mod test {
 	#[tokio::test]
 	async fn a_pat_spanning_two_packets_is_read_whole() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		let input = fifty_programs();
 		for chunk in input.chunks(100) {
 			programs.decode(chunk).unwrap();
@@ -468,7 +472,11 @@ mod test {
 		programs.finish().unwrap();
 		assert_eq!(programs.programs.len(), 1, "only program 50 has a PMT");
 
-		let consumer = origin.consume().request_broadcast(Path::new("event/50.hang").unwrap(), None).await.unwrap();
+		let consumer = origin
+			.consume()
+			.request_broadcast(Path::new("event/50.hang").unwrap(), None)
+			.await
+			.unwrap();
 		let catalog = hang::catalog::Catalog::<()>::subscribe(&consumer)
 			.await
 			.unwrap()
@@ -504,7 +512,11 @@ mod test {
 
 	/// How many audio renditions the catalog `path` publishes lists.
 	async fn renditions(origin: &moq_net::origin::Producer, path: &str) -> usize {
-		let consumer = origin.consume().request_broadcast(Path::new(path).unwrap(), None).await.unwrap();
+		let consumer = origin
+			.consume()
+			.request_broadcast(Path::new(path).unwrap(), None)
+			.await
+			.unwrap();
 		let catalog = hang::catalog::Catalog::<()>::subscribe(&consumer)
 			.await
 			.unwrap()
@@ -520,7 +532,11 @@ mod test {
 	#[tokio::test]
 	async fn a_pat_in_two_sections_starts_every_program() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		programs.decode(&two_section_pat()).unwrap();
 		programs.finish().unwrap();
 		assert_eq!(programs.programs.len(), 2);
@@ -533,7 +549,11 @@ mod test {
 	#[tokio::test]
 	async fn only_programs_a_pmt_describes_publish() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		// Pairs of programs share a PMT PID, so 6 waits on the PID that starts 7.
 		let pmt_pid = |program: u16| 0x0100 + program / 2;
 		let mut cc = 0;
@@ -572,7 +592,11 @@ mod test {
 	#[tokio::test]
 	async fn a_later_pat_revises_the_waiting_programs() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		let mut cc = 0;
 		let mut data = psi_packets(0, &mut cc, &[], &pat_section(&[(1, 0x0100), (2, 0x0101)]));
 		let revised = psi::section(0x00, 1, 1, 0, 0, &[0x00, 0x01, 0xe2, 0x00]);
@@ -598,7 +622,11 @@ mod test {
 	#[tokio::test]
 	async fn a_program_starts_on_the_last_pmt_in_its_packet() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		let mut data = psi_packets(0, &mut 0, &[], &pat_section(&[(1, 0x0100)]));
 		let mut sections = pmt_section(1, 0, &[(MP2, 0x0062, &[])]);
 		sections.extend(pmt_section(1, 1, &[(MP2, 0x0061, &[])]));
@@ -614,7 +642,11 @@ mod test {
 	#[tokio::test]
 	async fn a_pmt_spanning_two_packets_starts_its_program() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 		let mut data = psi_packets(0, &mut 0, &[], &pat_section(&[(1, 0x0100)]));
 		let mut private = vec![0x80, 200];
 		private.resize(202, 0);
@@ -877,7 +909,11 @@ mod test {
 	#[tokio::test]
 	async fn every_program_publishes_its_own_broadcast() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin.clone(), Path::new("event.hang").unwrap(), catalog::Config::default());
+		let mut programs = Programs::new(
+			origin.clone(),
+			Path::new("event.hang").unwrap(),
+			catalog::Config::default(),
+		);
 
 		let input = two_programs();
 		let before = moq_clock::wall();
@@ -891,7 +927,11 @@ mod test {
 		let after = moq_clock::wall();
 
 		for (path, fills) in [("event/1.hang", [0xAA, 0xBB]), ("event/2.hang", [0xCC, 0xDD])] {
-			let consumer = origin.consume().request_broadcast(Path::new(path).unwrap(), None).await.unwrap();
+			let consumer = origin
+				.consume()
+				.request_broadcast(Path::new(path).unwrap(), None)
+				.await
+				.unwrap();
 			let catalog = hang::catalog::Catalog::<()>::subscribe(&consumer)
 				.await
 				.unwrap()

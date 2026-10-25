@@ -8,8 +8,8 @@
 //! with its stream credit spent) pins them for good, and a relay retrying across
 //! routes accumulates them until it runs out of memory.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -86,7 +86,11 @@ async fn withdrawn_broadcast_releases_track_info(version: &str, answered: bool, 
 	options.server_publish = Some(publisher.consume());
 	options.client_subscribe = Some(reader.clone());
 	let pair = connect_mock(options).await;
-	let remote = reader.consume().routed_broadcast(Path::new("room").unwrap()).await.unwrap();
+	let remote = reader
+		.consume()
+		.routed_broadcast(Path::new("room").unwrap())
+		.await
+		.unwrap();
 	let mut query = remote.track("video").unwrap().query();
 	let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut query).await {
 		futures::future::Either::Left((request, _)) => request.expect("TRACK reaches the publisher"),

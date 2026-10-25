@@ -4,8 +4,8 @@
 //! to 17 its stream is a bare header with no FIRST_OBJECT bit, which must not read as a
 //! group missing its head.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

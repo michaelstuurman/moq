@@ -68,7 +68,9 @@ fn url(port: u16, path: &str) -> url::Url {
 /// handles alive for as long as the broadcast should stay announced.
 async fn publish(url: url::Url, name: &str) -> Box<dyn std::any::Any> {
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
+	let broadcast = origin
+		.create_broadcast(Path::new(name).unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");

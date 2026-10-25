@@ -11,8 +11,8 @@
 //! that cannot carry the epoch (before draft-17) makes each move a restart and a
 //! re-request.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -189,7 +189,12 @@ impl Topology {
 	}
 
 	async fn subscribe(&self) -> mpsc::UnboundedReceiver<Delivery> {
-		let remote = self.subscriber.consume().request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let remote = self
+			.subscriber
+			.consume()
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 		let prefs = track::Subscription::default().with_max_delay(Duration::from_secs(60));
 		read(remote.track("video").unwrap().subscribe(prefs).await.unwrap())
 	}

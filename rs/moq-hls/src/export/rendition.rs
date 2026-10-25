@@ -1360,13 +1360,17 @@ mod tests {
 	async fn pending_reads_preserve_a_later_authorization_refusal() {
 		let origin = moq_tokio::origin::spawn();
 		let broadcast = origin.create_broadcast(Path::new("room/live").unwrap()).unwrap();
-		let dynamic = origin.dynamic_route(Path::new("room/secret").unwrap(), Default::default()).unwrap();
+		let dynamic = origin
+			.dynamic_route(Path::new("room/secret").unwrap(), Default::default())
+			.unwrap();
 		let source = moq_mux::Source::new(origin.consume(), broadcast.consume());
 		let mut config = VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		config.broadcast = Some(moq_net::path::Relative::new("./secret").to_owned());
 		let rendition = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
 		let request = dynamic.requested_broadcast().await.unwrap();
-		let other = origin.dynamic_route(Path::new("room/hidden").unwrap(), Default::default()).unwrap();
+		let other = origin
+			.dynamic_route(Path::new("room/hidden").unwrap(), Default::default())
+			.unwrap();
 		config.broadcast = Some(moq_net::path::Relative::new("./hidden").to_owned());
 		let resolving = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
 		let other_request = other.requested_broadcast().await.unwrap();
@@ -1524,7 +1528,9 @@ mod tests {
 	#[test]
 	fn a_gone_publisher_is_unservable_and_an_ietf_miss_is_not() {
 		let origin = produce_origin();
-		let producer = origin.create_broadcast(Path::new("live").unwrap()).expect("publish allowed");
+		let producer = origin
+			.create_broadcast(Path::new("live").unwrap())
+			.expect("publish allowed");
 		let live = producer.consume();
 		let ietf_miss = over_ietf_miss();
 		assert!(

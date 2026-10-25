@@ -14,8 +14,8 @@
 //! writes the track and ends it with no await in between, so the session has sent
 //! nothing when the broadcast ends.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

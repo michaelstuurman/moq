@@ -14,8 +14,8 @@
 //!
 //! Run with `cargo bench -p moq-net --features fuzz --bench interests`.
 
-use moq_net::Path;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use moq_net::Path;
 use moq_net::{Hop, Pattern, Patterns, announce, fuzz, origin};
 
 /// `(watches, sessions)` shapes.

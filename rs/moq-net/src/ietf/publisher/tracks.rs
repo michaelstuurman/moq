@@ -1347,7 +1347,9 @@ mod tests {
 
 	fn harness_with(version: Version, config: memory::Config, declared: peer::Peer) -> Harness {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-		let broadcast = origin.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default()).unwrap();
+		let broadcast = origin
+			.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default())
+			.unwrap();
 		let tracks = ["video", "audio"]
 			.into_iter()
 			.map(|name| (name, broadcast.create_track(name, crate::track::Info::timed()).unwrap()))
@@ -1514,7 +1516,10 @@ mod tests {
 			let (_stream, _, name, _) = h.publish().await;
 			assert_eq!(name, "captions", "{version}");
 
-			let mic = h._origin.publish(Path::new("room/mic").unwrap(), crate::origin::Route::default()).unwrap();
+			let mic = h
+				._origin
+				.publish(Path::new("room/mic").unwrap(), crate::origin::Route::default())
+				.unwrap();
 			let _audio = mic.create_track("audio", crate::track::Info::timed()).unwrap();
 			let (_stream, namespace, name, _) = h.publish().await;
 			assert_eq!((namespace.as_str(), name.as_str()), ("room/mic", "audio"), "{version}");
@@ -2506,7 +2511,10 @@ mod tests {
 			moq_clock::sleep(Duration::from_millis(10)).await;
 
 			// A new instance takes the path while the old one goes on: only its route ends.
-			let _restarted = h._origin.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default()).unwrap();
+			let _restarted = h
+				._origin
+				.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default())
+				.unwrap();
 			let (id, body) = next(&mut stream).await;
 			assert_eq!(id, ietf::PublishDone::ID, "{version}");
 			let done: ietf::PublishDone = body.message(version).unwrap();

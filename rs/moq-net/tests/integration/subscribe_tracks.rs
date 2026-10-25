@@ -5,8 +5,8 @@
 //!
 //! Deterministic: paused time and a single-threaded runtime over the mock transport.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

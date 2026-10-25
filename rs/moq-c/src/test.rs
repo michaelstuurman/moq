@@ -3708,7 +3708,12 @@ fn consume_announced_close_cancels() {
 fn publish(origin: u32, path: &str, route: moq_net::origin::Route) -> moq_net::broadcast::Producer {
 	let _runtime = crate::ffi::RUNTIME.enter();
 	let origin = crate::Id::try_from(origin).unwrap();
-	State::lock().origin.get(origin).unwrap().publish(Path::new(path).unwrap(), route).unwrap()
+	State::lock()
+		.origin
+		.get(origin)
+		.unwrap()
+		.publish(Path::new(path).unwrap(), route)
+		.unwrap()
 }
 
 /// Publish `path` on `origin` under a fresh epoch, as each run of a publisher does.

@@ -5,8 +5,8 @@
 //! Negotiated IETF and lite-07 hops keep DEFLATE slices as received. Peers that cannot
 //! signal compression receive the plain frames the relay inflates once for all of them.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -107,7 +107,10 @@ async fn relay(published: Published, hops: [&str; 2], subscription: moq_net::tra
 
 	let consumer = origin.consume();
 	consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bcast").unwrap(), None)
+		.await
+		.unwrap();
 	let subscriber = remote.track("data").unwrap().subscribe(subscription).await.unwrap();
 	support::harness::subscribed(&track).await;
 
@@ -310,7 +313,10 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 
 			let consumer = origin.consume();
 			consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-			let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+			let remote = consumer
+				.request_broadcast(Path::new("bcast").unwrap(), None)
+				.await
+				.unwrap();
 			let mut subscriber = remote.track("data").unwrap().subscribe(None).await.unwrap();
 			support::harness::subscribed(&track).await;
 
@@ -418,7 +424,11 @@ async fn ietf_fetch_keeps_the_stored_form() {
 			options.client_subscribe = Some(origin.clone());
 			let _pair = connect_mock(options).await;
 			origin.consume().routed(Path::new("bcast").unwrap()).await.unwrap();
-			let remote = origin.consume().request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+			let remote = origin
+				.consume()
+				.request_broadcast(Path::new("bcast").unwrap(), None)
+				.await
+				.unwrap();
 			let consumer = remote.track("data").unwrap();
 			assert_eq!(consumer.query().await.unwrap().compress, version != "moq-transport-16");
 			let mut fetched = consumer.fetch_group(0, moq_net::group::Fetch::default()).await.unwrap();

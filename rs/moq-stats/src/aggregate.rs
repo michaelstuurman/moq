@@ -1036,13 +1036,18 @@ mod tests {
 		let egress = feed_origin.consume().with_stats(ctx.clone());
 
 		let mut announced = egress.announced();
-		let source = feed_origin.create_broadcast(Path::new(path).unwrap()).expect("create_broadcast");
+		let source = feed_origin
+			.create_broadcast(Path::new(path).unwrap())
+			.expect("create_broadcast");
 		source.announce(origin::Route::default()).expect("announce");
 		let track = source.create_track("video", timed()).expect("create_track");
 
 		let (_, active) = next_update(&mut announced).await.expect("announce");
 		assert!(active);
-		let consumer = egress.request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
+		let consumer = egress
+			.request_broadcast(Path::new(path).unwrap(), None)
+			.await
+			.expect("resolve");
 		let mut sub = consumer.track("video").unwrap().subscribe(None).await.unwrap();
 
 		let mut group = track.append_group().unwrap();
@@ -1109,7 +1114,9 @@ mod tests {
 	impl NodeBroadcast {
 		fn new(origin: &origin::Producer, group: &str, node: &str) -> Self {
 			let path = format!(".stats/{group}/node/{node}");
-			let source = origin.create_broadcast(Path::new(path.as_str()).unwrap()).expect("create broadcast");
+			let source = origin
+				.create_broadcast(Path::new(path.as_str()).unwrap())
+				.expect("create broadcast");
 			source.announce(origin::Route::default()).expect("announce");
 			let name = traffic_track(&Tier::default(), Role::Publisher, Encoding::Plain);
 			let track = source.create_track(name, timed()).expect("create track");
@@ -1442,7 +1449,9 @@ mod tests {
 					.announce(origin::Route::default().with_epoch(epoch_b.clone()))
 					.unwrap();
 				new.publish("acme/room", 30);
-				let pending = origin.consume().request_broadcast(Path::new(".stats/acme/node/a").unwrap(), None);
+				let pending = origin
+					.consume()
+					.request_broadcast(Path::new(".stats/acme/node/a").unwrap(), None);
 				let front = futures::executor::block_on(kio::wait(|waiter| {
 					driver.poll(now, waiter).unwrap();
 					pending.poll_ok(waiter)
@@ -1467,7 +1476,10 @@ mod tests {
 				(new, front, warm, driver)
 			});
 			ready.wait();
-			let key = (Path::new(".stats/acme/node/a").unwrap(), (!drop_epoch).then_some(epoch_a));
+			let key = (
+				Path::new(".stats/acme/node/a").unwrap(),
+				(!drop_epoch).then_some(epoch_a),
+			);
 			let node = merged.nodes.get_mut(&key).unwrap();
 			advance(node, &merged.origin, &merged.config, &name, &Waiter::noop());
 			let old_bytes = node.last.as_ref().unwrap()["acme/room"].bytes;
@@ -1762,8 +1774,14 @@ mod tests {
 		// group.
 		let _fa = feed(&node_a, Tier::default(), "acme", "acme/room", 8).await;
 		let _fb = feed(&node_b, Tier::default(), "acme", "acme/room", 8).await;
-		let _sa = node_a.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
-		let _sb = node_b.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let _sa = node_a
+			.registry()
+			.tier(Tier::default())
+			.session(Path::new("acme").unwrap());
+		let _sb = node_b
+			.registry()
+			.tier(Tier::default())
+			.session(Path::new("acme").unwrap());
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));
@@ -1789,8 +1807,14 @@ mod tests {
 
 		let _fa = feed(&node_a, Tier::default(), "acme", "acme/room", 8).await;
 		let fb = feed(&node_b, Tier::default(), "acme", "acme/room", 8).await;
-		let _sa = node_a.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
-		let sb = node_b.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let _sa = node_a
+			.registry()
+			.tier(Tier::default())
+			.session(Path::new("acme").unwrap());
+		let sb = node_b
+			.registry()
+			.tier(Tier::default())
+			.session(Path::new("acme").unwrap());
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));

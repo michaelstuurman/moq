@@ -4,8 +4,8 @@
 //! publisher hands the payload to the transport, and the subscriber reads it back,
 //! without a copy on either side.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

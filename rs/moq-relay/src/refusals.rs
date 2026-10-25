@@ -45,7 +45,10 @@ impl Refusals {
 		if let auth::Error::Refused(refusal) = err {
 			// The refusal is recorded either way, under the default tier or root if the
 			// server named one with an empty segment.
-			let tier = refusal.tier.clone().and_then(|tier| moq_net::PathOwned::try_from(tier).ok());
+			let tier = refusal
+				.tier
+				.clone()
+				.and_then(|tier| moq_net::PathOwned::try_from(tier).ok());
 			let root = refusal.root.as_deref().and_then(|root| moq_net::Path::new(root).ok());
 			self.0
 				.tier(tier.map(Tier::new).unwrap_or_default())

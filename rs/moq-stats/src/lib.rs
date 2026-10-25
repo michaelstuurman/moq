@@ -381,10 +381,22 @@ mod tests {
 		);
 		assert_eq!(totals_track(Encoding::Plain), "totals.json");
 		assert_eq!(totals_track(Encoding::Compressed), "totals.json.z");
-		assert_eq!(presence_track(Path::new("acme/live").unwrap(), Encoding::Plain), "acme/live/presence.json");
-		assert_eq!(presence_track(Path::new("").unwrap(), Encoding::Compressed), "presence.json.z");
-		assert_eq!(prefix_track(Path::new("acme/live").unwrap(), Encoding::Plain), "acme/live/prefix.json");
-		assert_eq!(prefix_track(Path::new("").unwrap(), Encoding::Compressed), "prefix.json.z");
+		assert_eq!(
+			presence_track(Path::new("acme/live").unwrap(), Encoding::Plain),
+			"acme/live/presence.json"
+		);
+		assert_eq!(
+			presence_track(Path::new("").unwrap(), Encoding::Compressed),
+			"presence.json.z"
+		);
+		assert_eq!(
+			prefix_track(Path::new("acme/live").unwrap(), Encoding::Plain),
+			"acme/live/prefix.json"
+		);
+		assert_eq!(
+			prefix_track(Path::new("").unwrap(), Encoding::Compressed),
+			"prefix.json.z"
+		);
 	}
 
 	#[test]

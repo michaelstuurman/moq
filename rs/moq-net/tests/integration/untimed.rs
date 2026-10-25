@@ -7,8 +7,8 @@
 //! encoder writes its send time instead, and their receivers drop every timestamp, which
 //! leaves a timed track untimed too.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -186,7 +186,11 @@ async fn an_explicit_start_holds_on_an_untimed_track() {
 		}
 		moq_clock::sleep(Duration::from_secs(1)).await;
 
-		let consumer = chain.nodes[1].consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let consumer = chain.nodes[1]
+			.consume()
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let subscription = track::Subscription::default()
 			.with_range(2..)
 			.with_max_delay(Duration::from_secs(30));
@@ -243,7 +247,11 @@ async fn a_fetched_untimed_frame_arrives_untimed() {
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sleep(Duration::from_secs(1)).await;
 
-		let consumer = chain.nodes[1].consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+		let consumer = chain.nodes[1]
+			.consume()
+			.request_broadcast(Path::new("room").unwrap(), None)
+			.await
+			.unwrap();
 		let mut waiting = Box::pin(consumer.track("video").unwrap().fetch_group(0, None));
 		let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut waiting).await {
 			futures::future::Either::Left((request, _)) => request.expect("the track request reaches the publisher"),

@@ -2273,7 +2273,9 @@ mod tests {
 		let after = stats.snapshot();
 		assert_eq!(before.sessions(), after.sessions(), "retirement keeps outcomes once");
 		let disabled = Registry::disabled();
-		disabled.tier(Tier::default()).refuse(Path::new("root").unwrap(), RefusalKind::Refused);
+		disabled
+			.tier(Tier::default())
+			.refuse(Path::new("root").unwrap(), RefusalKind::Refused);
 		disabled
 			.tier(Tier::default())
 			.session(Path::new("root").unwrap())
@@ -2321,12 +2323,11 @@ mod tests {
 
 	/// The [`Presence`] for `(tier, label)`, or `None` if absent.
 	fn session_snapshot(stats: &Registry, tier: &Tier, label: &str) -> Option<Presence> {
-		stats
-			.shared()
-			.sessions
-			.lock()
-			.get(tier)
-			.and_then(|labels| labels.get(&Path::new(label).unwrap().to_owned()).map(|c| c.snapshot().0))
+		stats.shared().sessions.lock().get(tier).and_then(|labels| {
+			labels
+				.get(&Path::new(label).unwrap().to_owned())
+				.map(|c| c.snapshot().0)
+		})
 	}
 
 	fn test_stats() -> Registry {
@@ -2337,7 +2338,9 @@ mod tests {
 	fn default_and_named_tiers_are_independent() {
 		let stats = test_stats();
 		let default = stats.tier(Tier::default()).session(Path::new("root").unwrap());
-		let regional = stats.tier(Tier::new(Path::new("region/sjc").unwrap())).session(Path::new("root").unwrap());
+		let regional = stats
+			.tier(Tier::new(Path::new("region/sjc").unwrap()))
+			.session(Path::new("root").unwrap());
 
 		default.egress(Path::new("demo/bbb").unwrap()).meter().bytes(100);
 		regional.ingress(Path::new("demo/bbb").unwrap()).meter().bytes(7);
@@ -2359,7 +2362,10 @@ mod tests {
 
 		let stats = test_stats();
 		let tier = stats.tier(Tier::default());
-		let (s1, s2) = (tier.session(Path::new("acme").unwrap()), tier.session(Path::new("acme").unwrap()));
+		let (s1, s2) = (
+			tier.session(Path::new("acme").unwrap()),
+			tier.session(Path::new("acme").unwrap()),
+		);
 		let announces = Slots::new(10).with_stats(&s1, Cap::Announces);
 		let subscriptions = Slots::new(10).with_stats(&s2, Cap::Subscriptions);
 		let other = Slots::new(10).with_stats(&s2, Cap::Announces);
@@ -2455,7 +2461,10 @@ mod tests {
 		let regional_subscriber = slot(Tier::new(Path::new("region/sjc").unwrap()), Role::Subscriber);
 		assert_eq!(regional_subscriber.bytes, 7, "regional ingress isolated by tier/role");
 		assert_eq!(slot(Tier::default(), Role::Subscriber).bytes, 0);
-		assert_eq!(slot(Tier::new(Path::new("region/sjc").unwrap()), Role::Publisher).bytes, 0);
+		assert_eq!(
+			slot(Tier::new(Path::new("region/sjc").unwrap()), Role::Publisher).bytes,
+			0
+		);
 
 		let sessions = |tier| {
 			snap.sessions()
@@ -2470,7 +2479,10 @@ mod tests {
 			"two default-tier sessions under one label"
 		);
 		assert_eq!(default_sessions.sessions_ended, 0, "guards still held");
-		assert_eq!(sessions(Tier::new(Path::new("region/sjc").unwrap())).sessions_started, 1);
+		assert_eq!(
+			sessions(Tier::new(Path::new("region/sjc").unwrap())).sessions_started,
+			1
+		);
 	}
 
 	fn drain(stats: &Registry) -> Report {
@@ -2484,7 +2496,9 @@ mod tests {
 		// A reused report is cleared, not appended to, and keeps its buffers.
 		let stats = test_stats();
 		let ctx = stats.tier(Tier::default()).session(Path::new("root").unwrap());
-		let _scopes: Vec<_> = (0..8).map(|i| ctx.egress(Path::new(format!("b/{i}").as_str()).unwrap())).collect();
+		let _scopes: Vec<_> = (0..8)
+			.map(|i| ctx.egress(Path::new(format!("b/{i}").as_str()).unwrap()))
+			.collect();
 
 		let mut report = Report::default();
 		stats.report(&mut report);
@@ -2674,7 +2688,9 @@ mod tests {
 		let worker = std::thread::spawn(move || {
 			for i in 0..256 {
 				let path = format!("root/{i}");
-				let session = worker_stats.tier(Tier::default()).session(Path::new(path.as_str()).unwrap());
+				let session = worker_stats
+					.tier(Tier::default())
+					.session(Path::new(path.as_str()).unwrap());
 				session.ingress(Path::new(path.as_str()).unwrap()).meter().bytes(1);
 				drop(session);
 				drain(&worker_stats);
@@ -3026,9 +3042,17 @@ mod tests {
 		let stats = test_stats();
 		let raw = || tier_counters(&stats, "demo/bbb", &Tier::default()).publisher.snapshot();
 
-		let v1 = stats.tier(Tier::default()).session(Path::new("a").unwrap()).egress(Path::new("demo/bbb").unwrap()).subscribe();
+		let v1 = stats
+			.tier(Tier::default())
+			.session(Path::new("a").unwrap())
+			.egress(Path::new("demo/bbb").unwrap())
+			.subscribe();
 		assert_eq!(raw().broadcasts_started, 1);
-		let v2 = stats.tier(Tier::default()).session(Path::new("b").unwrap()).egress(Path::new("demo/bbb").unwrap()).subscribe();
+		let v2 = stats
+			.tier(Tier::default())
+			.session(Path::new("b").unwrap())
+			.egress(Path::new("demo/bbb").unwrap())
+			.subscribe();
 		assert_eq!(raw().broadcasts_started, 2, "two distinct contexts => two viewers");
 
 		drop(v1);
@@ -3062,7 +3086,9 @@ mod tests {
 	#[test]
 	fn request_admission_survives_clones_retiering_and_retirement_without_presence() {
 		let stats = test_stats();
-		let request = stats.tier(Tier::new(Path::new("old").unwrap())).request(Path::new("root").unwrap());
+		let request = stats
+			.tier(Tier::new(Path::new("old").unwrap()))
+			.request(Path::new("root").unwrap());
 		let clone = request.clone();
 		request.egress(Path::new("root/video").unwrap()).meter().bytes(7);
 		request.retag(Tier::new(Path::new("new").unwrap()), Path::new("root").unwrap());

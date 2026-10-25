@@ -159,7 +159,9 @@ pub async fn import(target: ImportTarget, args: ImportArgs, epoch: moq_net::Epoc
 		linger,
 		bandwidth,
 	} = target;
-	let mut producer = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
+	let mut producer = origin
+		.create_broadcast(moq_net::Path::new(&name)?)
+		.context("failed to create broadcast")?;
 
 	let config = moq_mux::catalog::Config::default()
 		.with_max_age(max_age)
@@ -434,7 +436,10 @@ mod test {
 		let importing = tokio::spawn(import(target, args, moq_net::Epoch::mint()));
 
 		announced.next().await.expect("announced");
-		let broadcast = consumer.request_broadcast(moq_net::Path::new("hls").unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(moq_net::Path::new("hls").unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalogs = hang::catalog::Catalog::<()>::subscribe(&broadcast).await.unwrap();
 		let catalog = catalogs.next().await.unwrap().expect("a catalog");
 		let name = catalog.audio.renditions.keys().next().expect("an audio rendition");

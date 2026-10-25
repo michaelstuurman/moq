@@ -191,7 +191,9 @@ mod tests {
 	impl Fixture {
 		async fn new() -> Self {
 			let origin = moq_tokio::origin::spawn();
-			let broadcast = origin.create_broadcast(moq_net::Path::new("demo").unwrap()).expect("broadcast");
+			let broadcast = origin
+				.create_broadcast(moq_net::Path::new("demo").unwrap())
+				.expect("broadcast");
 			broadcast.announce(Default::default()).expect("announce");
 
 			let data = broadcast.create_track("data", timed()).expect("data track");

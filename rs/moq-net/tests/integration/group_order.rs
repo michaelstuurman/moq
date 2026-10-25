@@ -7,8 +7,8 @@
 //! the hop into the subscriber and releases them by send order, the way a congested
 //! sender would transmit them.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

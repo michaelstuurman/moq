@@ -161,7 +161,9 @@ async fn main() -> anyhow::Result<()> {
 					break;
 				}
 			}
-			let health = consumer.routed_broadcast(moq_net::PathOwned::try_from(format!("{}.health", args.broadcast))?).await?;
+			let health = consumer
+				.routed_broadcast(moq_net::PathOwned::try_from(format!("{}.health", args.broadcast))?)
+				.await?;
 			let mut track = health.track("live")?.subscribe(None).await?;
 			let mut group = track.recv_group().await?.context("no health group")?;
 			let frame = group.read_frame().await?.context("no health frame")?;

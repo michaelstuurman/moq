@@ -3,8 +3,8 @@
 //! One upstream subscription carries the aggregate priority of the subscribers it serves,
 //! and follows it as they come and go, directly and through a relay.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

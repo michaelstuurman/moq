@@ -4,8 +4,8 @@
 //! tokens union, and a publication outside the grant fails loud. Every case runs on
 //! moq-lite-07-wip and on moq-transport with the MoQ Auth extension.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -651,7 +651,11 @@ async fn a_broadcast_published_before_the_grant_is_checked(version: &'static str
 		let pair = connect(Options {
 			version: Some(version),
 			client_publish: Some(publisher.clone()),
-			server_subscribe: Some(produce_origin(1).scope(Path::new("").unwrap(), &patterns(&["baz"])).unwrap()),
+			server_subscribe: Some(
+				produce_origin(1)
+					.scope(Path::new("").unwrap(), &patterns(&["baz"]))
+					.unwrap(),
+			),
 			..Default::default()
 		})
 		.await;
@@ -1068,7 +1072,11 @@ async fn exact_and_subtree_grants_admit_their_broadcast(version: &'static str) {
 			group
 				.write_frame(moq_net::Timestamp::from_millis(0).unwrap(), b"frame".as_ref())
 				.unwrap();
-			let remote = received.consume().routed_broadcast(Path::new("ch1").unwrap()).await.unwrap();
+			let remote = received
+				.consume()
+				.routed_broadcast(Path::new("ch1").unwrap())
+				.await
+				.unwrap();
 			let prefs = moq_net::track::Subscription::default().with_max_delay(Duration::from_secs(10));
 			let mut sub = remote.track("video").unwrap().subscribe(prefs).await.unwrap();
 			sub.recv_group().await.unwrap().expect("a group");
@@ -1126,7 +1134,11 @@ async fn a_live_subscription_survives_union_renewal(version: &'static str) {
 			requests.next().await.unwrap().accept(grant(&[], &["room"]))
 		});
 		let first = first.unwrap();
-		let remote = received.consume().routed_broadcast(Path::new("room/x").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/x").unwrap())
+			.await
+			.unwrap();
 		let mut group = published.append_group().unwrap();
 		group
 			.write_frame(moq_net::Timestamp::from_millis(0).unwrap(), b"first".as_ref())
@@ -1197,11 +1209,19 @@ async fn a_revoked_grant_cancels_its_subscriptions(version: &'static str) {
 		let mut group = up_track.append_group().unwrap();
 		group.write_frame(ts(0), b"up".as_ref()).unwrap();
 
-		let remote = received.consume().routed_broadcast(Path::new("room/x").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/x").unwrap())
+			.await
+			.unwrap();
 		let mut down_sub = remote.track("video").unwrap().subscribe(prefs()).await.unwrap();
 		down_sub.recv_group().await.unwrap().unwrap();
 
-		let remote = server_origin.consume().routed_broadcast(Path::new("up/y").unwrap()).await.unwrap();
+		let remote = server_origin
+			.consume()
+			.routed_broadcast(Path::new("up/y").unwrap())
+			.await
+			.unwrap();
 		let mut up_sub = remote.track("video").unwrap().subscribe(prefs()).await.unwrap();
 		up_sub.recv_group().await.unwrap().unwrap();
 
@@ -1390,7 +1410,9 @@ async fn a_wildcard_grant_is_enforced(version: &'static str) {
 		}
 		assert_eq!(pair.client_transport.close_reason(), None);
 
-		let bad = publisher.create_broadcast(Path::new("room/alice/mic").unwrap()).unwrap();
+		let bad = publisher
+			.create_broadcast(Path::new("room/alice/mic").unwrap())
+			.unwrap();
 		bad.announce(Default::default()).unwrap();
 		assert!(matches!(
 			pair.server.closed().await,
@@ -1577,10 +1599,18 @@ async fn a_narrowing_deafens_one_path(version: &'static str) {
 		let mut group = video_track.append_group().unwrap();
 		group.write_frame(ts(0), b"v".as_ref()).unwrap();
 
-		let remote = received.consume().routed_broadcast(Path::new("room/alice/audio").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/alice/audio").unwrap())
+			.await
+			.unwrap();
 		let mut audio_sub = remote.track("opus").unwrap().subscribe(prefs()).await.unwrap();
 		audio_sub.recv_group().await.unwrap().unwrap();
-		let remote = received.consume().routed_broadcast(Path::new("room/alice/video").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/alice/video").unwrap())
+			.await
+			.unwrap();
 		let mut video_sub = remote.track("h264").unwrap().subscribe(prefs()).await.unwrap();
 		video_sub.recv_group().await.unwrap().unwrap();
 
@@ -1629,10 +1659,14 @@ async fn a_narrowing_aborts_what_the_peer_published(version: &'static str) {
 		let prefs = || moq_net::track::Subscription::default().with_max_delay(Duration::from_secs(10));
 
 		let client_origin = produce_origin(2);
-		let mic = client_origin.create_broadcast(Path::new("room/bob/mic").unwrap()).unwrap();
+		let mic = client_origin
+			.create_broadcast(Path::new("room/bob/mic").unwrap())
+			.unwrap();
 		let mic_track = mic.create_track("opus", timed()).unwrap();
 		mic.announce(Default::default()).unwrap();
-		let cam = client_origin.create_broadcast(Path::new("room/bob/cam").unwrap()).unwrap();
+		let cam = client_origin
+			.create_broadcast(Path::new("room/bob/cam").unwrap())
+			.unwrap();
 		let cam_track = cam.create_track("h264", timed()).unwrap();
 		cam.announce(Default::default()).unwrap();
 
@@ -1650,10 +1684,18 @@ async fn a_narrowing_aborts_what_the_peer_published(version: &'static str) {
 		let mut group = cam_track.append_group().unwrap();
 		group.write_frame(ts(0), b"c".as_ref()).unwrap();
 
-		let remote = relay.consume().routed_broadcast(Path::new("room/bob/mic").unwrap()).await.unwrap();
+		let remote = relay
+			.consume()
+			.routed_broadcast(Path::new("room/bob/mic").unwrap())
+			.await
+			.unwrap();
 		let mut mic_sub = remote.track("opus").unwrap().subscribe(prefs()).await.unwrap();
 		mic_sub.recv_group().await.unwrap().unwrap();
-		let remote = relay.consume().routed_broadcast(Path::new("room/bob/cam").unwrap()).await.unwrap();
+		let remote = relay
+			.consume()
+			.routed_broadcast(Path::new("room/bob/cam").unwrap())
+			.await
+			.unwrap();
 		let mut cam_sub = remote.track("h264").unwrap().subscribe(prefs()).await.unwrap();
 		cam_sub.recv_group().await.unwrap().unwrap();
 
@@ -1698,7 +1740,11 @@ async fn a_narrowing_resets_a_fetch_in_flight(version: &'static str) {
 		})
 		.await;
 
-		let remote = received.consume().routed_broadcast(Path::new("room/x").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/x").unwrap())
+			.await
+			.unwrap();
 		let mut fetched = remote.track("video").unwrap().fetch_group(0, None).await.unwrap();
 		let frame = fetched.read_frame().await.unwrap().expect("first frame");
 		assert_eq!(frame.payload.as_ref(), b"first");
@@ -1760,7 +1806,11 @@ async fn a_widening_brings_back_a_deafened_path(version: &'static str) {
 
 		let mut group = audio_track.append_group().unwrap();
 		group.write_frame(ts(0), b"a".as_ref()).unwrap();
-		let remote = received.consume().routed_broadcast(Path::new("room/alice/audio").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/alice/audio").unwrap())
+			.await
+			.unwrap();
 		let mut sub = remote.track("opus").unwrap().subscribe(prefs()).await.unwrap();
 		sub.recv_group().await.unwrap().unwrap();
 
@@ -1772,7 +1822,11 @@ async fn a_widening_brings_back_a_deafened_path(version: &'static str) {
 
 		pair.server.auth().authorize(&grant(&[], &["room"]));
 		wait_announced(&received.consume(), "room/alice/audio", true).await;
-		let remote = received.consume().routed_broadcast(Path::new("room/alice/audio").unwrap()).await.unwrap();
+		let remote = received
+			.consume()
+			.routed_broadcast(Path::new("room/alice/audio").unwrap())
+			.await
+			.unwrap();
 		let mut sub = remote.track("opus").unwrap().subscribe(prefs()).await.unwrap();
 		let mut group = audio_track.append_group().unwrap();
 		group.write_frame(ts(1), b"a".as_ref()).unwrap();
@@ -1802,7 +1856,9 @@ async fn a_widening_brings_back_what_the_peer_published(version: &'static str) {
 		let prefs = || moq_net::track::Subscription::default().with_max_delay(Duration::from_secs(10));
 
 		let client_origin = produce_origin(2);
-		let mic = client_origin.create_broadcast(Path::new("room/bob/mic").unwrap()).unwrap();
+		let mic = client_origin
+			.create_broadcast(Path::new("room/bob/mic").unwrap())
+			.unwrap();
 		let mic_track = mic.create_track("opus", timed()).unwrap();
 		mic.announce(Default::default()).unwrap();
 
@@ -1821,7 +1877,11 @@ async fn a_widening_brings_back_what_the_peer_published(version: &'static str) {
 
 		pair.server.auth().authorize(&grant(&["room"], &[]));
 		wait_announced(&relay.consume(), "room/bob/mic", true).await;
-		let remote = relay.consume().routed_broadcast(Path::new("room/bob/mic").unwrap()).await.unwrap();
+		let remote = relay
+			.consume()
+			.routed_broadcast(Path::new("room/bob/mic").unwrap())
+			.await
+			.unwrap();
 		let mut sub = remote.track("opus").unwrap().subscribe(prefs()).await.unwrap();
 		let mut group = mic_track.append_group().unwrap();
 		group.write_frame(ts(0), b"m".as_ref()).unwrap();

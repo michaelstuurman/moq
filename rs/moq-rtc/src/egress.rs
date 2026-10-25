@@ -623,7 +623,10 @@ mod tests {
 	#[test]
 	fn catalog_codecs_ignores_codecs_available_only_via_escaping_references() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
+		let source = moq_mux::Source::new(
+			origin.consume(),
+			origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume(),
+		);
 		let mut catalog = Catalog::default();
 
 		let mut escaped_audio = AudioConfig::new(AudioCodec::Opus, 48_000, 2);
@@ -658,7 +661,10 @@ mod tests {
 	#[test]
 	fn picks_the_best_video_rendition_whatever_its_name() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
+		let source = moq_mux::Source::new(
+			origin.consume(),
+			origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume(),
+		);
 		let mut catalog = Catalog::default();
 
 		let rendition = |height: u32| {
@@ -698,7 +704,10 @@ mod tests {
 	#[test]
 	fn picks_the_preferred_codec_whatever_the_peer_offers_first() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
+		let source = moq_mux::Source::new(
+			origin.consume(),
+			origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume(),
+		);
 		let mut catalog = Catalog::default();
 
 		// An H.265 source beside its own H.264 compatibility transcode, which has the higher bitrate.
@@ -748,7 +757,10 @@ mod tests {
 	#[test]
 	fn picks_the_best_opus_rendition_whatever_its_name() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
+		let source = moq_mux::Source::new(
+			origin.consume(),
+			origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume(),
+		);
 		let mut catalog = Catalog::default();
 
 		let opus = |bitrate: Option<u64>| {
@@ -928,7 +940,11 @@ mod tests {
 		};
 		point(&mut catalog, "a", None);
 
-		let broadcast = origin.consume().request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let broadcast = origin
+			.consume()
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 		let mut egress = EgressSource::new(moq_mux::Source::new(origin.consume(), broadcast))
 			.await
 			.unwrap();

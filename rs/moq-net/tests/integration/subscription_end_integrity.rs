@@ -19,8 +19,8 @@
 //! Deterministic: paused time, single-threaded runtime, and every "let the session
 //! send" step is an idle-advance rather than a race.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

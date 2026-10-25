@@ -1030,8 +1030,8 @@ impl Drop for Handshake {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::Path;
 	use crate::Hop;
+	use crate::Path;
 	use crate::model::ProduceTest;
 	use std::{
 		collections::VecDeque,
@@ -1702,7 +1702,10 @@ mod tests {
 		let mut local_hops = crate::Hops::new();
 		local_hops.push(other).unwrap();
 		let _local = origin
-			.announce(Path::new("local-route").unwrap(), crate::origin::Route::default().with_hops(local_hops))
+			.announce(
+				Path::new("local-route").unwrap(),
+				crate::origin::Route::default().with_hops(local_hops),
+			)
 			.unwrap();
 
 		let (session, driver) = request.ok().await.unwrap();

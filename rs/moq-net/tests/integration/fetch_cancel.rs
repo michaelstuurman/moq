@@ -7,8 +7,8 @@
 //! (lite has no FETCH_OK, so one that never answers would pin them for good) or is
 //! partway through the group. A group cut short is aborted, never cached as whole.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -175,7 +175,11 @@ async fn a_refetch_within_the_linger_stays_on_the_relay(version: &str) {
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;
 
-	let consumer = relay.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
+	let consumer = relay
+		.consume()
+		.request_broadcast(Path::new("room").unwrap(), None)
+		.await
+		.unwrap();
 	let mut waiting = Box::pin(consumer.track("video").unwrap().fetch_group(0, None));
 	let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut waiting).await {
 		futures::future::Either::Left((request, _)) => request.expect("the track request reaches the publisher"),

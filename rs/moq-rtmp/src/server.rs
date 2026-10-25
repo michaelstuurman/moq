@@ -1745,7 +1745,11 @@ mod tests {
 		let Some(Request::Publish(publish)) = accept_stream(stream, peer).await.unwrap() else {
 			panic!("expected a publish request");
 		};
-		publish.with_linger(linger).accept(&origin, Path::new("live/cam0").unwrap()).await.unwrap();
+		publish
+			.with_linger(linger)
+			.accept(&origin, Path::new("live/cam0").unwrap())
+			.await
+			.unwrap();
 	}
 
 	/// An unpublish is a clean end: the finished broadcast stays up for the linger, then
@@ -1763,7 +1767,10 @@ mod tests {
 			let accept = tokio::spawn(accept_publish(server, origin.clone(), Duration::from_secs(10)));
 			let broadcast = async {
 				consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
-				consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap()
+				consumer
+					.request_broadcast(Path::new("live/cam0").unwrap(), None)
+					.await
+					.unwrap()
 			};
 			let (broadcast, ()) = tokio::join!(broadcast, publish_one_keyframe(client, leave));
 
@@ -1783,7 +1790,10 @@ mod tests {
 		let accept = tokio::spawn(accept_publish(server, origin.clone(), Duration::ZERO));
 		let catalog = async {
 			consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
-			let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+			let broadcast = consumer
+				.request_broadcast(Path::new("live/cam0").unwrap(), None)
+				.await
+				.unwrap();
 			let track = broadcast.track(hang::Catalog::DEFAULT_NAME).unwrap();
 			track.subscribe(None).await.unwrap()
 		};
@@ -1812,7 +1822,10 @@ mod tests {
 		publish_one_keyframe(client, Leave::Unpublish).await;
 
 		tokio::time::sleep(Duration::from_secs(5)).await;
-		let finished = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let finished = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let mut video = finished.track("0.flv-v").unwrap().subscribe(None).await.unwrap();
 		assert!(
 			video.recv_group().await.unwrap().is_some(),
@@ -2094,7 +2107,10 @@ mod tests {
 
 		let consumer = origin.consume();
 		consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
-		let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let broadcast = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let info = broadcast.track("0.flv-v").unwrap().query().await.unwrap();
 		assert_eq!(info.max_age, Some(Duration::from_secs(3)));
 	}
@@ -2219,7 +2235,8 @@ mod tests {
 		assert_eq!(next().await.1[..2], [0x17, 0x01]);
 
 		let epoch = moq_net::Epoch::mint();
-		let mut instances = moq_mux::follow::Instances::new(&consumer, Path::new("live/cam0").unwrap(), Some(&epoch)).unwrap();
+		let mut instances =
+			moq_mux::follow::Instances::new(&consumer, Path::new("live/cam0").unwrap(), Some(&epoch)).unwrap();
 		let (_new, _new_catalog) = publish_avc(&origin, epoch, &[0x65, 0x99, 0x99, 0x99, 0x99]);
 		tokio::time::timeout(Duration::from_secs(5), instances.next())
 			.await
@@ -2599,7 +2616,9 @@ mod tests {
 
 		tokio::time::pause();
 		let server_task = tokio::spawn(async move {
-			play.accept(&consumer, Path::new("live/missing").unwrap()).await.unwrap();
+			play.accept(&consumer, Path::new("live/missing").unwrap())
+				.await
+				.unwrap();
 		});
 
 		tokio::task::yield_now().await;
@@ -2672,7 +2691,10 @@ mod tests {
 			.await
 			.expect("stale publish timed out")
 			.unwrap();
-		let stale = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let stale = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -2702,7 +2724,10 @@ mod tests {
 		assert!(stale_viewer.is_err(), "the stale viewer ended: {stale_viewer:?}");
 		assert!(!stale_client.is_finished(), "the stale connection is still open");
 
-		let fresh = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
+		let fresh = consumer
+			.request_broadcast(Path::new("live/cam0").unwrap(), None)
+			.await
+			.unwrap();
 		assert!(!fresh.is_clone(&stale), "viewers reach the reconnected publish");
 
 		stale_client.abort();

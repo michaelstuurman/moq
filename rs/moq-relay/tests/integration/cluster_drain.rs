@@ -113,7 +113,11 @@ async fn relay(name: &str) -> (Relay, SocketAddr, moq_net::broadcast::Producer) 
 	config.drain_timeout = Some(DRAIN.into());
 	let relay = Relay::load(config).await.expect("load relay").with_signals(false);
 	let addr = relay.tcp_addr().expect("tcp listener");
-	let broadcast = relay.cluster().origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
+	let broadcast = relay
+		.cluster()
+		.origin
+		.create_broadcast(Path::new(name).unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	(relay, addr, broadcast)
 }
@@ -125,7 +129,10 @@ async fn peer(name: &str, forwarder: &Forwarder) -> (cluster::Cluster, moq_net::
 	let cluster = cluster::Cluster::new(cluster::Options::new(config))
 		.expect("cluster init")
 		.with_connect(Default::default(), Default::default());
-	let broadcast = cluster.origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
+	let broadcast = cluster
+		.origin
+		.create_broadcast(Path::new(name).unwrap())
+		.expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let started = cluster.clone().start().await.expect("cluster start");
 	tokio::spawn(started.run());

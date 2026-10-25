@@ -88,7 +88,12 @@ impl Lazy {
 
 	/// Whether the client's origin routes `path` right now.
 	async fn routes(&self, path: &str) -> bool {
-		match self.subscriber.consume().request_broadcast(Path::new(path).unwrap(), None).await {
+		match self
+			.subscriber
+			.consume()
+			.request_broadcast(Path::new(path).unwrap(), None)
+			.await
+		{
 			Ok(_) => true,
 			Err(Error::Unroutable) => false,
 			Err(err) => panic!("{path}: {err}"),
@@ -259,7 +264,12 @@ async fn a_resolved_broadcast_keeps_its_route() {
 		let lazy = Lazy::new(version).await;
 		let mut watch = lazy.watch("a");
 		synced(&mut watch).await;
-		let broadcast = lazy.subscriber.consume().request_broadcast(Path::new("a/x").unwrap(), None).await.unwrap();
+		let broadcast = lazy
+			.subscriber
+			.consume()
+			.request_broadcast(Path::new("a/x").unwrap(), None)
+			.await
+			.unwrap();
 		drop(watch);
 
 		moq_clock::sleep(LINGERED).await;
@@ -304,7 +314,11 @@ async fn a_relay_link_asks_for_everything() {
 			assert_eq!(lazy.requests(), 1, "{version}");
 			// Read through a plain handle: one taken from an upstream link hides its routes.
 			for path in ["a/x", "b/y"] {
-				relay.consume().request_broadcast(Path::new(path).unwrap(), None).await.unwrap();
+				relay
+					.consume()
+					.request_broadcast(Path::new(path).unwrap(), None)
+					.await
+					.unwrap();
 			}
 		}
 	}
@@ -323,7 +337,11 @@ async fn a_server_asks_for_everything() {
 		options.server_subscribe = Some(relay.clone());
 		let _pair = connect_mock(options).await;
 		moq_clock::sleep(SETTLE).await;
-		relay.consume().request_broadcast(Path::new("a/x").unwrap(), None).await.unwrap();
+		relay
+			.consume()
+			.request_broadcast(Path::new("a/x").unwrap(), None)
+			.await
+			.unwrap();
 	}
 }
 
@@ -499,7 +517,11 @@ async fn ietf_a_relay_link_asks_for_everything() {
 		let relay = produce_origin(2);
 		let _lazy = Lazy::with(version, relay.clone().with_link(moq_net::origin::Link::Peer)).await;
 		for path in ["a/x", "b/y"] {
-			relay.consume().request_broadcast(Path::new(path).unwrap(), None).await.unwrap();
+			relay
+				.consume()
+				.request_broadcast(Path::new(path).unwrap(), None)
+				.await
+				.unwrap();
 		}
 	}
 }

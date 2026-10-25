@@ -5,8 +5,8 @@
 //!
 //! Deterministic: simulated time over the mock transport.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -119,7 +119,10 @@ async fn track_info_interest_precedes_a_subscription() {
 		let _pair = connect_mock(options).await;
 		let consumer = subscriber.consume();
 		consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("bcast").unwrap(), None)
+			.await
+			.unwrap();
 		let copy = remote.track("video").unwrap();
 		copy.query().await.expect("TRACK_INFO");
 		crate::support::wanted(track.demand())

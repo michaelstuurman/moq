@@ -417,7 +417,9 @@ mod tests {
 			stats::{Bytes, Control, Registry, Tier},
 		};
 		let stats = Registry::new(Default::default());
-		let session = stats.tier(Tier::new(Path::new("internal").unwrap())).session(Path::new("").unwrap());
+		let session = stats
+			.tier(Tier::new(Path::new("internal").unwrap()))
+			.session(Path::new("").unwrap());
 		let gate = kio::Producer::new(false);
 		let mut writer =
 			Writer::new(SinkSend::gated(Log::default(), gate.consume()), lite::Version::Lite07).with_stats(&session);
@@ -433,7 +435,11 @@ mod tests {
 		assert!(writer.poll_flush(&mut Context::from_waker(Waker::noop())).is_pending());
 		assert_eq!(
 			stats.snapshot().control(),
-			vec![(Tier::new(Path::new("internal").unwrap()), Control::Probe, Bytes { tx: size, rx: 0 })]
+			vec![(
+				Tier::new(Path::new("internal").unwrap()),
+				Control::Probe,
+				Bytes { tx: size, rx: 0 }
+			)]
 		);
 		writer
 			.buffer(&lite::Track {

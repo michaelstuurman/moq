@@ -7,8 +7,8 @@
 //! `.dash/nobody` sees it at its own root. Across a session the publisher must
 //! translate it into the requested scope rather than end the session.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -62,7 +62,10 @@ async fn covering(version: Option<&str>) -> Vec<String> {
 			(subscriber.consume(), Some(connect_mock(options).await))
 		}
 	};
-	let mut announced = observer.scope(Path::new(REQUESTED).unwrap(), &everything).unwrap().announced();
+	let mut announced = observer
+		.scope(Path::new(REQUESTED).unwrap(), &everything)
+		.unwrap()
+		.announced();
 	let mut log = Vec::new();
 
 	let served = publisher.create_broadcast(Path::new(SERVED).unwrap()).unwrap();
@@ -70,7 +73,9 @@ async fn covering(version: Option<&str>) -> Vec<String> {
 	moq_clock::sleep(SETTLE).await;
 	log.push(format!("served: {:?}", drain(&mut announced)));
 
-	let below = publisher.create_broadcast(Path::try_from(format!("{REQUESTED}/cam")).unwrap()).unwrap();
+	let below = publisher
+		.create_broadcast(Path::try_from(format!("{REQUESTED}/cam")).unwrap())
+		.unwrap();
 	below.announce(Default::default()).unwrap();
 	moq_clock::sleep(SETTLE).await;
 	log.push(format!("below: {:?}", drain(&mut announced)));

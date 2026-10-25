@@ -466,8 +466,8 @@ fn with_jwt(query: Option<&str>, token: &str) -> String {
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
 	use super::*;
-	use moq_net::Path;
 	use futures::FutureExt;
+	use moq_net::Path;
 	use std::time::Duration;
 
 	fn grant(prefix: &str, seconds: u64) -> Grant {
@@ -598,8 +598,12 @@ mod tests {
 	async fn refused_before_setup(change: fn(&mut moq_auth::Grant)) {
 		let (producer, consumer) = lease::Producer::new(grant("a/**", 3000));
 		let registry = moq_net::stats::Registry::new(Default::default());
-		let stats = registry.tier(moq_net::stats::Tier::default()).session(Path::new("room").unwrap());
-		let lease = super::super::Lease::new("/room", consumer).unwrap().with_stats(stats.clone());
+		let stats = registry
+			.tier(moq_net::stats::Tier::default())
+			.session(Path::new("room").unwrap());
+		let lease = super::super::Lease::new("/room", consumer)
+			.unwrap()
+			.with_stats(stats.clone());
 		let (client_transport, server) = transports().await;
 		let now = moq_net::time::Instant::now();
 		let origin = moq_tokio::origin::spawn();
@@ -702,7 +706,9 @@ mod tests {
 		] {
 			let (producer, consumer) = lease::Producer::new(grant("a/**", 3000));
 			let registry = moq_net::stats::Registry::new(Default::default());
-			let stats = registry.tier(moq_net::stats::Tier::default()).session(Path::new("room").unwrap());
+			let stats = registry
+				.tier(moq_net::stats::Tier::default())
+				.session(Path::new("room").unwrap());
 			let lease = super::super::Lease::new("/room", consumer).unwrap().with_stats(stats);
 			let (client, supervising) = sessions(lease).await;
 			producer.revoke(reason.clone());

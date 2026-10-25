@@ -11,8 +11,8 @@
 //! the subscriber are held, with a one-message stream buffer, so the relay still holds
 //! most of the track when the upstream session ends.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

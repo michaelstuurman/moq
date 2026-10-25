@@ -1321,7 +1321,9 @@ mod tests {
 	#[tokio::test]
 	async fn broadcast_race_quic_wins() {
 		let pub_origin = crate::origin::spawn();
-		let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
+		let broadcast = pub_origin
+			.create_broadcast(Path::new("test").unwrap())
+			.expect("failed to create broadcast");
 		broadcast
 			.announce(Default::default())
 			.expect("failed to create broadcast");

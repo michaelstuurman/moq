@@ -5,8 +5,8 @@
 //! the anchor the same way. A copy received over any other wire refuses the anchor instead
 //! of resolving it against the part of the track it happens to hold.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -65,10 +65,13 @@ async fn read(version: Option<&str>, range: Range) -> Result<Vec<u64>, Error> {
 	let _pair;
 	let remote = match version {
 		// Through the origin, as a reader of a local route.
-		None => moq_clock::timeout(TIMEOUT, publisher.consume().request_broadcast(Path::new("room").unwrap(), None))
-			.await
-			.expect("resolve timeout")
-			.expect("broadcast resolves"),
+		None => moq_clock::timeout(
+			TIMEOUT,
+			publisher.consume().request_broadcast(Path::new("room").unwrap(), None),
+		)
+		.await
+		.expect("resolve timeout")
+		.expect("broadcast resolves"),
 		Some(version) => {
 			_pair = peer(version.parse::<Version>().unwrap(), &publisher, &subscriber).await;
 			let consumer = subscriber.consume();

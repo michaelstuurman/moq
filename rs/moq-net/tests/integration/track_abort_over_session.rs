@@ -3,8 +3,8 @@
 //! A track aborted by its publisher while the broadcast stays announced, read by a
 //! subscriber on the far side of one session.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
@@ -40,7 +40,10 @@ async fn after_abort(version: &str, hops: u32) {
 	let _pair2 = connect_mock(options).await;
 	let consumer = if hops == 2 { far.consume() } else { relay.consume() };
 	consumer.routed(Path::new("bench").unwrap()).await.unwrap();
-	let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let remote = consumer
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let mut sub = remote.track("video").unwrap().subscribe(None).await.unwrap();
 	let mut open = track.append_group().unwrap();
 	open.write_frame(Timestamp::ZERO, b"head".as_ref()).unwrap();
@@ -83,7 +86,11 @@ async fn recreate(finish: bool) {
 		.announce(moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint()))
 		.unwrap();
 	let track = broadcast.create_track("video", timed()).unwrap();
-	let remote = origin.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
+	let remote = origin
+		.consume()
+		.request_broadcast(Path::new("bench").unwrap(), None)
+		.await
+		.unwrap();
 	let mut sub = remote.track("video").unwrap().subscribe(None).await.unwrap();
 	let mut open = track.create_group(moq_net::group::Info { sequence: 2 }).unwrap();
 	open.write_frame(Timestamp::ZERO, b"head".as_ref()).unwrap();

@@ -1150,7 +1150,10 @@ mod supervision_tests {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create((origin.create_broadcast(Path::new("retained").unwrap()).unwrap(), completion.clone()))
+			.create((
+				origin.create_broadcast(Path::new("retained").unwrap()).unwrap(),
+				completion.clone(),
+			))
 			.unwrap();
 		let container = publish
 			.container(
@@ -1174,7 +1177,10 @@ mod supervision_tests {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create((origin.create_broadcast(Path::new("retained").unwrap()).unwrap(), completion.clone()))
+			.create((
+				origin.create_broadcast(Path::new("retained").unwrap()).unwrap(),
+				completion.clone(),
+			))
 			.unwrap();
 		let producer = &publish.broadcast(broadcast).unwrap().producer;
 		// A dynamic handle outlives the consumed broadcast, so only an explicit close ends it.

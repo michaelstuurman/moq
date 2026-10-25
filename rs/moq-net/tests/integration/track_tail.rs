@@ -11,8 +11,8 @@
 //!
 //! Time is paused, so the one-second grace for a group that never arrives is free.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

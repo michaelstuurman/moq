@@ -1372,7 +1372,9 @@ mod tests {
 		let _driver = driver;
 		let tier = crate::stats::Tier::new(Path::new("t").unwrap());
 		let session = registry.tier(tier.clone()).session(Path::new("root").unwrap());
-		let _broadcast = origin.publish(Path::new("room/1").unwrap(), crate::origin::Route::default()).unwrap();
+		let _broadcast = origin
+			.publish(Path::new("room/1").unwrap(), crate::origin::Route::default())
+			.unwrap();
 		let mut cursor = origin.consume().with_stats(session).announced();
 		while cursor.next().now_or_never().flatten().is_some() {}
 

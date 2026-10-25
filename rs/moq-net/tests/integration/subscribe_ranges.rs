@@ -3,8 +3,8 @@
 //! Subscribers asking for different ranges of one track share a single upstream
 //! subscription, and each still gets the groups its own range asks for.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 

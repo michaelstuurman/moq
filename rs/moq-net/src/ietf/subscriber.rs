@@ -6334,7 +6334,9 @@ mod tests {
 	async fn a_rooted_subscriber_asks_for_its_scope_not_its_root() {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
 		let scope = crate::Patterns::from(crate::Pattern::subtree("cam").unwrap());
-		let scoped = origin.scope(Path::new("rootns").unwrap(), &scope).expect("scope the origin");
+		let scoped = origin
+			.scope(Path::new("rootns").unwrap(), &scope)
+			.expect("scope the origin");
 
 		let gate = kio::Producer::new(true);
 		let session = crate::lite::test_transport::SinkSession::gated_bi(gate.consume());
@@ -6424,7 +6426,9 @@ mod tests {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
 		let consumer = origin.consume();
 		let scope = crate::Patterns::from(crate::Pattern::subtree("cam").unwrap());
-		let scoped = origin.scope(Path::new("rootns").unwrap(), &scope).expect("scope the origin");
+		let scoped = origin
+			.scope(Path::new("rootns").unwrap(), &scope)
+			.expect("scope the origin");
 
 		let session = crate::lite::test_transport::ScriptedSession::new(namespace_response(VERSION, "x.hang").await);
 		let (tasks, _task_set) = crate::util::TaskSet::new();
@@ -6849,8 +6853,12 @@ mod tests {
 		let stream = Stream::open(&mut crate::driver::Transport::new(session.clone()), VERSION)
 			.await
 			.unwrap();
-		let mut run =
-			std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new("").unwrap().to_owned(), snapshot, live));
+		let mut run = std::pin::pin!(subscriber.run_subscribe_namespace(
+			stream,
+			crate::Path::new("").unwrap().to_owned(),
+			snapshot,
+			live
+		));
 		for _ in 0..10 {
 			assert!(futures::poll!(run.as_mut()).is_pending());
 			settle().await;
@@ -8577,8 +8585,14 @@ mod tests {
 
 		for version in [Version::Draft18, Version::Draft19, Version::Draft22] {
 			let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-			let source = origin.publish(Path::new("broadcast").unwrap(), Default::default()).unwrap();
-			let resolved = origin.consume().request_broadcast(Path::new("broadcast").unwrap(), None).await.unwrap();
+			let source = origin
+				.publish(Path::new("broadcast").unwrap(), Default::default())
+				.unwrap();
+			let resolved = origin
+				.consume()
+				.request_broadcast(Path::new("broadcast").unwrap(), None)
+				.await
+				.unwrap();
 			let peer = Arc::new(Peer {
 				version,
 				dynamic: Mutex::new(Some(source.dynamic())),
@@ -8915,7 +8929,11 @@ mod tests {
 
 		let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 		subscriber
-			.start_announce(crate::Path::new("room/host").unwrap().to_owned(), advert, Admit::Session(None))
+			.start_announce(
+				crate::Path::new("room/host").unwrap().to_owned(),
+				advert,
+				Admit::Session(None),
+			)
 			.unwrap();
 
 		let mut announced = consumer.announced();
@@ -8952,7 +8970,10 @@ mod tests {
 		// What we are publishing to the peer: a real upstream route.
 		let upstream = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
 		let _source = origin
-			.announce(Path::new("room/host").unwrap(), crate::origin::Route::default().with_hops(upstream.clone()))
+			.announce(
+				Path::new("room/host").unwrap(),
+				crate::origin::Route::default().with_hops(upstream.clone()),
+			)
 			.unwrap();
 		announced.expect_next_active(Path::new("room/host").unwrap()).await;
 		let _advertised = publishing.expect_next_active(Path::new("room/host").unwrap()).await;
@@ -8975,7 +8996,11 @@ mod tests {
 		);
 		let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 		subscriber
-			.start_announce(crate::Path::new("room/host").unwrap().to_owned(), advert, Admit::Session(None))
+			.start_announce(
+				crate::Path::new("room/host").unwrap().to_owned(),
+				advert,
+				Admit::Session(None),
+			)
 			.unwrap();
 
 		// No announce churn: the upstream route stays the best one, on both cursors.
@@ -9015,7 +9040,11 @@ mod tests {
 			);
 			let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 			subscriber
-				.start_announce(crate::Path::new("room/host").unwrap().to_owned(), advert, Admit::Session(None))
+				.start_announce(
+					crate::Path::new("room/host").unwrap().to_owned(),
+					advert,
+					Admit::Session(None),
+				)
 				.unwrap();
 			subscriber
 		};
@@ -13231,7 +13260,9 @@ mod stitch_tests {
 	) -> (Vec<u8>, crate::lite::test_transport::Log) {
 		use crate::lite::test_transport::Sent;
 		let origin = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-		let broadcast = origin.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
+		let broadcast = origin
+			.publish(Path::new("room").unwrap(), crate::origin::Route::default())
+			.unwrap();
 		let track = broadcast
 			.create_track(
 				"video",
@@ -14000,7 +14031,9 @@ mod stitch_tests {
 		{
 			{
 				let origin = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-				let broadcast = origin.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
+				let broadcast = origin
+					.publish(Path::new("room").unwrap(), crate::origin::Route::default())
+					.unwrap();
 				let track = broadcast
 					.create_track("video", accepted_info(&Default::default(), version))
 					.unwrap();
@@ -14130,7 +14163,9 @@ mod stitch_tests {
 				.flat_map(|egress| [END_OF_GROUP, END_OF_TRACK].map(|status| (egress, status)));
 			for (egress, status) in pairs {
 				let origin = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-				let broadcast = origin.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
+				let broadcast = origin
+					.publish(Path::new("room").unwrap(), crate::origin::Route::default())
+					.unwrap();
 				let track = broadcast
 					.create_track("video", accepted_info(&Default::default(), ingress))
 					.unwrap();
@@ -15928,7 +15963,8 @@ mod joining_fetch_tests {
 			let track = consumer.track("video").unwrap();
 			let mut subscribing = Box::pin(track.subscribe(None));
 			let request = dynamic.requested_track().await.unwrap();
-			let mut serving = Box::pin(subscriber.run_subscribe(Path::new("broadcast").unwrap(), dynamic, None, request));
+			let mut serving =
+				Box::pin(subscriber.run_subscribe(Path::new("broadcast").unwrap(), dynamic, None, request));
 			assert!(futures::poll!(serving.as_mut()).is_pending());
 			let received = (&mut subscribing).now_or_never().expect("SUBSCRIBE_OK").unwrap();
 			let mut fetch = Box::pin(track.fetch_group(4, None));
@@ -16643,7 +16679,12 @@ mod joining_fetch_tests {
 
 		subscriber
 			.clone()
-			.run_group_fetch(Path::new("broadcast").unwrap().to_owned(), "video".into(), request, None)
+			.run_group_fetch(
+				Path::new("broadcast").unwrap().to_owned(),
+				"video".into(),
+				request,
+				None,
+			)
 			.await;
 
 		assert!(fetch.await.is_err(), "the accepted group was aborted");
@@ -16715,7 +16756,12 @@ mod joining_fetch_tests {
 
 					subscriber
 						.clone()
-						.run_group_fetch(Path::new("broadcast").unwrap().to_owned(), "video".into(), request, None)
+						.run_group_fetch(
+							Path::new("broadcast").unwrap().to_owned(),
+							"video".into(),
+							request,
+							None,
+						)
 						.await;
 
 					assert_eq!(

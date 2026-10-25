@@ -5,8 +5,8 @@
 //! [`Error::Unroutable`](moq_net::Error::Unroutable), a fresh request for the path
 //! answers the same, and the broadcast can never be announced again.
 
-use moq_net::Path;
 use crate::support;
+use moq_net::Path;
 
 use std::time::Duration;
 
