@@ -223,7 +223,7 @@ impl Message for PublishDone<'_> {
 #[derive(Debug)]
 pub struct Publish<'a> {
 	pub request_id: RequestId,
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 	pub track_name: Cow<'a, str>,
 	pub track_alias: u64,
 	pub largest_location: Option<Location>,

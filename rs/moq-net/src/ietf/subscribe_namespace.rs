@@ -26,9 +26,9 @@ fn is_legacy_version(version: Version) -> bool {
 /// Options field when it split SUBSCRIBE_TRACKS (0x51) off into its own message
 /// type (#1542). Draft-14 through draft-17 use [`SubscribeNamespaceLegacy`].
 #[derive(Clone, Debug)]
-pub struct SubscribeNamespace<'a> {
+pub struct SubscribeNamespace {
 	pub request_id: RequestId,
-	pub namespace: Path<'a>,
+	pub namespace: Path,
 	/// MoQ Hidden: also advertise hidden namespaces. Only sent to a peer that declared
 	/// the extension; absent means false.
 	pub hidden: bool,
@@ -48,7 +48,7 @@ fn hidden_from_param(value: Option<u64>) -> Result<bool, DecodeError> {
 	}
 }
 
-impl Message for SubscribeNamespace<'_> {
+impl Message for SubscribeNamespace {
 	const ID: u64 = 0x50;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -124,16 +124,16 @@ impl SubscribeOptions {
 /// Required Request ID delta (removed in draft-18 per #1615). Draft-18+ uses
 /// [`SubscribeNamespace`].
 #[derive(Clone, Debug)]
-pub struct SubscribeNamespaceLegacy<'a> {
+pub struct SubscribeNamespaceLegacy {
 	pub request_id: RequestId,
-	pub namespace: Path<'a>,
+	pub namespace: Path,
 	/// Encoded on v16/v17 only; earlier drafts always mean [`SubscribeOptions::Namespace`].
 	pub subscribe_options: SubscribeOptions,
 	/// MoQ Hidden: see [`SubscribeNamespace::hidden`].
 	pub hidden: bool,
 }
 
-impl Message for SubscribeNamespaceLegacy<'_> {
+impl Message for SubscribeNamespaceLegacy {
 	const ID: u64 = 0x11;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -243,14 +243,14 @@ impl Message for SubscribeNamespaceError<'_> {
 /// UnsubscribeNamespace message (0x14): v14/v15 only (v16 uses stream close).
 /// v14 names the prefix it subscribed, v15 the request.
 #[derive(Clone, Debug)]
-pub struct UnsubscribeNamespace<'a> {
+pub struct UnsubscribeNamespace {
 	/// v14: the Track Namespace Prefix of the SUBSCRIBE_NAMESPACE it cancels.
-	pub prefix: Path<'a>,
+	pub prefix: Path,
 	/// v15: the Request ID of the SUBSCRIBE_NAMESPACE it cancels.
 	pub request_id: RequestId,
 }
 
-impl Message for UnsubscribeNamespace<'_> {
+impl Message for UnsubscribeNamespace {
 	const ID: u64 = 0x14;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -285,15 +285,15 @@ impl Message for UnsubscribeNamespace<'_> {
 /// field for both, so the advertisement can carry its HOP_PATH and ROUTE_COST (see
 /// [`super::cluster`]) and its EPOCH (see [`super::epoch`]).
 #[derive(Clone, Debug)]
-pub struct Namespace<'a> {
-	pub suffix: Path<'a>,
+pub struct Namespace {
+	pub suffix: Path,
 
 	/// The extension parameters. `Some` selects the extended form; `None` the base one.
 	/// An endpoint must not append them on a session that negotiated neither extension.
 	pub params: Option<AdvertParams>,
 }
 
-impl Namespace<'_> {
+impl Namespace {
 	/// Decode the message body, expecting the extended form when the session negotiated
 	/// an extension that defines it. See [`super::PublishNamespace::decode_body`].
 	pub fn decode_body(r: &mut Decoder<'_>, version: Version, negotiated: Negotiated) -> Result<Self, DecodeError> {
@@ -310,7 +310,7 @@ impl Namespace<'_> {
 	}
 }
 
-impl Message for Namespace<'_> {
+impl Message for Namespace {
 	const ID: u64 = 0x08;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -329,11 +329,11 @@ impl Message for Namespace<'_> {
 /// NAMESPACE_DONE message (0x0E): v16 only, sent on SUBSCRIBE_NAMESPACE bidi stream
 /// Indicates a namespace suffix matching the subscribed prefix is no longer active.
 #[derive(Clone, Debug)]
-pub struct NamespaceDone<'a> {
-	pub suffix: Path<'a>,
+pub struct NamespaceDone {
+	pub suffix: Path,
 }
 
-impl Message for NamespaceDone<'_> {
+impl Message for NamespaceDone {
 	const ID: u64 = 0x0E;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, _: Version) -> Result<(), EncodeError> {
@@ -381,7 +381,7 @@ mod tests {
 		bytes: Vec<u8>,
 		version: Version,
 		negotiated: Negotiated,
-	) -> Result<(Namespace<'static>, bool), DecodeError> {
+	) -> Result<(Namespace, bool), DecodeError> {
 		let mut buf = bytes::Bytes::from(bytes);
 		let decoded = crate::coding::decode_buf(&mut buf, version, |r, v| Namespace::decode_body(r, v, negotiated))?;
 		Ok((decoded, buf.is_empty()))

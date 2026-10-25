@@ -32,8 +32,8 @@ struct Args {
 async fn main() -> anyhow::Result<()> {
 	moq_tokio::Log::new(tracing::Level::INFO).init()?;
 	let args = Args::parse();
-	let source_path = moq_net::PathOwned::from(args.source);
-	let output_path = moq_net::PathOwned::from(
+	let source_path = moq_net::Path::from(args.source);
+	let output_path = moq_net::Path::from(
 		args.output
 			.clone()
 			.unwrap_or_else(|| format!("{source_path}/transcode.hang")),

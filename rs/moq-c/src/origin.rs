@@ -321,7 +321,7 @@ impl Origin {
 	/// Create an unannounced broadcast at `path` on an origin.
 	///
 	/// Errors with [`Error::Moq`] if the path is outside the origin's scope.
-	pub fn create_broadcast<P: moq_net::AsPath>(
+	pub fn create_broadcast<P: Into<moq_net::Path>>(
 		&self,
 		origin: Id,
 		path: P,

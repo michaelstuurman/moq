@@ -13,7 +13,7 @@
 use bytes::Bytes;
 
 use crate::{
-	Hops, Path, PathOwned, Pattern, broadcast, cache, coding,
+	Hops, Path, Pattern, broadcast, cache, coding,
 	coding::{Decode, Decoder, Encode, Encoder, Form, varint},
 	frame, group, ietf, lite,
 	path::Relative,
@@ -204,10 +204,10 @@ pub fn lite_wire(data: &[u8]) -> bool {
 	match kind {
 		0 => roundtrip::<lite::Setup, _>(rest, version),
 		1 => roundtrip::<lite::SessionInfo, _>(rest, version),
-		2 => roundtrip::<lite::AnnounceInit<'static>, _>(rest, version),
-		3 => roundtrip::<lite::AnnounceRequest<'static>, _>(rest, version),
+		2 => roundtrip::<lite::AnnounceInit, _>(rest, version),
+		3 => roundtrip::<lite::AnnounceRequest, _>(rest, version),
 		4 => roundtrip::<lite::AnnounceOk, _>(rest, version),
-		5 => roundtrip::<lite::AnnounceBroadcast<'static>, _>(rest, version),
+		5 => roundtrip::<lite::AnnounceBroadcast, _>(rest, version),
 		6 => roundtrip::<lite::Subscribe<'static>, _>(rest, version),
 		7 => roundtrip::<lite::SubscribeOk, _>(rest, version),
 		8 => roundtrip::<lite::SubscribeStart, _>(rest, version),
@@ -232,7 +232,7 @@ pub fn lite_wire(data: &[u8]) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Announced {
 	/// ANNOUNCE_START: a route's suffix and wire hop chain, taking the next id.
-	Start(PathOwned, Hops),
+	Start(Path, Hops),
 	/// ANNOUNCE_UPDATE: a live id's new wire hop chain.
 	Update(u64, Hops),
 	/// ANNOUNCE_END: a live id retired.
@@ -305,7 +305,7 @@ pub fn excluding(origin: crate::origin::Consumer, peer: crate::Hop) -> crate::or
 /// Land a claim with a peer's wire route, as a session does, for the origin bench.
 pub fn dynamic_route(
 	origin: &crate::origin::Producer,
-	prefix: impl crate::AsPath,
+	prefix: impl Into<crate::Path>,
 	route: crate::origin::Route,
 ) -> Result<crate::origin::Dynamic, crate::Error> {
 	origin.dynamic_route(prefix, route)
@@ -356,7 +356,7 @@ impl Interests {
 /// drops the entry unless some guard still holds it. Not a public API.
 pub fn bump_publisher_bytes(
 	registry: &crate::stats::Registry,
-	path: impl crate::AsPath,
+	path: impl Into<crate::Path>,
 	tier: &crate::stats::Tier,
 	n: u64,
 ) {
@@ -437,6 +437,30 @@ pub fn decode_announces(data: &[u8], compress: bool) -> Vec<Announced> {
 		resolved.push(announced);
 	}
 	resolved
+}
+
+/// Encode a moq-transport NAMESPACE message for each of `paths`.
+pub fn encode_namespaces(paths: &[Path]) -> Vec<u8> {
+	let mut data = Vec::new();
+	let w = &mut Encoder::new(&mut data, BENCH_IETF.into());
+	for path in paths {
+		let msg = ietf::Namespace {
+			suffix: path.clone(),
+			params: None,
+		};
+		msg.encode(w, BENCH_IETF).expect("a namespace that fits");
+	}
+	data
+}
+
+/// Decode the NAMESPACE messages [`encode_namespaces`] wrote.
+pub fn decode_namespaces(data: &[u8]) -> Vec<Path> {
+	let r = &mut Decoder::new(data, BENCH_IETF.into());
+	let mut paths = Vec::new();
+	while !r.is_empty() {
+		paths.push(ietf::Namespace::decode(r, BENCH_IETF).expect("our own encoding").suffix);
+	}
+	paths
 }
 
 /// A varint-heavy lite wire object, as the varint bench times it: what a publisher
@@ -597,10 +621,10 @@ pub fn ietf_wire(data: &[u8]) -> bool {
 		4 => roundtrip::<ietf::FetchCancel, _>(rest, version),
 		5 => roundtrip::<ietf::FetchHeader, _>(rest, version),
 		6 => roundtrip::<ietf::FetchType<'static>, _>(rest, version),
-		7 => roundtrip::<ietf::PublishNamespace<'static>, _>(rest, version),
+		7 => roundtrip::<ietf::PublishNamespace, _>(rest, version),
 		8 => roundtrip::<ietf::PublishNamespaceOk, _>(rest, version),
 		9 => roundtrip::<ietf::PublishNamespaceError<'static>, _>(rest, version),
-		10 => roundtrip::<ietf::PublishNamespaceDone<'static>, _>(rest, version),
+		10 => roundtrip::<ietf::PublishNamespaceDone, _>(rest, version),
 		11 => roundtrip::<ietf::PublishNamespaceCancel<'static>, _>(rest, version),
 		12 => roundtrip::<ietf::TrackStatus<'static>, _>(rest, version),
 		13 => roundtrip::<ietf::Publish<'static>, _>(rest, version),
@@ -613,13 +637,13 @@ pub fn ietf_wire(data: &[u8]) -> bool {
 		20 => roundtrip::<ietf::SubscribeError<'static>, _>(rest, version),
 		21 => roundtrip::<ietf::SubscribeUpdate, _>(rest, version),
 		22 => roundtrip::<ietf::Unsubscribe, _>(rest, version),
-		23 => roundtrip::<ietf::SubscribeNamespace<'static>, _>(rest, version),
-		24 => roundtrip::<ietf::SubscribeNamespaceLegacy<'static>, _>(rest, version),
+		23 => roundtrip::<ietf::SubscribeNamespace, _>(rest, version),
+		24 => roundtrip::<ietf::SubscribeNamespaceLegacy, _>(rest, version),
 		25 => roundtrip::<ietf::SubscribeNamespaceOk, _>(rest, version),
 		26 => roundtrip::<ietf::SubscribeNamespaceError<'static>, _>(rest, version),
-		27 => roundtrip::<ietf::UnsubscribeNamespace<'static>, _>(rest, version),
-		28 => roundtrip::<ietf::Namespace<'static>, _>(rest, version),
-		29 => roundtrip::<ietf::NamespaceDone<'static>, _>(rest, version),
+		27 => roundtrip::<ietf::UnsubscribeNamespace, _>(rest, version),
+		28 => roundtrip::<ietf::Namespace, _>(rest, version),
+		29 => roundtrip::<ietf::NamespaceDone, _>(rest, version),
 		30 => roundtrip::<ietf::MaxRequestId, _>(rest, version),
 		31 => roundtrip::<ietf::RequestsBlocked, _>(rest, version),
 		32 => roundtrip::<ietf::RequestOk, _>(rest, version),
@@ -630,7 +654,7 @@ pub fn ietf_wire(data: &[u8]) -> bool {
 		37 => roundtrip::<ietf::FetchObject, _>(rest, version),
 		38 => roundtrip::<ietf::PublishNamespaceUpdate, _>(rest, version),
 		39 => roundtrip::<ietf::ObjectDatagram, _>(rest, version),
-		40 => roundtrip::<ietf::SubscribeTracks<'static>, _>(rest, version),
+		40 => roundtrip::<ietf::SubscribeTracks, _>(rest, version),
 		// The unified SETUP replaced the client/server pair at draft-17. The pair refuses a
 		// later draft itself, but the unified one treats an earlier draft as unreachable.
 		41 if matches!(
@@ -899,8 +923,6 @@ pub fn path(data: &[u8]) -> bool {
 	// Normalization is a fixed point: re-parsing what `as_str` printed changes nothing,
 	// or every path that made a round trip through the wire would drift.
 	assert_eq!(Path::new(target.as_str()), target, "normalization is not idempotent");
-	assert_eq!(target.to_owned(), target, "owning a path changed it");
-	assert_eq!(target.borrow(), target, "borrowing a path changed it");
 	assert_eq!(target.parts().collect::<Vec<_>>().join("/"), target.as_str());
 
 	// A prefix is a prefix whichever way you ask.
@@ -923,7 +945,7 @@ pub fn path(data: &[u8]) -> bool {
 		assert_eq!(base.resolve(&rel), target, "relative did not invert resolve");
 		assert_eq!(
 			base.try_resolve(&rel),
-			Some(target.to_owned()),
+			Some(target.clone()),
 			"relative escaped the root"
 		);
 	}
@@ -1195,7 +1217,7 @@ pub fn seeds() -> Vec<Seed> {
 	let mut announced = Vec::new();
 	let hop = |id: u64| crate::Hop::new(id).expect("a valid hop");
 	for n in 0..12u64 {
-		let suffix = PathOwned::from(format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2));
+		let suffix = Path::from(format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2));
 		let hops = Hops::try_from(vec![hop(100 + n % 3), hop(1 << 40), hop(1 << 41)]).expect("valid hops");
 		announced.push(Announced::Start(suffix, hops));
 		if n % 4 == 3 {

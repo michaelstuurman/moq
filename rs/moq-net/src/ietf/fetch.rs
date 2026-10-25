@@ -22,7 +22,7 @@ use super::Version;
 pub enum FetchType<'a> {
 	/// An inclusive range of a track, through draft-18.
 	Standalone {
-		namespace: Path<'a>,
+		namespace: Path,
 		track: Cow<'a, str>,
 		start: Location,
 		end: Location,
@@ -38,7 +38,7 @@ pub enum FetchType<'a> {
 	/// A track, with the range as a LOCATION_FILTER, from draft-22 on. Unfiltered is
 	/// everything from `{0, 0}` up to Largest Object.
 	Filtered {
-		namespace: Path<'a>,
+		namespace: Path,
 		track: Cow<'a, str>,
 		filter: Filter,
 	},

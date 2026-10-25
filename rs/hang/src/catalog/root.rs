@@ -1113,7 +1113,7 @@ mod test {
 			"video".to_string(),
 			crate::catalog::Timeline::new("video.timeline.z", 2_000),
 		);
-		archive.replay = Some(moq_net::path::RelativeOwned::new("recordings/clip"));
+		archive.replay = Some(moq_net::path::Relative::new("recordings/clip"));
 		archive.version = Some(crate::catalog::Archive::VERSION);
 
 		let catalog = Catalog::<()> {
@@ -1209,7 +1209,7 @@ mod test {
 		chat.schema = Some("https://example.com/chat.schema.json".to_string());
 
 		let mut status = JsonConfig::new(Mode::Snapshot);
-		status.broadcast = Some(moq_net::path::RelativeOwned::new("source"));
+		status.broadcast = Some(moq_net::path::Relative::new("source"));
 
 		let mut thumbnail = BinaryConfig::new(Mode::Snapshot);
 		thumbnail.mime = Some("image/jpeg".to_string());

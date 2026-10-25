@@ -4,6 +4,16 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### `Path` and `Relative` have no lifetime
+
+There is one owned `Path` type: a short path is stored inline and a long one shares a reference-counted buffer, so cloning stays cheap.
+
+- `PathOwned`, `Path<'a>`, and `Path<'static>` are all `Path`; `RelativeOwned` and `Relative<'a>` are `Relative`.
+- `Path::{to_owned, into_owned, borrow}` and the `Relative` equivalents are gone: drop the call, or `clone()` a `&Path` you need to keep.
+- `AsPath` is gone. Functions that took `impl AsPath` take `impl Into<Path>`, which still accepts `&str`, `String`, `&String`, `Path`, and `&Path`.
+- `Path::{has_prefix, strip_prefix, join, relative}` take `&Path`: write `path.has_prefix(&Path::new("room"))`.
+- `Path::new` copies its argument. Use `Path::from_static("room")` for a literal, which borrows it.
+
 ### Exports without a consumer are gone
 
 These had no caller outside tests; replace them as follows.

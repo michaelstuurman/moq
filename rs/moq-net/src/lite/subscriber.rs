@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-	AsPath, Error, Path, PathOwned, Timescale, Timestamp, bandwidth,
+	Error, Path, Timescale, Timestamp, bandwidth,
 	coding::{Reader, Stream, varint::MAX_QUIC},
 	lite,
 	track::{Anchor, Position, Subscription},
@@ -177,8 +177,8 @@ impl Subscriber {
 	/// bookkeeping in `run`.
 	fn handle_announce(
 		&mut self,
-		prefix: &PathOwned,
-		announce: lite::AnnounceBroadcast<'_>,
+		prefix: &Path,
+		announce: lite::AnnounceBroadcast,
 		run: &mut PrefixRun,
 	) -> Result<(), Error> {
 		match announce {
@@ -192,7 +192,7 @@ impl Subscriber {
 					// Every `active` assigns the next ordinal, even ones we drop locally.
 					true => run.decoder.start(suffix, hops)?,
 					// Nothing references an announcement here, so there are no bases.
-					false => (suffix.rest.into_owned(), hops.literal),
+					false => (suffix.rest, hops.literal),
 				};
 				let path = prefix.join(&suffix);
 				if lite::update_supported(self.version)
@@ -276,7 +276,7 @@ impl Subscriber {
 	)]
 	fn start_announce(
 		&mut self,
-		path: PathOwned,
+		path: Path,
 		// The publisher instance the peer announced, fixed until it retracts.
 		epoch: Option<crate::Epoch>,
 		hops: crate::Hops,
@@ -329,7 +329,7 @@ impl Subscriber {
 	/// since it never changes the content.
 	fn announced_route(
 		&self,
-		path: &PathOwned,
+		path: &Path,
 		hops: crate::Hops,
 		cost: crate::origin::Cost,
 		link_cost: u64,
@@ -374,7 +374,7 @@ impl Subscriber {
 	/// route is now gone), `Ok(true)` otherwise.
 	fn update_announce(
 		&mut self,
-		path: PathOwned,
+		path: Path,
 		hops: crate::Hops,
 		// The route cost off the wire and this link's price. See `start_announce`.
 		cost: crate::origin::Cost,
@@ -416,7 +416,7 @@ impl Subscriber {
 	/// route is now gone), `Ok(true)` otherwise.
 	fn restart_announce(
 		&mut self,
-		path: PathOwned,
+		path: Path,
 		hops: crate::Hops,
 		// See `update_announce`.
 		cost: crate::origin::Cost,
@@ -439,7 +439,7 @@ impl Subscriber {
 	/// reflected or exceeds the origin's hop limit.
 	fn chain(
 		&self,
-		path: &PathOwned,
+		path: &Path,
 		mut hops: crate::Hops,
 		responder_origin: Option<crate::Hop>,
 	) -> Option<crate::Hops> {
@@ -533,8 +533,8 @@ impl Subscriber {
 		Ok(())
 	}
 
-	fn log_path(&self, path: impl AsPath) -> Path<'_> {
-		self.origin.root().join(path)
+	fn log_path(&self, path: impl Into<Path>) -> Path {
+		self.origin.root().join(&path.into())
 	}
 }
 
@@ -587,7 +587,7 @@ pub(super) struct SubscriberDriver {
 	discovery: crate::discovery::Discovery,
 	/// One machine per prefix asked about. Only an error ends the session; a
 	/// prefix finishing cleanly (publisher FIN) just retires.
-	prefixes: HashMap<PathOwned, AnnouncePrefix>,
+	prefixes: HashMap<Path, AnnouncePrefix>,
 	uni: UniAccept,
 	/// PROBE feedback; finishes quietly when unsupported or given up on.
 	bandwidth: Option<RecvBandwidth>,
@@ -1564,7 +1564,7 @@ impl ProbeStream {
 /// session; a publisher FIN is a clean end for the prefix alone.
 struct AnnouncePrefix {
 	subscriber: Subscriber,
-	prefix: PathOwned,
+	prefix: Path,
 	state: PrefixState,
 	/// Holds the origin's announce consumers under the prefix unsynced
 	/// until the peer's initial set is in. Dropped at the boundary the version
@@ -1621,7 +1621,7 @@ struct PrefixRun {
 impl AnnouncePrefix {
 	/// `snapshot` was taken when the prefix was first wanted, so a consumer of the
 	/// origin never reads as synced before the request even goes out.
-	fn new(subscriber: Subscriber, prefix: PathOwned, snapshot: crate::model::Snapshot) -> Self {
+	fn new(subscriber: Subscriber, prefix: Path, snapshot: crate::model::Snapshot) -> Self {
 		Self {
 			subscriber,
 			prefix,
@@ -1659,7 +1659,7 @@ impl AnnouncePrefix {
 					// the origin, and each local reader opts in on its own
 					// (`origin::Consumer::with_hidden`).
 					stream.writer.buffer(&lite::AnnounceRequest {
-						prefix: self.prefix.as_path(),
+						prefix: self.prefix.clone(),
 						exclude_hop: self.subscriber.self_origin,
 						hidden: true,
 					})?;
@@ -1835,7 +1835,7 @@ impl AnnouncePrefix {
 
 /// A source the announce half minted for one requested path, for the driver to serve.
 struct MintedSource {
-	path: PathOwned,
+	path: Path,
 	/// The publisher instance the route announced, asked for on every request.
 	epoch: Option<crate::Epoch>,
 	source: crate::model::broadcast::SourceGuard,
@@ -1853,7 +1853,7 @@ struct MintedSource {
 /// dying drops them.
 struct SourceServe {
 	subscriber: Subscriber,
-	path: PathOwned,
+	path: Path,
 	epoch: Option<crate::Epoch>,
 	source: crate::model::broadcast::SourceGuard,
 	dynamic: crate::broadcast::Dynamic,
@@ -1914,7 +1914,7 @@ impl TracksRecv {
 				stream = stream.with_stats(source.subscriber.origin.stats());
 				stream.writer.buffer(&lite::ControlType::Tracks)?;
 				stream.writer.buffer(&lite::Tracks {
-					broadcast: source.path.as_path(),
+					broadcast: source.path.clone(),
 					epoch: source.epoch.clone(),
 				})?;
 				self.stream.insert(stream)
@@ -3421,7 +3421,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3493,7 +3493,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").to_owned(),
+			path: Path::new("room").clone(),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3563,7 +3563,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3622,7 +3622,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").to_owned(),
+			path: Path::new("room").clone(),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3806,7 +3806,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber: subscriber.clone(),
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -3880,7 +3880,7 @@ mod tests {
 					validity: crate::model::broadcast::RequestValidity::token(Some(route.consume())),
 					route: None,
 					subscriber,
-					path: Path::new("room").to_owned(),
+					path: Path::new("room").clone(),
 					epoch: None,
 					name: "video".into(),
 				};
@@ -3953,7 +3953,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room").to_owned(),
+					path: Path::new("room").clone(),
 					epoch: None,
 					name: "video".to_string(),
 				},
@@ -3999,7 +3999,7 @@ mod tests {
 		let serve = SourceServe::new(
 			subscriber,
 			MintedSource {
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				source: crate::model::broadcast::SourceGuard::new(broadcast),
 				dynamic,
@@ -4127,7 +4127,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -4178,7 +4178,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").to_owned(),
+			path: Path::new("room/host").clone(),
 			epoch: None,
 			name: "catalog.json".to_string(),
 		};
@@ -4245,7 +4245,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").to_owned(),
+			path: Path::new("room/host").clone(),
 			epoch: None,
 			name: "audio".to_string(),
 		};
@@ -4314,7 +4314,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room/host").to_owned(),
+					path: Path::new("room/host").clone(),
 					epoch: None,
 					name: "catalog.json".to_string(),
 				},
@@ -4380,7 +4380,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4434,7 +4434,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").clone(),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4784,7 +4784,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		let mut announced = Announced::default();
 		assert!(
 			subscriber
@@ -4844,7 +4844,7 @@ mod tests {
 			assert!(
 				subscriber
 					.start_announce(
-						Path::new(&format!("room/{i}")).to_owned(),
+						Path::new(&format!("room/{i}")).clone(),
 						None,
 						crate::Hops::new(),
 						crate::origin::Cost::default(),
@@ -4892,7 +4892,7 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let path = Path::new("pool").to_owned();
+		let path = Path::new("pool").clone();
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
@@ -4964,7 +4964,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("pool").to_owned(),
+				Path::new("pool").clone(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::default(),
@@ -5018,7 +5018,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		let mut announced = Announced::default();
 
 		// A chain that already names us is a reflection, declined but still recorded.
@@ -5077,7 +5077,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		let mut announced = Announced::default();
 		let mut reflected = crate::Hops::new();
 		reflected.push(assigned).unwrap();
@@ -5143,7 +5143,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").clone(),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5209,7 +5209,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").clone(),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5268,7 +5268,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").clone(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5315,7 +5315,7 @@ mod tests {
 		assert!(
 			subscriber
 				.start_announce(
-					Path::new("room/host").to_owned(),
+					Path::new("room/host").clone(),
 					None,
 					hops,
 					crate::origin::Cost::UNKNOWN,
@@ -5343,7 +5343,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").clone(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5362,7 +5362,7 @@ mod tests {
 		// A reprice from the same unnamed publisher stays anonymous and in place.
 		subscriber
 			.update_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").clone(),
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
 				4,
@@ -5401,7 +5401,7 @@ mod tests {
 		let (mut subscriber, consumer) = restart_subscriber(SinkSession::new(Default::default()));
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5442,7 +5442,7 @@ mod tests {
 		let auth = subscriber.auth.clone();
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5501,7 +5501,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").clone();
 		let hops = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
 		let mut announced = Announced::default();
 		subscriber
@@ -5586,7 +5586,7 @@ mod tests {
 		});
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").to_owned(),
+			Path::new("").clone(),
 			subscriber.origin.snapshot(""),
 		);
 		let mut cursor = consumer.announced();
@@ -5655,7 +5655,7 @@ mod tests {
 		(
 			AnnouncePrefix::new(
 				subscriber.clone(),
-				Path::new("").to_owned(),
+				Path::new("").clone(),
 				subscriber.origin.snapshot(""),
 			),
 			consumer,
@@ -5834,7 +5834,7 @@ mod tests {
 		subscriber.announces = slots.clone();
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").to_owned(),
+			Path::new("").clone(),
 			subscriber.origin.snapshot(""),
 		);
 
@@ -5984,17 +5984,17 @@ enum Sub {
 /// A declined advertisement remains present with no route because the peer still
 /// owns its path and announce id until it retracts or restarts it.
 struct Announced {
-	routes: HashMap<PathOwned, Held>,
+	routes: HashMap<Path, Held>,
 	/// The session's announce cap, and one slot taken from it per entry in `routes`.
 	slots: crate::session::Slots,
 	held: Vec<crate::session::Slot>,
 	/// The epoch each advertisement named, kept while it stands even when declined,
 	/// so a restart that attaches it later serves the same broadcast.
-	epochs: HashMap<PathOwned, crate::Epoch>,
+	epochs: HashMap<Path, crate::Epoch>,
 	/// Attached routes whose request queue woke since the last serve pass. The
 	/// driver wakes for every group the session carries, so a pass must cost what
 	/// was requested, not every route the peer announced.
-	ready: kio::Queue<PathOwned>,
+	ready: kio::Queue<Path>,
 }
 
 /// What we made of one advertisement the peer holds.
@@ -6026,12 +6026,12 @@ impl Announced {
 		}
 	}
 
-	fn contains(&self, path: &PathOwned) -> bool {
+	fn contains(&self, path: &Path) -> bool {
 		self.routes.contains_key(path)
 	}
 
 	/// Attach a route, queued for its first serve pass.
-	fn attach(&mut self, path: PathOwned, route: crate::origin::Route, dynamic: crate::origin::Dynamic) {
+	fn attach(&mut self, path: Path, route: crate::origin::Route, dynamic: crate::origin::Dynamic) {
 		let wake = crate::util::QueueWake::new(path.clone(), self.ready.clone());
 		let route = AnnouncedRoute::new(route, dynamic, wake);
 		route.waker.wake_by_ref();
@@ -6041,7 +6041,7 @@ impl Announced {
 	/// Put the peer's route into the origin, so paths under it resolve through this
 	/// session on demand, or hold it back when the session's limit does not cover it.
 	/// Returns whether it attached.
-	fn offer(&mut self, subscriber: &Subscriber, path: PathOwned, route: crate::origin::Route) -> bool {
+	fn offer(&mut self, subscriber: &Subscriber, path: Path, route: crate::origin::Route) -> bool {
 		if !subscriber
 			.auth
 			.within_limit(crate::auth::Direction::Subscribe, path.as_str())
@@ -6063,7 +6063,7 @@ impl Announced {
 		}
 	}
 
-	fn declined(&mut self, path: PathOwned) {
+	fn declined(&mut self, path: Path) {
 		// Dropping a replaced route closes its sources.
 		self.routes.insert(path, Held::Declined);
 	}
@@ -6079,7 +6079,7 @@ impl Announced {
 	/// with [`Self::contains`]. Overwriting an attached route is [`Self::declined`]'s job.
 	///
 	/// Fails with [`Error::TooManyRequests`] once the session holds as many as it allows.
-	fn reserve(&mut self, path: PathOwned, epoch: Option<crate::Epoch>) -> Result<(), Error> {
+	fn reserve(&mut self, path: Path, epoch: Option<crate::Epoch>) -> Result<(), Error> {
 		debug_assert!(!self.routes.contains_key(&path), "reserved a prefix already advertised");
 		self.held.push(self.slots.acquire()?);
 		if let Some(epoch) = epoch {
@@ -6090,19 +6090,19 @@ impl Announced {
 	}
 
 	/// The epoch the advertisement at `path` named, if any.
-	fn epoch(&self, path: &PathOwned) -> Option<crate::Epoch> {
+	fn epoch(&self, path: &Path) -> Option<crate::Epoch> {
 		self.epochs.get(path).cloned()
 	}
 
 	/// Record the epoch a restart of the live advertisement at `path` names.
-	fn restart(&mut self, path: &PathOwned, epoch: Option<crate::Epoch>) {
+	fn restart(&mut self, path: &Path, epoch: Option<crate::Epoch>) {
 		match epoch {
 			Some(epoch) => self.epochs.insert(path.clone(), epoch),
 			None => self.epochs.remove(path),
 		};
 	}
 
-	fn attached(&mut self, path: &PathOwned) -> Option<&mut AnnouncedRoute> {
+	fn attached(&mut self, path: &Path) -> Option<&mut AnnouncedRoute> {
 		match self.routes.get_mut(path)? {
 			Held::Attached(route) => Some(route.as_mut()),
 			_ => None,
@@ -6111,7 +6111,7 @@ impl Announced {
 
 	/// Retire this session's advertisement without invalidating another live
 	/// session from the same peer. Dropping its sources closes their requests.
-	fn withdraw(&mut self, path: &PathOwned) {
+	fn withdraw(&mut self, path: &Path) {
 		self.epochs.remove(path);
 		let Some(held) = self.routes.remove(path) else {
 			return;
@@ -6126,7 +6126,7 @@ impl Announced {
 	/// path, answer the requester with its consumer, and hand the source to the
 	/// driver's serve machines, which own it from then on.
 	fn poll_serve(&mut self, subscriber: &Subscriber, waiter: &kio::Waiter) {
-		let root = subscriber.origin.root().to_owned();
+		let root = subscriber.origin.root().clone();
 		while let Poll::Ready(Ok(path)) = self.ready.poll_pop(waiter) {
 			// A route retired since it woke has nothing left to serve.
 			let Some(Held::Attached(entry)) = self.routes.get_mut(&path) else {
@@ -6143,7 +6143,7 @@ impl Announced {
 					// Outside our root: nothing we could name on the wire.
 					continue;
 				};
-				let path = path.to_owned();
+				let path = path.clone();
 				// A request naming the epoch reaches only that instance, so only a source
 				// without one must stop once the peer no longer selects what minted it.
 				let validity = if entry.route.epoch.is_some() {
@@ -6173,7 +6173,7 @@ impl Announced {
 	/// its sources (tracks in flight end on their own gates, with `Unauthorized`), and
 	/// attach every withheld one it now does.
 	fn limit(&mut self, permit: &crate::auth::Permit, subscriber: &Subscriber) {
-		let changed: Vec<PathOwned> = self
+		let changed: Vec<Path> = self
 			.routes
 			.iter()
 			.filter(|(path, held)| match held {
@@ -6225,7 +6225,7 @@ struct AnnouncedRoute {
 	/// Whether the GOAWAY drain already re-priced this route.
 	drained: bool,
 	/// Queues this route on its prefix's ready set when its request queue wakes.
-	wake: Arc<crate::util::QueueWake<PathOwned>>,
+	wake: Arc<crate::util::QueueWake<Path>>,
 	waker: std::task::Waker,
 	/// Keeps this route's registration on its request queue alive between passes.
 	park: kio::Park,
@@ -6235,7 +6235,7 @@ impl AnnouncedRoute {
 	fn new(
 		route: crate::origin::Route,
 		dynamic: crate::origin::Dynamic,
-		wake: Arc<crate::util::QueueWake<PathOwned>>,
+		wake: Arc<crate::util::QueueWake<Path>>,
 	) -> Self {
 		Self {
 			route,
@@ -6290,7 +6290,7 @@ struct TrackServe {
 	/// The advertisement that minted this source, absent for standalone test sources.
 	route: Option<kio::Consumer<()>>,
 	subscriber: Subscriber,
-	path: PathOwned,
+	path: Path,
 	/// The publisher instance to ask for; the peer refuses a request for another.
 	epoch: Option<crate::Epoch>,
 	name: String,
@@ -6604,7 +6604,7 @@ impl Establish {
 					let msg = lite::Subscribe {
 						epoch: self.serve.epoch.clone(),
 						id: self.id,
-						broadcast: self.serve.path.as_path(),
+						broadcast: self.serve.path.clone(),
 						track: self.serve.name.as_str().into(),
 						priority: self.subscription.priority,
 						max_delay: wire_max_delay(self.subscription.max_delay),
@@ -6948,7 +6948,7 @@ impl TrackInfoFetch {
 					stream.writer.buffer(&lite::ControlType::Track)?;
 					stream.writer.buffer(&lite::Track {
 						epoch: serve.epoch.clone(),
-						broadcast: serve.path.as_path(),
+						broadcast: serve.path.clone(),
 						track: serve.name.as_str().into(),
 					})?;
 					self.state = TrackInfoState::Send { stream };
@@ -7845,7 +7845,7 @@ impl kio::Task for FetchServeRun {
 
 					let msg = lite::Fetch {
 						epoch: self.serve.epoch.clone(),
-						broadcast: self.serve.path.as_path(),
+						broadcast: self.serve.path.clone(),
 						track: self.serve.name.as_str().into(),
 						priority: request.priority(),
 						// Older wires cannot carry it; the local cache judges it instead.

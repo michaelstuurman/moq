@@ -1900,7 +1900,7 @@ struct Held {
 	grant: Grant,
 	deadline: crate::time::Deadline,
 	/// The request this grant must keep covering: a replacement that no longer does ends it.
-	path: crate::PathOwned,
+	path: crate::Path,
 	kind: RequestKind,
 	/// The request's slot, shared with a renewal's verification.
 	hold: Option<Hold>,
@@ -1917,7 +1917,7 @@ impl RequestGrant {
 		clock: &crate::time::Deadlines,
 		verdict: RequestVerdict,
 		res: std::result::Result<Grant, Refusal>,
-		path: crate::PathOwned,
+		path: crate::Path,
 		kind: RequestKind,
 		hold: Option<Hold>,
 	) -> std::result::Result<Self, Refusal> {
@@ -2143,7 +2143,7 @@ pub(crate) enum Direction {
 /// only re-matched when the union or the limit changes.
 pub(crate) struct Gate {
 	handle: Link,
-	path: crate::PathOwned,
+	path: crate::Path,
 	direction: Direction,
 	epoch: u64,
 	part: Part,
@@ -2155,7 +2155,7 @@ pub(crate) struct Gate {
 
 /// Log the whole wait once, including when its request is cancelled.
 struct Waiting {
-	path: crate::PathOwned,
+	path: crate::Path,
 	started: Instant,
 }
 
@@ -2176,7 +2176,7 @@ enum Part {
 }
 
 impl Gate {
-	pub(crate) fn new(handle: Link, path: crate::PathOwned, direction: Direction) -> Self {
+	pub(crate) fn new(handle: Link, path: crate::Path, direction: Direction) -> Self {
 		let within_limit = handle.within_limit(direction, path.as_str());
 		Self {
 			handle,
@@ -2200,7 +2200,7 @@ impl Gate {
 	/// the announce stands in for the scope, as its own token may have authorized it.
 	pub(crate) fn announced(
 		handle: Link,
-		path: crate::PathOwned,
+		path: crate::Path,
 		direction: Direction,
 		live: kio::Consumer<()>,
 	) -> Self {
@@ -2362,7 +2362,7 @@ pub(crate) struct Enforce {
 	epoch: u64,
 	permit: Option<Patterns>,
 	/// Every broadcast admitted so far, still announced.
-	live: std::collections::HashSet<crate::PathOwned>,
+	live: std::collections::HashSet<crate::Path>,
 	setup: bool,
 	/// Broadcasts outside the union, still announced, waiting on tokens that might cover
 	/// them, in announcement order.
@@ -2377,7 +2377,7 @@ impl Enforce {
 		handle: &Link,
 		announced: &mut crate::announce::Consumer,
 		waiter: &kio::Waiter,
-	) -> Poll<Option<crate::PathOwned>> {
+	) -> Poll<Option<crate::Path>> {
 		if !self.setup {
 			ready_or!(handle.poll_setup_answered(waiter));
 			self.setup = true;
@@ -2448,7 +2448,7 @@ mod tests {
 		let token = handle.present(Bytes::from_static(b"new"), false).unwrap();
 		let mut gate = Gate::new(
 			handle.clone(),
-			crate::Path::new("room").to_owned(),
+			crate::Path::new("room").clone(),
 			Direction::Subscribe,
 		);
 		let waiter = kio::Waiter::noop();
@@ -2472,7 +2472,7 @@ mod tests {
 		let busy = Error::Session(SessionError::TooManyRequests);
 		assert_eq!(handle.retry(id, &busy), Some(RETRY_INITIAL));
 
-		let mut gate = Gate::new(handle.clone(), crate::Path::new("room").to_owned(), Direction::Publish);
+		let mut gate = Gate::new(handle.clone(), crate::Path::new("room").clone(), Direction::Publish);
 		let waiter = kio::Waiter::noop();
 		assert!(
 			gate.poll_ready(&waiter).is_pending(),
@@ -2495,7 +2495,7 @@ mod tests {
 		let route = kio::Producer::<()>::default();
 		let mut gate = Gate::announced(
 			handle,
-			crate::Path::new("room").to_owned(),
+			crate::Path::new("room").clone(),
 			Direction::Subscribe,
 			route.consume(),
 		);
@@ -2510,7 +2510,7 @@ mod tests {
 	fn an_empty_token_never_holds_a_request() {
 		let handle = Link::new(true);
 		let _setup = handle.present(Bytes::new(), true).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").to_owned(), Direction::Subscribe);
+		let mut gate = Gate::new(handle, crate::Path::new("room").clone(), Direction::Subscribe);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 
@@ -2520,7 +2520,7 @@ mod tests {
 		let first = handle.present(Bytes::from_static(b"first"), false).unwrap();
 		handle.granted(first.presented.id, Grant::all());
 		let _unanswered = handle.present(Bytes::from_static(b"renewal"), false).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").to_owned(), Direction::Subscribe);
+		let mut gate = Gate::new(handle, crate::Path::new("room").clone(), Direction::Subscribe);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 
@@ -2942,7 +2942,7 @@ mod tests {
 		assert_eq!(link.retry(id, &lost), Some(RETRY_INITIAL));
 		assert_eq!(auth.grant().peek(), None, "the lost stream's grant is gone");
 		assert_eq!(link.token(&auth).as_deref(), Some(&b"jwt"[..]));
-		let mut gate = Gate::new(link.clone(), crate::Path::new("room").to_owned(), Direction::Publish);
+		let mut gate = Gate::new(link.clone(), crate::Path::new("room").clone(), Direction::Publish);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_pending());
 
 		assert_eq!(link.reopen(id).unwrap().as_ref(), b"jwt");
@@ -3022,8 +3022,8 @@ mod request_token_tests {
 		}
 	}
 
-	fn subscribe_path() -> crate::PathOwned {
-		crate::Path::new("room/alice").to_owned()
+	fn subscribe_path() -> crate::Path {
+		crate::Path::new("room/alice").clone()
 	}
 
 	/// A request token reaches the app's acceptor like any other token, and the grant the

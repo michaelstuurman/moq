@@ -515,12 +515,12 @@ impl Decode<Version> for Update {
 #[derive(Debug)]
 pub(super) struct NamespaceUpdate<const TRACKS: bool = false> {
 	pub(super) request_id: super::RequestId,
-	pub(super) prefix: Option<crate::PathOwned>,
+	pub(super) prefix: Option<crate::Path>,
 	pub(super) refused: Option<Error>,
 }
 
 #[derive(Debug)]
-struct NamespacePrefix(crate::PathOwned);
+struct NamespacePrefix(crate::Path);
 
 impl super::parameters::Param for NamespacePrefix {
 	fn param_encode(&self, w: &mut crate::coding::Encoder<'_>, _: Version) -> Result<(), crate::coding::EncodeError> {

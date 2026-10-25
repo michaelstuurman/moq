@@ -16,7 +16,7 @@ const LEGACY_UNLIMITED: u64 = (1u64 << 53) - 1;
 /// Lite05+ only.
 #[derive(Clone, Debug)]
 pub struct Track<'a> {
-	pub broadcast: Path<'a>,
+	pub broadcast: Path,
 	/// The publisher instance the subscriber expects; see [`crate::origin::Route::epoch`].
 	/// Lite07+ only.
 	pub epoch: Option<crate::Epoch>,
@@ -483,7 +483,7 @@ mod test {
 	fn track_request_roundtrips_on_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").clone(),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();
@@ -499,7 +499,7 @@ mod test {
 	fn track_request_errors_before_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").clone(),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();

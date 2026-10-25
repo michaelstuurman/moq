@@ -19,9 +19,9 @@ use super::token::RequestToken;
 ///
 /// Its subscription parameters are the defaults of each PUBLISH it produces.
 #[derive(Clone, Debug)]
-pub struct SubscribeTracks<'a> {
+pub struct SubscribeTracks {
 	pub request_id: RequestId,
-	pub prefix: Path<'a>,
+	pub prefix: Path,
 	/// FORWARD: absent means 1, which asks each PUBLISH to push its objects at once.
 	pub forward: bool,
 	/// The default subscriber priority of each PUBLISH subscription.
@@ -44,7 +44,7 @@ pub struct SubscribeTracks<'a> {
 	pub authorization_token: Option<RequestToken>,
 }
 
-impl Message for SubscribeTracks<'_> {
+impl Message for SubscribeTracks {
 	const ID: u64 = 0x51;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -142,7 +142,7 @@ pub(crate) fn has_subscribe_tracks(version: Version) -> bool {
 #[derive(Clone, Debug)]
 pub struct PublishSkipped<'a> {
 	/// The track's namespace below the request's prefix.
-	pub suffix: Path<'a>,
+	pub suffix: Path,
 	pub track_name: Cow<'a, str>,
 }
 
@@ -190,7 +190,7 @@ mod tests {
 		crate::coding::decode_buf(&mut buf, version, M::decode_msg)
 	}
 
-	fn paused() -> SubscribeTracks<'static> {
+	fn paused() -> SubscribeTracks {
 		SubscribeTracks {
 			request_id: RequestId(4),
 			prefix: Path::new("room"),

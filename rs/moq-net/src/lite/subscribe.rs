@@ -16,7 +16,7 @@ use crate::track::Order;
 #[derive(Clone, Debug)]
 pub struct Subscribe<'a> {
 	pub id: u64,
-	pub broadcast: Path<'a>,
+	pub broadcast: Path,
 	/// The publisher instance the subscriber expects; see [`crate::origin::Route::epoch`].
 	/// Lite07+ only.
 	pub epoch: Option<crate::Epoch>,
@@ -912,7 +912,7 @@ mod test {
 			order: crate::track::Order::Descending,
 			epoch: None,
 			id: 1,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").clone(),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: std::time::Duration::from_millis(250),

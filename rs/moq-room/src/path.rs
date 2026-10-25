@@ -4,7 +4,7 @@
 //! `alice/camera`, `alice/camera.hang`, and `guest/uuid/screen` are all valid.
 //! A `.hang` suffix on the kind is optional and equivalent.
 
-use moq_net::{AsPath, Path, PathOwned};
+use moq_net::Path;
 
 /// The two broadcasts each participant may publish.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -29,7 +29,7 @@ impl Kind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Parsed {
 	/// Path prefix identifying the participant; may be more than one segment.
-	pub identity: PathOwned,
+	pub identity: Path,
 	/// `camera` (camera + mic) or `screen` (screenshare).
 	pub kind: Kind,
 }
@@ -47,29 +47,30 @@ pub fn kind_from_segment(segment: &str) -> Option<Kind> {
 /// Split a room-relative broadcast path into identity and kind.
 ///
 /// Returns `None` when there is no identity, or the last segment is not a kind.
-pub fn parse(path: impl AsPath) -> Option<Parsed> {
-	let path = path.as_path();
+pub fn parse(path: impl Into<Path>) -> Option<Parsed> {
+	let path: Path = path.into();
 	let mut parts: Vec<&str> = path.parts().collect();
 	let last = parts.pop()?;
 	if parts.is_empty() {
 		return None;
 	}
 	let kind = kind_from_segment(last)?;
-	let identity = Path::new(&parts.join("/")).to_owned();
+	let identity = Path::new(&parts.join("/")).clone();
 	Some(Parsed { identity, kind })
 }
 
 /// The broadcast path a participant publishes for `kind`.
-pub fn broadcast_path(identity: impl AsPath, kind: Kind) -> PathOwned {
-	identity.as_path().join(format!("{}.hang", kind.as_str()))
+pub fn broadcast_path(identity: impl Into<Path>, kind: Kind) -> Path {
+	let identity: Path = identity.into();
+	identity.join(&Path::from(format!("{}.hang", kind.as_str())))
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
-	fn p(s: &str) -> PathOwned {
-		Path::new(s).to_owned()
+	fn p(s: &str) -> Path {
+		Path::new(s).clone()
 	}
 
 	#[test]

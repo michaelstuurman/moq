@@ -21,7 +21,7 @@ use super::Version;
 #[derive(Clone, Debug)]
 pub struct TrackStatus<'a> {
 	pub request_id: RequestId,
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 	pub track_name: Cow<'a, str>,
 	/// Whether the requester wants Track Properties on the answer (INCLUDE_PROPERTIES,
 	/// draft-22).

@@ -114,11 +114,11 @@ async fn delete(State(state): State<RouterState>, Path(path): Path<String>) -> S
 pub async fn accept(
 	server: &Server,
 	publisher: &moq_net::origin::Producer,
-	broadcast: impl moq_net::AsPath,
+	broadcast: impl Into<moq_net::Path>,
 	offer: &str,
 ) -> Result<Response> {
 	let offer = sdp::parse_offer(offer)?;
-	let broadcast = broadcast.as_path();
+	let broadcast: moq_net::Path = broadcast.into();
 
 	// Create the broadcast hidden up front, so an out-of-scope offer is refused before
 	// any mux work. It announces only once negotiation succeeds (below).

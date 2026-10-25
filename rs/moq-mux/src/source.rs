@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Poll, ready};
 
 /// The broadcast held for each path, shared by a source's clones and its requests.
-type Pins = Arc<Mutex<HashMap<moq_net::PathOwned, moq_net::broadcast::Consumer>>>;
+type Pins = Arc<Mutex<HashMap<moq_net::Path, moq_net::broadcast::Consumer>>>;
 
 /// The subscription side of an export: an origin and the catalog broadcast that drives it.
 ///
@@ -42,7 +42,7 @@ type Pins = Arc<Mutex<HashMap<moq_net::PathOwned, moq_net::broadcast::Consumer>>
 #[derive(Clone)]
 pub struct Source {
 	origin: moq_net::origin::Consumer,
-	path: moq_net::PathOwned,
+	path: moq_net::Path,
 	pins: Pins,
 	/// What each rendition an export reads through this source has received. See
 	/// [`stats`](Self::stats).
@@ -110,7 +110,7 @@ impl Source {
 		&self.origin
 	}
 
-	pub(crate) fn path(&self) -> &moq_net::PathOwned {
+	pub(crate) fn path(&self) -> &moq_net::Path {
 		&self.path
 	}
 
@@ -139,7 +139,7 @@ impl Source {
 
 	/// The broadcast `path` is pinned to, or a lookup that waits for the path's first
 	/// announcement and pins its answer, either checked against `epoch` on every read.
-	pub(crate) fn request_path(&self, path: &moq_net::PathOwned, epoch: Option<&moq_net::Epoch>) -> Binding {
+	pub(crate) fn request_path(&self, path: &moq_net::Path, epoch: Option<&moq_net::Epoch>) -> Binding {
 		let bound = match self.pins.lock().expect("pins poisoned").get(path) {
 			Some(pinned) => Bound::Ready(pinned.clone()),
 			// Unpinned even with an epoch: an epochless route still answers, best effort, and
@@ -167,7 +167,7 @@ impl Source {
 	/// A missing or empty reference returns the catalog broadcast path. A valid reference
 	/// may return the empty root path, which still names a broadcast. `None` means the
 	/// reference walked above the root and names nothing.
-	pub fn resolve_reference(&self, rel: Option<&moq_net::path::Relative<'_>>) -> Option<moq_net::PathOwned> {
+	pub fn resolve_reference(&self, rel: Option<&moq_net::path::Relative>) -> Option<moq_net::Path> {
 		match rel.filter(|rel| !rel.is_empty()) {
 			Some(rel) => self.path.try_resolve(rel),
 			None => Some(self.path.clone()),
@@ -178,7 +178,7 @@ impl Source {
 	///
 	/// The erroring counterpart to [`Self::resolve_reference`], for the consumer side, where
 	/// an escaping reference is a fault to report rather than a rendition to drop.
-	fn target(&self, rel: Option<&moq_net::path::Relative<'_>>) -> crate::Result<moq_net::PathOwned> {
+	fn target(&self, rel: Option<&moq_net::path::Relative>) -> crate::Result<moq_net::Path> {
 		self.resolve_reference(rel).ok_or_else(|| {
 			let rel = rel.map_or("", |rel| rel.as_str());
 			tracing::error!(rel, catalog = %self.path, "broadcast reference escapes the root");
@@ -239,7 +239,7 @@ impl Source {
 	/// no broadcast, so there is nothing to resolve.
 	pub async fn resolve(
 		&self,
-		rel: Option<&moq_net::path::Relative<'_>>,
+		rel: Option<&moq_net::path::Relative>,
 		epoch: Option<&moq_net::Epoch>,
 	) -> crate::Result<moq_net::broadcast::Consumer> {
 		self.bind(rel, epoch)?.broadcast().await
@@ -262,7 +262,7 @@ impl Source {
 	/// `epoch` on every read.
 	pub fn bind(
 		&self,
-		rel: Option<&moq_net::path::Relative<'_>>,
+		rel: Option<&moq_net::path::Relative>,
 		epoch: Option<&moq_net::Epoch>,
 	) -> crate::Result<Binding> {
 		Ok(self.request_path(&self.target(rel)?, epoch))
@@ -283,7 +283,7 @@ impl Source {
 	/// use it to honor cross-broadcast renditions without reimplementing the path math.
 	pub async fn subscribe_track(
 		&self,
-		rel: Option<&moq_net::path::Relative<'_>>,
+		rel: Option<&moq_net::path::Relative>,
 		epoch: Option<&moq_net::Epoch>,
 		name: &str,
 	) -> crate::Result<moq_net::track::Subscriber> {
@@ -306,7 +306,7 @@ impl Source {
 	/// Rejects an escaping reference exactly as [`resolve`](Self::resolve) does.
 	pub fn follow(
 		&self,
-		rel: Option<&moq_net::path::Relative<'_>>,
+		rel: Option<&moq_net::path::Relative>,
 		epoch: Option<&moq_net::Epoch>,
 	) -> crate::Result<crate::follow::Instances> {
 		let path = self.target(rel)?;
@@ -365,7 +365,7 @@ enum Bound {
 		routing: Box<Mutex<moq_net::origin::Routing>>,
 		/// Where the answer is pinned, the first for its path winning.
 		pins: Pins,
-		path: moq_net::PathOwned,
+		path: moq_net::Path,
 	},
 }
 
@@ -890,9 +890,9 @@ mod tests {
 			level: 0x1e,
 			inline: false,
 		});
-		escaped.broadcast = Some(Relative::new("../../source").to_owned());
+		escaped.broadcast = Some(Relative::new("../../source").clone());
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source").to_owned());
+		sibling.broadcast = Some(Relative::new("./source").clone());
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.video.renditions.insert("escaped".to_string(), escaped);
@@ -938,9 +938,9 @@ mod tests {
 		let source = created(&origin);
 
 		let mut escaped = hang::catalog::TextConfig::new(hang::catalog::TextFormat::Vtt);
-		escaped.broadcast = Some(Relative::new("../../source").to_owned());
+		escaped.broadcast = Some(Relative::new("../../source").clone());
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source").to_owned());
+		sibling.broadcast = Some(Relative::new("./source").clone());
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.text.renditions.insert("escaped".to_string(), escaped);

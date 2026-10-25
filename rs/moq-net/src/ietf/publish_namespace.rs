@@ -43,9 +43,9 @@ pub struct AdvertParams {
 /// PublishNamespace message (0x06)
 /// Sent by the publisher to announce the availability of a namespace.
 #[derive(Clone, Debug)]
-pub struct PublishNamespace<'a> {
+pub struct PublishNamespace {
 	pub request_id: RequestId,
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 
 	/// The extension parameters, which a session that negotiated none leaves empty.
 	pub params: AdvertParams,
@@ -55,7 +55,7 @@ pub struct PublishNamespace<'a> {
 	pub authorization_token: Option<RequestToken>,
 }
 
-impl PublishNamespace<'_> {
+impl PublishNamespace {
 	/// Decode the message body, expecting the parameters of the extensions the session
 	/// negotiated.
 	///
@@ -92,7 +92,7 @@ impl PublishNamespace<'_> {
 	}
 }
 
-impl Message for PublishNamespace<'_> {
+impl Message for PublishNamespace {
 	const ID: u64 = 0x06;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -330,14 +330,14 @@ impl Message for PublishNamespaceError<'_> {
 /// PublishNamespaceDone message (0x09)
 /// v14/v15: uses track_namespace. v16: uses request_id.
 #[derive(Clone, Debug)]
-pub struct PublishNamespaceDone<'a> {
+pub struct PublishNamespaceDone {
 	/// v14/v15: the namespace being unannounced
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 	/// v16: the request ID of the original PublishNamespace
 	pub request_id: RequestId,
 }
 
-impl Message for PublishNamespaceDone<'_> {
+impl Message for PublishNamespaceDone {
 	const ID: u64 = 0x09;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -379,7 +379,7 @@ impl Message for PublishNamespaceDone<'_> {
 #[derive(Clone, Debug)]
 pub struct PublishNamespaceCancel<'a> {
 	/// v14/v15: the namespace being cancelled
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 	/// v16: the request ID of the original PublishNamespace
 	pub request_id: RequestId,
 	pub error_code: u64,

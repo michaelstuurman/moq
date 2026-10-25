@@ -8,7 +8,7 @@ use std::task::Poll;
 
 use moq_clock::Instant;
 use moq_net::stats::{Presence, Registry, Report, Tier, Traffic, TrafficEntry};
-use moq_net::{Epoch, Path, PathOwned, broadcast, kio, origin, track};
+use moq_net::{Epoch, Path, broadcast, kio, origin, track};
 use serde::Serialize;
 use web_async::spawn;
 
@@ -36,13 +36,13 @@ pub struct Config {
 	/// `node` is unset), announced under a fresh [`Epoch`] each time. Also the
 	/// registry's exclude prefix, so serving a stats broadcast doesn't generate
 	/// more stats.
-	pub prefix: PathOwned,
+	pub prefix: Path,
 	/// Node suffix that disambiguates broadcasts from different relays sharing a
 	/// cluster origin. Set this on every node in multi-relay deployments. May be
 	/// multi-segment (e.g. `sjc/1`, `sjc/2`) so a region with multiple hosts can
 	/// nest under a shared region key. An empty path is treated as unset.
 	/// Default none.
-	pub node: Option<PathOwned>,
+	pub node: Option<Path>,
 	/// How long the publish task waits between drains. Default 1s. Non-zero:
 	/// it is the timescale of every track's group numbers, so a track opens at
 	/// most one group per interval.
@@ -79,7 +79,7 @@ impl Config {
 	pub fn new() -> Self {
 		Self {
 			origin: None,
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::from(".stats"),
 			node: None,
 			interval: Duration::from_secs(1),
 			depth: 0,
@@ -95,7 +95,7 @@ impl Config {
 	}
 
 	/// Override the top-level prefix (default `.stats`).
-	pub fn with_prefix(mut self, prefix: impl Into<PathOwned>) -> Self {
+	pub fn with_prefix(mut self, prefix: impl Into<Path>) -> Self {
 		self.prefix = prefix.into();
 		self
 	}
@@ -107,7 +107,7 @@ impl Config {
 	}
 
 	/// Set the node suffix (default none). An empty path is treated as unset.
-	pub fn with_node(mut self, node: impl Into<Option<PathOwned>>) -> Self {
+	pub fn with_node(mut self, node: impl Into<Option<Path>>) -> Self {
 		self.node = node.into();
 		self
 	}
@@ -218,8 +218,8 @@ impl Producer {
 struct Task {
 	registry: Registry,
 	origin: origin::Producer,
-	prefix: PathOwned,
-	node: Option<PathOwned>,
+	prefix: Path,
+	node: Option<Path>,
 	depth: usize,
 	linger: Duration,
 	interval: Duration,
@@ -351,7 +351,7 @@ pub mod bench;
 /// [`PresenceFrame`](crate::PresenceFrame), or
 /// [`PrefixFrame`](crate::PrefixFrame) once sorted.
 struct Frame<V> {
-	entries: Vec<(PathOwned, V)>,
+	entries: Vec<(Path, V)>,
 }
 
 impl<V> Default for Frame<V> {
@@ -612,10 +612,10 @@ struct NodePublisher {
 	/// presence or prefix track parks until the next drain serves it instead
 	/// of being rejected `NotFound` on the spot.
 	dynamic: broadcast::Dynamic,
-	local: HashMap<PathOwned, HashMap<Tier, SideSlots>>,
+	local: HashMap<Path, HashMap<Tier, SideSlots>>,
 	totals: TotalsTrack,
 	/// Held presence tracks, keyed by stats label.
-	presence: HashMap<PathOwned, PresenceTrack>,
+	presence: HashMap<Path, PresenceTrack>,
 	/// Held prefix tracks, keyed by broadcast prefix. A `String` key, so a
 	/// drain looks each row's ancestors up by `&str` without allocating.
 	prefixes: HashMap<String, PrefixTrack>,
@@ -706,7 +706,7 @@ struct PresenceTrack {
 	sums: Cumulative<Presence>,
 	/// Wire collection starts at the current reading on every hold. Other presence
 	/// fields keep their existing live-session seeding behavior.
-	wire_start: HashMap<PathOwned, (u64, u64)>,
+	wire_start: HashMap<Path, (u64, u64)>,
 }
 
 impl PresenceTrack {
@@ -930,7 +930,7 @@ impl GroupTrack {
 	/// or request holds its counters, plus its final readout, so every row is
 	/// listed: a label held by an idle request must not drop out and return
 	/// looking reset.
-	fn add_sessions(&mut self, label: &PathOwned, tier: &Tier, presence: Presence, closed: bool) {
+	fn add_sessions(&mut self, label: &Path, tier: &Tier, presence: Presence, closed: bool) {
 		let tier = self.tier(tier);
 		tier.totals.sessions.add(presence);
 		if closed {
@@ -990,7 +990,7 @@ impl NodePublisher {
 	/// Announce the node's broadcast with its totals track and, at depth 0, the
 	/// one group's track, which both live for the producer's life.
 	fn create(task: &Task) -> Option<Self> {
-		let advertised = advertised_path(&task.prefix, task.node.as_ref().map(PathOwned::as_str));
+		let advertised = advertised_path(&task.prefix, task.node.as_ref().map(Path::as_str));
 		// A fresh epoch per announcement: a restart is a new broadcast, so no relay
 		// resumes it from groups cached under the old one.
 		let route = origin::Route::default().with_epoch(Epoch::mint());
@@ -1191,8 +1191,8 @@ impl NodePublisher {
 
 		// Pop everything queued, grouping the two flavors of one plain name so
 		// a pair is built from the actual requests where present.
-		let mut labels: HashMap<PathOwned, PendingPair> = HashMap::new();
-		let mut paths: HashMap<PathOwned, PendingPair> = HashMap::new();
+		let mut labels: HashMap<Path, PendingPair> = HashMap::new();
+		let mut paths: HashMap<Path, PendingPair> = HashMap::new();
 		let noop = kio::Waiter::noop();
 		while let Poll::Ready(Ok(request)) = self.dynamic.poll_requested_track(&noop) {
 			let keyed = match parse_presence_track(request.name()) {
@@ -1223,7 +1223,7 @@ impl NodePublisher {
 
 	/// Hold a requested label's presence track, publishing its current counters
 	/// so the subscription resolves at once. Cumulative from here on.
-	fn adopt_presence(&mut self, report: &Report, label: PathOwned, pending: PendingPair, stamp: Stamp) {
+	fn adopt_presence(&mut self, report: &Report, label: Path, pending: PendingPair, stamp: Stamp) {
 		// A request for a live track is served by the broadcast itself, so a
 		// live pair here means the requested flavor ended and cannot update.
 		if self.presence.contains_key(&label) {
@@ -1256,7 +1256,7 @@ impl NodePublisher {
 
 	/// Hold a requested prefix track, publishing its current counters so the
 	/// subscription resolves at once. Cumulative from here on.
-	fn adopt_prefix(&mut self, report: &Report, path: PathOwned, pending: PendingPair, tick: u64, stamp: Stamp) {
+	fn adopt_prefix(&mut self, report: &Report, path: Path, pending: PendingPair, tick: u64, stamp: Stamp) {
 		// Defensive only, as in `adopt_presence`.
 		if self.prefixes.contains_key(path.as_str()) {
 			pending.reject(moq_net::Error::NotFound);
@@ -1351,14 +1351,14 @@ fn group_key(path: &str, depth: usize) -> &str {
 /// `<prefix>/node/<node>`, or `<prefix>/node` without a node. The fixed `node`
 /// category leaves room for sibling categories (e.g. `<prefix>/cluster` for
 /// relay-mesh stats) under the same prefix.
-fn advertised_path(prefix: &Path, node: Option<&str>) -> PathOwned {
+fn advertised_path(prefix: &Path, node: Option<&str>) -> Path {
 	let mut out = prefix.as_str().to_string();
 	out.push_str("/node");
 	if let Some(node) = node {
 		out.push('/');
 		out.push_str(node);
 	}
-	PathOwned::from(out)
+	Path::from(out)
 }
 
 #[cfg(test)]
@@ -1384,7 +1384,7 @@ mod tests {
 		let track = broadcast.create_track("t.json.z", compressed_info()).unwrap();
 		let mut snapshot = Snapshot::<Frame<u64>>::new(track.clone(), moq_json::snapshot::Config::default());
 		let frame = |n| Frame {
-			entries: vec![(PathOwned::from("a"), n)],
+			entries: vec![(Path::from("a"), n)],
 		};
 		let wanted = |track: &track::Producer| track.demand().wanted();
 
@@ -1608,7 +1608,7 @@ mod tests {
 		let consumer = broadcast.consume();
 		let mut pair = TrackPair::<u64>::create(&broadcast, "t.json").unwrap();
 		let mut publish = |key: &str, value: u64| {
-			pair.frame.entries.push((PathOwned::from(key.to_string()), value));
+			pair.frame.entries.push((Path::from(key.to_string()), value));
 			pair.publish("t.json", stamp(value));
 		};
 		publish("small", 1);
@@ -1684,7 +1684,7 @@ mod tests {
 		let producer = Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(node.map(|s| PathOwned::from(s.to_string()))),
+				.with_node(node.map(|s| Path::from(s.to_string()))),
 		);
 		(producer, origin)
 	}
@@ -1944,7 +1944,7 @@ mod tests {
 		Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from("sjc")),
+				.with_node(Path::from("sjc")),
 		)
 	}
 
@@ -2181,7 +2181,7 @@ mod tests {
 		let producer = Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from("sjc"))
+				.with_node(Path::from("sjc"))
 				.with_depth(1)
 				.with_linger(linger),
 		);
@@ -2359,7 +2359,7 @@ mod tests {
 		let mut drain = Drain::new(Task {
 			registry: registry.clone(),
 			origin: origin.clone(),
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::from(".stats"),
 			node: None,
 			depth: 0,
 			linger: DEFAULT_LINGER,
@@ -2616,7 +2616,7 @@ mod tests {
 		let mut drain = Drain::new(Task {
 			registry: registry.clone(),
 			origin: origin.clone(),
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::from(".stats"),
 			node: None,
 			depth: 0,
 			linger: DEFAULT_LINGER,
@@ -2728,7 +2728,7 @@ mod tests {
 		let mut frame = Frame::default();
 		let mut map = BTreeMap::new();
 		for (path, bytes) in [("room/b", 2), ("room/a", 1), ("other", 3), ("room/a/cam", 4)] {
-			frame.entries.push((PathOwned::from(path), traffic(bytes)));
+			frame.entries.push((Path::from(path), traffic(bytes)));
 			map.insert(path.to_string(), traffic(bytes));
 		}
 		frame.entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -2750,12 +2750,12 @@ mod tests {
 			publisher: None,
 			subscriber: Some(usage.subscriber),
 		};
-		tier.paths.entries.push((PathOwned::from("acme/live"), side));
-		tier.labels.entries.push((PathOwned::from("acme"), presence));
+		tier.paths.entries.push((Path::from("acme/live"), side));
+		tier.labels.entries.push((Path::from("acme"), presence));
 		let body = GroupBody {
 			epoch: Epoch::mint(),
 			tiers: Frame {
-				entries: vec![(PathOwned::from(""), tier)],
+				entries: vec![(Path::from(""), tier)],
 			},
 		};
 
@@ -2835,7 +2835,7 @@ mod tests {
 				let mut drain = Drain::new(Task {
 					registry,
 					origin: produce_origin(),
-					prefix: PathOwned::from(".stats"),
+					prefix: Path::from(".stats"),
 					node: None,
 					depth,
 					linger: DEFAULT_LINGER,
@@ -2854,7 +2854,7 @@ mod tests {
 					let stamp = drain.stamp(moq_clock::now());
 					drain.node.adopt_prefix(
 						&drain.report,
-						PathOwned::from("room0"),
+						Path::from("room0"),
 						PendingPair::default(),
 						tick,
 						stamp,

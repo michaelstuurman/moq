@@ -12,7 +12,7 @@ use super::{Message, Version};
 /// Lite03+ only.
 #[derive(Clone, Debug)]
 pub struct Fetch<'a> {
-	pub broadcast: Path<'a>,
+	pub broadcast: Path,
 	/// The publisher instance the subscriber expects; see [`crate::origin::Route::epoch`].
 	/// Lite07+ only.
 	pub epoch: Option<crate::Epoch>,
@@ -112,7 +112,7 @@ mod test {
 	fn fetch_sample() -> Fetch<'static> {
 		Fetch {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").clone(),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: None,

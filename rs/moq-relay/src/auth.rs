@@ -10,7 +10,7 @@ use std::sync::Arc;
 use axum::http;
 use moq_auth::{Bytes, Grant, Request, lease};
 use moq_auth::{Pattern, Patterns};
-use moq_net::{Path, PathOwned, stats::Tier};
+use moq_net::{Path, stats::Tier};
 use serde::{Deserialize, Serialize};
 use serde_with::{OneOrMany, serde_as};
 use tokio::sync::{mpsc, oneshot};
@@ -427,10 +427,10 @@ pub struct Token {
 	/// The path the session dialed, which a grant without `root` is relative to.
 	pub(crate) path: String,
 	/// The root the session is scoped to: the grant's `root` alias, else the dialed path.
-	pub root: PathOwned,
+	pub root: Path,
 	/// Subtrees read from elsewhere on the origin: each path, relative to `root`,
 	/// resolves at the absolute path it maps to.
-	pub mounts: Vec<(PathOwned, PathOwned)>,
+	pub mounts: Vec<(Path, Path)>,
 	/// Patterns the session may subscribe to, relative to `root`.
 	pub subscribe: moq_auth::Patterns,
 	/// Patterns the session may publish, relative to `root`.
@@ -438,7 +438,7 @@ pub struct Token {
 	/// The tier this session's stats record under.
 	pub tier: Tier,
 	/// The path this session's stats record under, empty when the grant names none.
-	pub label: PathOwned,
+	pub label: Path,
 	/// Whether the session is a cluster peer, so its routes entered elsewhere.
 	pub peer: bool,
 	/// Whether the peer is upstream, so it is never offered another upstream's routes.
@@ -455,16 +455,16 @@ impl Token {
 		let root = grant.root.as_deref().unwrap_or(path);
 		Self {
 			path: path.to_string(),
-			root: Path::new(root).to_owned(),
+			root: Path::new(root).clone(),
 			mounts: grant
 				.mounts
 				.iter()
-				.map(|(at, target)| (Path::new(at).to_owned(), Path::new(target).to_owned()))
+				.map(|(at, target)| (Path::new(at).clone(), Path::new(target).clone()))
 				.collect(),
 			subscribe: grant.subscribe.clone(),
 			publish: grant.publish.clone(),
 			tier: crate::configured_tier(grant.tier.clone()),
-			label: Path::new(grant.label.as_deref().unwrap_or_default()).to_owned(),
+			label: Path::new(grant.label.as_deref().unwrap_or_default()).clone(),
 			peer: grant.peer,
 			upstream: grant.upstream,
 		}
@@ -1233,7 +1233,7 @@ mod tests {
 			("/rooms", "rooms", &[], &["chat"]),
 		] {
 			let lease = auth.admit(auth.request(moq_auth::Transport::Quic, path)).await.unwrap();
-			assert_eq!(lease.token().root, Path::new(root).to_owned(), "{path}");
+			assert_eq!(lease.token().root, Path::new(root).clone(), "{path}");
 			assert_eq!(lease.token().publish, patterns(publish), "{path}");
 			assert_eq!(lease.token().subscribe, patterns(subscribe), "{path}");
 		}
@@ -1293,7 +1293,7 @@ mod tests {
 		});
 		for request in [anonymous, certificate] {
 			let lease = auth.admit(request).await.unwrap();
-			assert_eq!(lease.token().root, Path::new("anon/room").to_owned());
+			assert_eq!(lease.token().root, Path::new("anon/room").clone());
 			assert_eq!(lease.token().subscribe, patterns(&["**"]));
 			assert_eq!(lease.token().tier, Tier::default());
 		}
@@ -1358,7 +1358,7 @@ mod tests {
 		};
 		let admit = async {
 			let lease = auth.admit(request()).await.expect("granted");
-			assert_eq!(lease.token().root, Path::new("anon/room").to_owned());
+			assert_eq!(lease.token().root, Path::new("anon/room").clone());
 			assert!(matches!(auth.admit(request()).await, Err(Error::Refused(_))));
 			assert!(matches!(auth.admit(request()).await, Err(Error::Refused(_))));
 			assert!(matches!(auth.admit(request()).await, Err(Error::Unavailable(_))));
@@ -1432,11 +1432,11 @@ mod tests {
 		grant.tier = Some("gold".into());
 		grant.label = Some("project/key/123".into());
 		let token = Token::new("/vanity/room", &grant);
-		assert_eq!(token.root, Path::new("pid/room").to_owned());
+		assert_eq!(token.root, Path::new("pid/room").clone());
 		assert_eq!(token.publish, patterns(&["alice/**"]));
 		assert_eq!(token.subscribe, patterns(&["**"]));
 		assert_eq!(token.tier, Tier::new("gold"));
-		assert_eq!(token.label, Path::new("project/key/123").to_owned());
+		assert_eq!(token.label, Path::new("project/key/123").clone());
 
 		let patterns = patterns(&["*/chat", "alice", ""]);
 		let token = Token::new("/", &Grant::new(patterns.clone(), Patterns::new()));
@@ -1457,7 +1457,7 @@ mod tests {
 		let mounted = Token::new("/room", &mounted);
 		assert_eq!(
 			mounted.mounts,
-			[(Path::new(".svc").to_owned(), Path::new(".svc/room").to_owned())]
+			[(Path::new(".svc").clone(), Path::new(".svc/room").clone())]
 		);
 		assert!(wide.covered_by(&wide));
 		assert!(narrow.covered_by(&wide));
@@ -1498,12 +1498,12 @@ mod tests {
 		let mut aliased = everything();
 		aliased.root = Some("pid/room".into());
 		let token = Token::new("/vanity/room", &aliased);
-		assert_eq!(token.root, Path::new("pid/room").to_owned());
+		assert_eq!(token.root, Path::new("pid/room").clone());
 
 		// The same alias still names the same root.
 		assert_eq!(token.recheck(&aliased).root, token.root);
 		// A grant without the alias is relative to what was dialed, not to the old root.
-		assert_eq!(token.recheck(&everything()).root, Path::new("vanity/room").to_owned());
+		assert_eq!(token.recheck(&everything()).root, Path::new("vanity/room").clone());
 	}
 }
 

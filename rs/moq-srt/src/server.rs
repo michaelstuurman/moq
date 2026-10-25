@@ -418,8 +418,8 @@ impl Publish {
 	/// Once the stream ends, the finished broadcast stays up for the
 	/// [linger](Self::with_linger), and the future resolves after that. Dropping the future
 	/// ends the linger early. A socket or demux error closes the broadcast at once.
-	pub async fn accept(self, origin: &origin::Producer, path: impl moq_net::AsPath) -> Result<()> {
-		let path = path.as_path();
+	pub async fn accept(self, origin: &origin::Producer, path: impl Into<moq_net::Path>) -> Result<()> {
+		let path: moq_net::Path = path.into();
 		let socket = self.0.request.accept(None).await?;
 		tracing::info!(peer = %self.0.peer, %path, "SRT publish accepted");
 		let config = moq_mux::catalog::Config::default()
@@ -493,8 +493,8 @@ impl Subscribe {
 	/// Waits for the broadcast to be announced (so a caller may connect before the
 	/// publisher), cancelling cleanly if the caller disconnects first. This future
 	/// resolves when playback ends, so callers usually run it on its own task.
-	pub async fn accept(self, origin: &origin::Consumer, path: impl moq_net::AsPath) -> Result<()> {
-		let path = path.as_path();
+	pub async fn accept(self, origin: &origin::Consumer, path: impl Into<moq_net::Path>) -> Result<()> {
+		let path: moq_net::Path = path.into();
 		let socket = self.0.request.accept(None).await?;
 		tracing::info!(peer = %self.0.peer, %path, "SRT subscribe accepted");
 		let options = crate::ts::Options {

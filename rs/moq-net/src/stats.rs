@@ -144,7 +144,7 @@ use std::{
 use kio::Lock;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{AsPath, PathOwned, Pattern, Patterns, util::SendCell};
+use crate::{Path, Pattern, Patterns, util::SendCell};
 
 mod outcomes;
 pub use outcomes::{Failure, Failures, RefusalKind, Refusals};
@@ -815,16 +815,16 @@ impl Presence {
 /// `Tier::new("region/sjc")` records under `"region/sjc"`. The label is an
 /// arbitrary path chosen by business logic; an empty label is the default tier.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Tier(PathOwned);
+pub struct Tier(Path);
 
 impl Tier {
 	/// A tier with the given label. An empty label is the default tier.
-	pub fn new(label: impl Into<PathOwned>) -> Self {
+	pub fn new(label: impl Into<Path>) -> Self {
 		Self(label.into())
 	}
 
 	/// The tier label, empty for the default tier.
-	pub fn label(&self) -> &PathOwned {
+	pub fn label(&self) -> &Path {
 		&self.0
 	}
 
@@ -1017,7 +1017,7 @@ pub struct Report {
 #[non_exhaustive]
 pub struct TrafficEntry {
 	/// The broadcast path the counters are keyed by.
-	pub path: PathOwned,
+	pub path: Path,
 	/// The tier the counters recorded under.
 	pub tier: Tier,
 	/// Egress counters (this node publishing to peers).
@@ -1036,7 +1036,7 @@ pub struct SessionEntry {
 	/// The tier the sessions recorded under.
 	pub tier: Tier,
 	/// The label the sessions record under, empty for sessions without one.
-	pub label: PathOwned,
+	pub label: Path,
 	/// Cumulative request admissions and connect/disconnect gauge.
 	pub presence: Presence,
 	/// This is the label's final readout: its last session or request ended, so the
@@ -1091,12 +1091,12 @@ struct Shared {
 	/// Completed entries folded by tier before pruning. Lock before either map
 	/// so a snapshot sees each entry either here or live, never both or neither.
 	retired: Lock<Snapshot>,
-	entries: Lock<HashMap<PathOwned, Arc<BroadcastEntry>>>,
+	entries: Lock<HashMap<Path, Arc<BroadcastEntry>>>,
 	/// Connected-session gauges keyed by `(tier, label)`. Independent of any
 	/// broadcast; surfaced on the per-tier session tracks and in the totals and
 	/// presence tracks. A tier's inner map is
 	/// created the first time a session records under it.
-	sessions: Lock<HashMap<Tier, HashMap<PathOwned, Arc<SessionCounters>>>>,
+	sessions: Lock<HashMap<Tier, HashMap<Path, Arc<SessionCounters>>>>,
 	wire: Lock<Vec<Weak<WireInner>>>,
 }
 
@@ -1185,7 +1185,7 @@ impl Registry {
 	/// unless a guard still holds it.
 	#[cfg(any(test, feature = "fuzz"))]
 	#[cfg(feature = "async")]
-	pub(crate) fn bump_publisher_bytes(&self, path: impl AsPath, tier: &Tier, n: u64) {
+	pub(crate) fn bump_publisher_bytes(&self, path: impl Into<Path>, tier: &Tier, n: u64) {
 		let Some(entry) = self.entry(path) else {
 			return;
 		};
@@ -1195,7 +1195,7 @@ impl Registry {
 	/// Resolve the pre-label payload meter used as the stats write benchmark's baseline.
 	#[cfg(any(test, feature = "fuzz"))]
 	#[cfg(feature = "async")]
-	pub(crate) fn publisher_meter(&self, path: impl AsPath, tier: &Tier) -> Meter {
+	pub(crate) fn publisher_meter(&self, path: impl Into<Path>, tier: &Tier) -> Meter {
 		Meter {
 			counters: self.entry(path).map(|entry| entry.tier(tier)),
 			traffic: None,
@@ -1203,17 +1203,17 @@ impl Registry {
 		}
 	}
 
-	fn entry(&self, path: impl AsPath) -> Option<Arc<BroadcastEntry>> {
+	fn entry(&self, path: impl Into<Path>) -> Option<Arc<BroadcastEntry>> {
 		// A disabled registry never allocates state.
 		let shared = self.shared.as_ref()?;
-		let path = path.as_path();
+		let path: Path = path.into();
 		// Skip excluded paths (our own stats broadcasts and any sibling category
 		// under the same prefix) so serving a stats broadcast doesn't generate
 		// more stats.
 		if self.exclude.matches(path.as_str()) {
 			return None;
 		}
-		let owned = path.to_owned();
+		let owned = path.clone();
 		let mut entries = shared.entries.lock();
 		Some(
 			entries
@@ -1226,9 +1226,9 @@ impl Registry {
 	/// Get-or-create the session gauge for `label` on `tier`. `None` for a
 	/// disabled registry. Unlike [`Self::entry`], labels key sessions rather than
 	/// broadcasts, so no cycle-breaking filter is needed.
-	fn session_counters(&self, tier: &Tier, label: impl AsPath) -> Option<Arc<SessionCounters>> {
+	fn session_counters(&self, tier: &Tier, label: impl Into<Path>) -> Option<Arc<SessionCounters>> {
 		let shared = self.shared.as_ref()?;
-		let owned = label.as_path().to_owned();
+		let owned = label.into();
 		let mut sessions = shared.sessions.lock();
 		Some(
 			sessions
@@ -1375,7 +1375,7 @@ pub struct Handle {
 
 impl Handle {
 	/// Count a session refused outside relay admission under its resolved label and tier.
-	pub fn refuse(&self, label: impl AsPath, reason: RefusalKind) {
+	pub fn refuse(&self, label: impl Into<Path>, reason: RefusalKind) {
 		if let Some(presence) = self.stats.session_counters(&self.tier, label) {
 			presence
 				.sessions_refused
@@ -1390,19 +1390,19 @@ impl Handle {
 	/// session that merely connects is still billable. Surfaced on the session
 	/// track for this tier, keyed by `label`, in its totals, and in `label`'s
 	/// presence track.
-	pub fn session(&self, label: impl AsPath) -> Session {
+	pub fn session(&self, label: impl Into<Path>) -> Session {
 		self.context(label, Context::Session)
 	}
 
 	/// Count one admitted request under `label` and meter its traffic without session presence.
 	///
 	/// A request has no session end to classify, so it never records a failure.
-	pub fn request(&self, label: impl AsPath) -> Session {
+	pub fn request(&self, label: impl Into<Path>) -> Session {
 		self.context(label, Context::Request)
 	}
 
-	fn context(&self, label: impl AsPath, context: Context) -> Session {
-		let label = label.as_path().to_owned();
+	fn context(&self, label: impl Into<Path>, context: Context) -> Session {
+		let label = label.into();
 		let presence = self.stats.session_counters(&self.tier, &label);
 		if let Some(presence) = &presence {
 			match context {
@@ -1581,7 +1581,7 @@ struct SessionInner {
 	/// Egress viewer refcount, keyed by absolute broadcast path: the first active
 	/// subscription this context opens for a broadcast bumps `broadcasts_started`, the last
 	/// to close bumps `broadcasts_ended` on the same counters, even across a tier change.
-	viewers: Mutex<HashMap<PathOwned, Viewer>>,
+	viewers: Mutex<HashMap<Path, Viewer>>,
 	/// What this session holds against each cap right now, so a tier change can seed the
 	/// new tier's peaks with slots it still holds.
 	held: Mutex<Vec<(Cap, Weak<AtomicUsize>)>>,
@@ -1593,7 +1593,7 @@ struct SessionInner {
 struct Current {
 	failure: Option<Failure>,
 	tier: Tier,
-	label: PathOwned,
+	label: Path,
 	/// The presence gauge for `(tier, label)`, or `None` for a disabled registry.
 	presence: Option<Arc<SessionCounters>>,
 }
@@ -1667,9 +1667,9 @@ impl Session {
 	}
 
 	/// Record later traffic and session presence under `(tier, label)`; a request stays counted where admitted.
-	pub fn retag(&self, tier: Tier, label: impl AsPath) {
+	pub fn retag(&self, tier: Tier, label: impl Into<Path>) {
 		let Some(inner) = &self.inner else { return };
-		let label = label.as_path().to_owned();
+		let label = label.into();
 		let mut current = inner.current.lock().unwrap_or_else(PoisonError::into_inner);
 		if current.tier == tier && current.label == label {
 			return;
@@ -1740,20 +1740,20 @@ impl Session {
 
 	/// Egress (publisher / reads) scope for a broadcast path. The path is the
 	/// absolute broadcast name.
-	pub(crate) fn egress(&self, path: impl AsPath) -> Scope {
+	pub(crate) fn egress(&self, path: impl Into<Path>) -> Scope {
 		self.scope(path, Side::Publisher)
 	}
 
 	/// Ingress (subscriber / writes) scope for a broadcast path.
-	pub(crate) fn ingress(&self, path: impl AsPath) -> Scope {
+	pub(crate) fn ingress(&self, path: impl Into<Path>) -> Scope {
 		self.scope(path, Side::Subscriber)
 	}
 
-	fn scope(&self, path: impl AsPath, side: Side) -> Scope {
+	fn scope(&self, path: impl Into<Path>, side: Side) -> Scope {
 		let Some(inner) = &self.inner else {
 			return Scope::default();
 		};
-		let path = path.as_path().to_owned();
+		let path = path.into();
 		let resolved = inner.resolve(&path);
 		Scope {
 			session: self.clone(),
@@ -1765,7 +1765,7 @@ impl Session {
 
 	/// Register one active egress subscription to `path` recording on `counters`.
 	/// The first bumps `broadcasts_started` there.
-	fn viewer_open(&self, path: &PathOwned, counters: &Arc<TierCounters>) {
+	fn viewer_open(&self, path: &Path, counters: &Arc<TierCounters>) {
 		let Some(inner) = &self.inner else { return };
 		let mut viewers = inner.viewers.lock().unwrap_or_else(PoisonError::into_inner);
 		let viewer = viewers.entry(path.clone()).or_insert_with(|| {
@@ -1780,7 +1780,7 @@ impl Session {
 
 	/// Release one active egress subscription to `path`. The last bumps
 	/// `broadcasts_ended` on the counters the first opened on.
-	fn viewer_close(&self, path: &PathOwned) {
+	fn viewer_close(&self, path: &Path) {
 		let Some(inner) = &self.inner else { return };
 		let mut viewers = inner.viewers.lock().unwrap_or_else(PoisonError::into_inner);
 		let Some(viewer) = viewers.get_mut(path) else { return };
@@ -1801,7 +1801,7 @@ impl Session {
 impl SessionInner {
 	/// The counters `path` records on under the current tier, tagged with the
 	/// generation they were resolved at.
-	fn resolve(&self, path: &PathOwned) -> Resolved {
+	fn resolve(&self, path: &Path) -> Resolved {
 		let (generation, tier) = {
 			let current = self.current.lock().unwrap_or_else(PoisonError::into_inner);
 			(self.generation.load(Ordering::Relaxed), current.tier.clone())
@@ -1945,7 +1945,7 @@ pub(crate) struct Scope {
 	side: Side,
 	/// Absolute broadcast path, used to key the viewer refcount and as the
 	/// `announced_bytes` length.
-	path: PathOwned,
+	path: Path,
 }
 
 /// A [`Scope`]'s counters and the session tier generation they belong to.
@@ -2058,7 +2058,7 @@ pub(crate) struct Subscription {
 	counters: Option<Arc<TierCounters>>,
 	side: Side,
 	/// `Some((session, path))` on the egress side, to release the viewer refcount.
-	viewer: Option<(Session, PathOwned)>,
+	viewer: Option<(Session, Path)>,
 }
 
 impl Drop for Subscription {
@@ -2267,7 +2267,7 @@ mod tests {
 			.shared()
 			.entries
 			.lock()
-			.get(&PathOwned::from(path.to_string()))
+			.get(&Path::from(path.to_string()))
 			.expect("entry")
 			.tier(tier)
 	}
@@ -2279,7 +2279,7 @@ mod tests {
 			.sessions
 			.lock()
 			.get(tier)
-			.and_then(|labels| labels.get(&PathOwned::from(label.to_string())).map(|c| c.snapshot().0))
+			.and_then(|labels| labels.get(&Path::from(label.to_string())).map(|c| c.snapshot().0))
 	}
 
 	fn test_stats() -> Registry {
@@ -2458,7 +2458,7 @@ mod tests {
 		// entry across drains while live, and prunes it on the first drain
 		// after the last guard drops (returning the final values that once).
 		let stats = test_stats();
-		let key = PathOwned::from("foo/bar");
+		let key = Path::from("foo/bar");
 		let ctx = stats.tier(Tier::default()).session("root");
 		let scope = ctx.egress("foo/bar");
 		let sub = scope.subscribe();
@@ -2506,7 +2506,7 @@ mod tests {
 		// the registry indefinitely: announces_started != announces_ended means a
 		// subscription could still begin at any moment.
 		let stats = test_stats();
-		let key = PathOwned::from("foo/bar");
+		let key = Path::from("foo/bar");
 		let ctx = stats.tier(Tier::default()).session("root");
 		let scope = ctx.egress("foo/bar");
 		let guard = scope.announce();

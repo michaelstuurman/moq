@@ -49,7 +49,7 @@ use std::collections::BTreeMap;
 /// can depend on this crate alone.
 pub use moq_net::stats::{Failure, Failures, Handle, Presence, RefusalKind, Refusals, Registry, Role, Tier, Traffic};
 
-use moq_net::{AsPath, Epoch, Path, PathOwned};
+use moq_net::{Epoch, Path};
 
 /// One frame off the totals track: each tier's [`Totals`], keyed by tier label
 /// (`""` for the default tier).
@@ -223,27 +223,27 @@ pub fn totals_track(encoding: Encoding) -> String {
 /// The presence track name for a stats label: `<label>/presence.json`, or
 /// `presence.json` for the empty label, plus [`COMPRESSED_SUFFIX`] for
 /// [`Encoding::Compressed`]. Served only while requested.
-pub fn presence_track(label: impl AsPath, encoding: Encoding) -> String {
-	keyed_track(label.as_path(), PRESENCE, encoding)
+pub fn presence_track(label: impl Into<Path>, encoding: Encoding) -> String {
+	keyed_track(&label.into(), PRESENCE, encoding)
 }
 
 /// The prefix track name for a broadcast prefix: `<path>/prefix.json`, or
 /// `prefix.json` for the empty prefix, plus [`COMPRESSED_SUFFIX`] for
 /// [`Encoding::Compressed`]. Served only while requested.
-pub fn prefix_track(path: impl AsPath, encoding: Encoding) -> String {
-	keyed_track(path.as_path(), PREFIX, encoding)
+pub fn prefix_track(path: impl Into<Path>, encoding: Encoding) -> String {
+	keyed_track(&path.into(), PREFIX, encoding)
 }
 
 /// The group track name for a group: `<group>/group.json`, or `group.json` for
 /// the empty group. One name, compressed by the track itself, with no `.z`
 /// sibling.
-pub fn group_track(group: impl AsPath) -> String {
-	keyed_track(group.as_path(), GROUP, Encoding::Plain)
+pub fn group_track(group: impl Into<Path>) -> String {
+	keyed_track(&group.into(), GROUP, Encoding::Plain)
 }
 
 /// The group a group track name carries; `None` for any other name. The
 /// inverse of [`group_track`], for reading a stats broadcast's track listing.
-pub fn parse_group_track(name: &str) -> Option<PathOwned> {
+pub fn parse_group_track(name: &str) -> Option<Path> {
 	match parse_keyed_track(name, GROUP)? {
 		(group, Encoding::Plain) => Some(group),
 		(_, Encoding::Compressed) => None,
@@ -251,7 +251,7 @@ pub fn parse_group_track(name: &str) -> Option<PathOwned> {
 }
 
 /// `<key>/<kind>`, or `<kind>` for the empty key, plus the encoding's suffix.
-fn keyed_track(key: Path, kind: &str, encoding: Encoding) -> String {
+fn keyed_track(key: &Path, kind: &str, encoding: Encoding) -> String {
 	encoding.name(match key.is_empty() {
 		true => kind.to_string(),
 		false => format!("{}/{kind}", key.as_str()),
@@ -260,19 +260,19 @@ fn keyed_track(key: Path, kind: &str, encoding: Encoding) -> String {
 
 /// The stats label a presence track name requests, and its encoding; `None`
 /// for any other name. The inverse of [`presence_track`].
-pub(crate) fn parse_presence_track(name: &str) -> Option<(PathOwned, Encoding)> {
+pub(crate) fn parse_presence_track(name: &str) -> Option<(Path, Encoding)> {
 	parse_keyed_track(name, PRESENCE)
 }
 
 /// The broadcast prefix a prefix track name requests, and its encoding; `None`
 /// for any other name. The inverse of [`prefix_track`].
-pub(crate) fn parse_prefix_track(name: &str) -> Option<(PathOwned, Encoding)> {
+pub(crate) fn parse_prefix_track(name: &str) -> Option<(Path, Encoding)> {
 	parse_keyed_track(name, PREFIX)
 }
 
 /// The key a `<key>/<kind>` name requests: the last segment picks the kind and
 /// everything before it is the key, so names stay injective across kinds.
-fn parse_keyed_track(name: &str, kind: &str) -> Option<(PathOwned, Encoding)> {
+fn parse_keyed_track(name: &str, kind: &str) -> Option<(Path, Encoding)> {
 	let (plain, encoding) = Encoding::split(name);
 	let key = match plain.strip_suffix(kind)? {
 		"" => "",
@@ -283,7 +283,7 @@ fn parse_keyed_track(name: &str, kind: &str) -> Option<(PathOwned, Encoding)> {
 	if path.as_str() != key {
 		return None;
 	}
-	Some((path.to_owned(), encoding))
+	Some((path, encoding))
 }
 
 /// The node a stats broadcast path names: `<prefix>/node/<node>` yields
@@ -292,9 +292,9 @@ fn parse_keyed_track(name: &str, kind: &str) -> Option<(PathOwned, Encoding)> {
 /// Returns `None` when the path is not under `prefix` or has no `node`
 /// category segment right after it, which also filters out sibling categories
 /// another producer may publish under the same prefix.
-pub fn parse_node_path(prefix: impl AsPath, path: impl AsPath) -> Option<PathOwned> {
-	let prefix = prefix.as_path();
-	let path = path.as_path();
+pub fn parse_node_path(prefix: impl Into<Path>, path: impl Into<Path>) -> Option<Path> {
+	let prefix: Path = prefix.into();
+	let path: Path = path.into();
 	let rest = if prefix.is_empty() {
 		path.as_str()
 	} else {
@@ -304,7 +304,7 @@ pub fn parse_node_path(prefix: impl AsPath, path: impl AsPath) -> Option<PathOwn
 		"" => "",
 		node => node.strip_prefix('/')?,
 	};
-	Some(Path::new(node).to_owned())
+	Some(Path::new(node).clone())
 }
 
 /// Errors produced while publishing or consuming stats.
@@ -331,13 +331,13 @@ mod tests {
 	fn parse_node_path_variants() {
 		let parse = |path| parse_node_path(".stats", path);
 
-		assert_eq!(parse(".stats/node/sjc"), Some(Path::new("sjc").to_owned()));
+		assert_eq!(parse(".stats/node/sjc"), Some(Path::new("sjc").clone()));
 		assert_eq!(
 			parse(".stats/node/sjc/1"),
-			Some(Path::new("sjc/1").to_owned()),
+			Some(Path::new("sjc/1").clone()),
 			"multi-segment node"
 		);
-		assert_eq!(parse(".stats/node"), Some(Path::empty().to_owned()), "nodeless path");
+		assert_eq!(parse(".stats/node"), Some(Path::empty().clone()), "nodeless path");
 
 		// Not ours: wrong prefix, a sibling category, or anything between.
 		assert_eq!(parse("other/node/sjc"), None);
@@ -363,7 +363,7 @@ mod tests {
 				let name = presence_track(label, encoding);
 				assert_eq!(
 					parse_presence_track(&name),
-					Some((PathOwned::from(label), encoding)),
+					Some((Path::from(label), encoding)),
 					"{name}"
 				);
 			}
@@ -403,7 +403,7 @@ mod tests {
 				let name = prefix_track(path, encoding);
 				assert_eq!(
 					parse_prefix_track(&name),
-					Some((PathOwned::from(path), encoding)),
+					Some((Path::from(path), encoding)),
 					"{name}"
 				);
 				assert_eq!(parse_presence_track(&name), None, "{name} is not a presence track");

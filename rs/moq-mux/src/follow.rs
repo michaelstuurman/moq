@@ -41,7 +41,7 @@ impl Instances {
 	/// [`Source`](crate::Source) for each instance.
 	pub fn new(
 		origin: &moq_net::origin::Consumer,
-		path: impl moq_net::AsPath,
+		path: impl Into<moq_net::Path>,
 		epoch: Option<&moq_net::Epoch>,
 	) -> crate::Result<Self> {
 		let announced = origin.announced_broadcast(path, None)?;

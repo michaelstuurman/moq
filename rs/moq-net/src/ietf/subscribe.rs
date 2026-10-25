@@ -21,7 +21,7 @@ use super::Version;
 #[derive(Clone, Debug)]
 pub struct Subscribe<'a> {
 	pub request_id: RequestId,
-	pub track_namespace: Path<'a>,
+	pub track_namespace: Path,
 	pub track_name: Cow<'a, str>,
 	pub subscriber_priority: u8,
 	pub group_order: GroupOrder,

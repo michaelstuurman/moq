@@ -344,7 +344,7 @@ impl Invocation {
 				};
 				// An origin refuses a broadcast a pattern could not name, so no viewer could
 				// publish its `<NAME>.echo` beneath this.
-				let feedback = prefix.join("viewer.echo");
+				let feedback = prefix.join(&hang::moq_net::Path::from_static("viewer.echo"));
 				if let Err(err) = hang::moq_net::Pattern::literal(feedback.as_str()) {
 					anyhow::bail!(
 						"--echo-path `{path}` resolves to `{prefix}`, where no viewer can publish its feedback: {err}"

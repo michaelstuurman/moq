@@ -21,13 +21,13 @@ use crate::util::TaskSet;
 #[derive(Default)]
 pub(super) struct Listings {
 	/// The prefix of every established SUBSCRIBE_TRACKS, by a key its guard removes.
-	prefixes: HashMap<u64, crate::PathOwned>,
+	prefixes: HashMap<u64, crate::Path>,
 	next: u64,
 	/// On draft-18, the tracks a PUBLISH of ours subscribes the peer to, and how many
 	/// SUBSCRIBEs of the peer's each track has: draft-18 allows the peer one subscription
 	/// per track (section 5.1), so a PUBLISH joins neither kind.
-	published: HashMap<(crate::PathOwned, Arc<str>), usize>,
-	subscribed: HashMap<(crate::PathOwned, Arc<str>), usize>,
+	published: HashMap<(crate::Path, Arc<str>), usize>,
+	subscribed: HashMap<(crate::Path, Arc<str>), usize>,
 }
 
 /// Holds a SUBSCRIBE_TRACKS prefix as established until dropped.
@@ -40,7 +40,7 @@ impl Established {
 	/// Establish `prefix`, unless it overlaps an established request (section 10.19): two
 	/// would match the same namespaces, and keeping them apart is also what lists each
 	/// broadcast at most once per session.
-	fn new(listings: &kio::Shared<Listings>, prefix: &crate::PathOwned) -> Option<Self> {
+	fn new(listings: &kio::Shared<Listings>, prefix: &crate::Path) -> Option<Self> {
 		let mut state = listings.lock();
 		if state
 			.prefixes
@@ -69,7 +69,7 @@ impl Drop for Established {
 /// until dropped.
 pub(super) struct Subscribed {
 	listings: kio::Shared<Listings>,
-	key: (crate::PathOwned, Arc<str>),
+	key: (crate::Path, Arc<str>),
 	/// A SUBSCRIBE of the peer's, rather than a PUBLISH of ours.
 	direct: bool,
 }
@@ -77,17 +77,17 @@ pub(super) struct Subscribed {
 impl Subscribed {
 	/// Claim `namespace`'s `track` for a PUBLISH of ours, unless the peer is subscribed to
 	/// it already, by its SUBSCRIBE or another PUBLISH.
-	fn publish(listings: &kio::Shared<Listings>, namespace: crate::PathOwned, track: Arc<str>) -> Option<Self> {
+	fn publish(listings: &kio::Shared<Listings>, namespace: crate::Path, track: Arc<str>) -> Option<Self> {
 		Self::claim(listings, (namespace, track), false)
 	}
 
 	/// Count the peer's SUBSCRIBE to `namespace`'s `track`, unless a PUBLISH of ours
 	/// subscribes it already.
 	pub(super) fn subscribe(listings: &kio::Shared<Listings>, namespace: &crate::Path, track: &str) -> Option<Self> {
-		Self::claim(listings, (namespace.to_owned(), Arc::from(track)), true)
+		Self::claim(listings, (namespace.clone(), Arc::from(track)), true)
 	}
 
-	fn claim(listings: &kio::Shared<Listings>, key: (crate::PathOwned, Arc<str>), direct: bool) -> Option<Self> {
+	fn claim(listings: &kio::Shared<Listings>, key: (crate::Path, Arc<str>), direct: bool) -> Option<Self> {
 		let mut locked = listings.lock();
 		let Listings {
 			published, subscribed, ..
@@ -142,14 +142,14 @@ struct Params {
 /// (suffix, name) in listing order. A track removed before its skip went out cancels it.
 /// A FORWARD=1 listing adds one only once this is empty, so a peer that stops reading
 /// leaves the rest unread in each broadcast's listing.
-type Skips = kio::Shared<LinkedHashMap<(crate::PathOwned, Arc<str>), ()>>;
+type Skips = kio::Shared<LinkedHashMap<(crate::Path, Arc<str>), ()>>;
 
 /// What a request's listing shares with the tasks listing each broadcast.
 #[derive(Clone)]
 struct Request {
 	origin: origin::Consumer,
 	/// The request's prefix, which every PUBLISH namespace starts with.
-	prefix: crate::PathOwned,
+	prefix: crate::Path,
 	/// Whether the request asked for every track's objects, which we answer with skips.
 	forward: bool,
 	params: Params,
@@ -184,14 +184,14 @@ struct Entries {
 }
 
 impl Entries {
-	fn skip(&mut self, skips: &Skips, suffix: &crate::PathOwned, name: Arc<str>) {
+	fn skip(&mut self, skips: &Skips, suffix: &crate::Path, name: Arc<str>) {
 		skips.lock().insert((suffix.clone(), name.clone()), ());
 		self.skipped.insert(name);
 	}
 
 	/// `name` is no longer listed: drop whatever it got to, ending its PUBLISH with
 	/// TRACK_ENDED if it `finished`.
-	fn remove(&mut self, skips: &Skips, suffix: &crate::PathOwned, name: Arc<str>, finished: bool) {
+	fn remove(&mut self, skips: &Skips, suffix: &crate::Path, name: Arc<str>, finished: bool) {
 		if self.staged.as_ref().is_some_and(|staged| staged.name == name) {
 			self.staged = None;
 		}
@@ -208,7 +208,7 @@ impl Entries {
 	}
 
 	/// Nothing more is PUBLISHed or skipped, while the PUBLISHes already sent stay listed.
-	fn halt(&mut self, skips: &Skips, suffix: &crate::PathOwned) {
+	fn halt(&mut self, skips: &Skips, suffix: &crate::Path) {
 		self.pending.clear();
 		self.staged = None;
 		let mut skips = skips.lock();
@@ -218,7 +218,7 @@ impl Entries {
 	}
 
 	/// Every track is no longer listed.
-	fn unlist(&mut self, skips: &Skips, suffix: &crate::PathOwned) {
+	fn unlist(&mut self, skips: &Skips, suffix: &crate::Path) {
 		self.halt(skips, suffix);
 		self.listed.clear();
 	}
@@ -239,7 +239,7 @@ struct Listed {
 	stream: Stream<Transport, Version>,
 	track: track::Consumer,
 	/// The track's full namespace, as the PUBLISH names it.
-	namespace: crate::PathOwned,
+	namespace: crate::Path,
 	name: Arc<str>,
 	properties: ietf::Properties,
 	/// Closes once the track is no longer listed, holding whether it finished.
@@ -283,7 +283,7 @@ impl Publisher {
 	pub(super) async fn serve_subscribe_tracks_stream(
 		self,
 		mut stream: Stream<Transport, Version>,
-		msg: ietf::SubscribeTracks<'_>,
+		msg: ietf::SubscribeTracks,
 	) -> Result<(), Error> {
 		if let Some(error) = super::super::namespace::refusal(&msg.prefix, self.version) {
 			return super::super::request_stream::reject(stream, error).await;
@@ -310,7 +310,7 @@ impl Publisher {
 			let error = refuse(request::NOT_SUPPORTED, "SUBSCRIBE_TRACKS needs FORWARD=0");
 			return super::super::request_stream::reject(stream, error).await;
 		}
-		let prefix = msg.prefix.to_owned();
+		let prefix = msg.prefix.clone();
 		let Some(established) = Established::new(&self.listings, &prefix) else {
 			let error = refuse(request::PREFIX_OVERLAP, "overlaps another SUBSCRIBE_TRACKS");
 			return super::super::request_stream::reject(stream, error).await;
@@ -365,8 +365,8 @@ impl Publisher {
 			live: live.consume(),
 		};
 		// Each listed broadcast's route, closed once its announcement goes; see [`Route`].
-		let mut routes: HashMap<crate::PathOwned, kio::Producer<Route>> = HashMap::new();
-		let withdraw = |routes: &mut HashMap<crate::PathOwned, kio::Producer<Route>>, prefix: &crate::PathOwned| {
+		let mut routes: HashMap<crate::Path, kio::Producer<Route>> = HashMap::new();
+		let withdraw = |routes: &mut HashMap<crate::Path, kio::Producer<Route>>, prefix: &crate::Path| {
 			if let Some(route) = routes.remove(prefix)
 				&& let Ok(mut route) = route.write()
 			{
@@ -598,12 +598,12 @@ impl Publisher {
 	async fn run_listed_broadcast(
 		self,
 		request: Request,
-		suffix: crate::PathOwned,
+		suffix: crate::Path,
 		epoch: Option<crate::Epoch>,
 		route: kio::Consumer<Route>,
 	) {
-		let namespace = request.prefix.join(&suffix).to_owned();
-		let absolute = self.origin.absolute(&namespace).to_owned();
+		let namespace = request.prefix.join(&suffix).clone();
+		let absolute = self.origin.absolute(&namespace).clone();
 		let flate = self.peer_setup.get().await.flate;
 
 		// Resolving may wait on a route for the broadcast, which its going ends.
@@ -868,7 +868,7 @@ impl Publisher {
 		// An update may ask for a new group only if the PUBLISH sent DYNAMIC_GROUPS, which
 		// INCLUDE_PROPERTIES=0 leaves out.
 		let dynamic = properties.dynamic_groups;
-		let absolute = self.origin.absolute(&namespace).to_owned();
+		let absolute = self.origin.absolute(&namespace).clone();
 
 		// Every wait on the peer, for a Request ID or the PUBLISH's bytes, lasts only while
 		// the track is listed and the request stands. A Request ID abandoned unsent leaves a
@@ -1167,7 +1167,7 @@ impl Publisher {
 		&self,
 		stream: &mut Stream<Transport, Version>,
 		track: &track::Consumer,
-		namespace: &crate::PathOwned,
+		namespace: &crate::Path,
 		request_id: RequestId,
 		params: &mut Params,
 		how: Resume,
@@ -1405,7 +1405,7 @@ mod tests {
 		}
 	}
 
-	fn listing(forward: bool) -> ietf::SubscribeTracks<'static> {
+	fn listing(forward: bool) -> ietf::SubscribeTracks {
 		ietf::SubscribeTracks {
 			request_id: RequestId(0),
 			prefix: crate::Path::new("room"),
@@ -1909,7 +1909,7 @@ mod tests {
 				let route = kio::Producer::new(Route::Replaced);
 				let request = Request {
 					origin: h._origin.consume(),
-					prefix: crate::Path::new("").to_owned(),
+					prefix: crate::Path::new("").clone(),
 					forward: true,
 					params: Params {
 						priority: crate::ietf::priority::DEFAULT_WIRE,
@@ -1924,7 +1924,7 @@ mod tests {
 				};
 				moq_clock::sim::spawn(h.publisher.clone().run_listed_broadcast(
 					request,
-					crate::Path::new("room/cam").to_owned(),
+					crate::Path::new("room/cam").clone(),
 					None,
 					route.consume(),
 				));

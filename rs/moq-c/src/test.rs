@@ -3701,7 +3701,7 @@ fn consume_audio_follows_a_sibling_broadcast_reference() {
 			.renditions
 			.get_mut(&name)
 			.unwrap()
-			.broadcast = Some(moq_net::path::Relative::new("./source").into_owned());
+			.broadcast = Some(moq_net::path::Relative::new("./source"));
 	}
 
 	let consume = request_broadcast(origin, b"a/pub");

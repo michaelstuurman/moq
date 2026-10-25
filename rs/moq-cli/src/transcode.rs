@@ -106,7 +106,7 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 	};
 	config.resize.output = args.frames.0;
 
-	let source_path = moq_net::PathOwned::from(
+	let source_path = moq_net::Path::from(
 		moq.broadcast
 			.clone()
 			.context("`transcode` requires the source broadcast: pass --broadcast <name>")?,
@@ -114,7 +114,7 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 	if source_path.is_empty() {
 		anyhow::bail!("`transcode` requires the source broadcast: pass --broadcast <name>");
 	}
-	let output_path = moq_net::PathOwned::from(
+	let output_path = moq_net::Path::from(
 		args.output
 			.clone()
 			.unwrap_or_else(|| format!("{source_path}/transcode.hang")),
@@ -158,8 +158,8 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 struct Following {
 	origin: moq_net::origin::Consumer,
 	publish: moq_net::origin::Producer,
-	source_path: moq_net::PathOwned,
-	output_path: moq_net::PathOwned,
+	source_path: moq_net::Path,
+	output_path: moq_net::Path,
 	config: moq_transcode::Config,
 }
 

@@ -131,7 +131,7 @@ impl Shared {
 	/// Watches whether the session still lets us serve `broadcast` to the peer: our
 	/// grant, and the ceiling on what the peer may subscribe to.
 	fn gate(&self, broadcast: &crate::Path) -> crate::auth::Gate {
-		crate::auth::Gate::new(self.auth.clone(), broadcast.to_owned(), crate::auth::Direction::Publish)
+		crate::auth::Gate::new(self.auth.clone(), broadcast.clone(), crate::auth::Direction::Publish)
 	}
 
 	/// The origin to resolve a peer-requested broadcast from: excludes routes
@@ -274,9 +274,9 @@ impl Publisher {
 		version: Version,
 		auth: Option<crate::auth::Link>,
 	) -> Result<(), Error> {
-		let mut run = AnnounceRun::new(crate::PathOwned::default(), self_origin, version);
+		let mut run = AnnounceRun::new(crate::Path::default(), self_origin, version);
 		run.auth = auth.map(|handle| {
-			crate::auth::Gate::new(handle, crate::Path::empty().to_owned(), crate::auth::Direction::Publish)
+			crate::auth::Gate::new(handle, crate::Path::empty().clone(), crate::auth::Direction::Publish)
 		});
 		kio::wait(|waiter| run.poll(stream, origin, announced, waiter)).await
 	}
@@ -852,7 +852,7 @@ enum AnnounceState {
 	Decode,
 	/// Waiting on the peer's SETUP for the session-wide excluded origin
 	/// (lite-05, whose wire carries no per-stream exclude_hop).
-	ExcludeHop { prefix: crate::PathOwned, hidden: bool },
+	ExcludeHop { prefix: crate::Path, hidden: bool },
 	/// Streaming announce updates.
 	Run {
 		origin: origin::Consumer,
@@ -878,7 +878,7 @@ impl AnnounceServe {
 					let stream = self.stream.as_mut().expect("stream present");
 					let mut cx = waiter.context();
 					let interest = ready!(stream.reader.poll_decode::<lite::AnnounceRequest>(&mut cx))?;
-					let prefix = interest.prefix.to_owned();
+					let prefix = interest.prefix.clone();
 					let hidden = interest.hidden;
 
 					// The identity whose routes we filter out. Lite-04/05 carry it per
@@ -931,7 +931,7 @@ impl AnnounceServe {
 		}
 	}
 
-	fn start(&mut self, prefix: crate::PathOwned, exclude_hop: Hop, hidden: bool) {
+	fn start(&mut self, prefix: crate::Path, exclude_hop: Hop, hidden: bool) {
 		// If the requested prefix is outside our scope (an empty origin, or a token
 		// that doesn't grant it), we simply have nothing to announce. Respond with an
 		// empty set and keep the stream open (the subscriber treats a FIN here as a
@@ -981,7 +981,7 @@ impl AnnounceServe {
 struct AnnounceRun {
 	// The requested prefix. Updates arrive named relative to it, but the grant
 	// matches paths relative to the origin's root.
-	prefix: crate::PathOwned,
+	prefix: crate::Path,
 	self_origin: Hop,
 	version: Version,
 	// Lite06+: announce ids. Every `active` we send implicitly assigns the next
@@ -991,7 +991,7 @@ struct AnnounceRun {
 	encoder: lite::AnnounceEncoder,
 	// The routes the peer currently holds, keyed by the suffix under the requested
 	// prefix.
-	live: HashMap<crate::PathOwned, Advertised>,
+	live: HashMap<crate::Path, Advertised>,
 	phase: AnnouncePhase,
 	initial: Option<usize>,
 	replay: bool,
@@ -1023,7 +1023,7 @@ enum AnnouncePhase {
 }
 
 impl AnnounceRun {
-	fn new(prefix: crate::PathOwned, self_origin: Hop, version: Version) -> Self {
+	fn new(prefix: crate::Path, self_origin: Hop, version: Version) -> Self {
 		Self {
 			prefix,
 			self_origin,
@@ -1090,7 +1090,7 @@ impl AnnounceRun {
 		// whatever it has pending for the routes the peer holds (an update, a restart, an end
 		// still waiting out its hold) arrives through the loop as usual.
 		let mut snapshot = origin.announced();
-		let mut current: HashMap<crate::PathOwned, crate::origin::Route> = HashMap::new();
+		let mut current: HashMap<crate::Path, crate::origin::Route> = HashMap::new();
 		while let Some(event) = snapshot.try_next() {
 			match event {
 				announce::Event::Start(update) | announce::Event::Update(update) | announce::Event::Restart(update) => {
@@ -1119,7 +1119,7 @@ impl AnnounceRun {
 	fn advertise(
 		&mut self,
 		stream: &mut Stream<Transport, Version>,
-		suffix: crate::PathOwned,
+		suffix: crate::Path,
 		hops: Hops,
 		cost: crate::origin::Cost,
 		epoch: Option<crate::Epoch>,
@@ -1195,7 +1195,7 @@ impl AnnounceRun {
 	fn start(
 		&mut self,
 		stream: &mut Stream<Transport, Version>,
-		suffix: crate::PathOwned,
+		suffix: crate::Path,
 		hops: Hops,
 		cost: crate::origin::Cost,
 		// Fixed while the peer holds the advertisement: a new one is a restart.
@@ -1218,7 +1218,7 @@ impl AnnounceRun {
 	fn restart(
 		&mut self,
 		stream: &mut Stream<Transport, Version>,
-		suffix: crate::PathOwned,
+		suffix: crate::Path,
 		hops: Hops,
 		cost: crate::origin::Cost,
 		epoch: Option<crate::Epoch>,
@@ -1254,7 +1254,7 @@ impl AnnounceRun {
 	fn retract(
 		&mut self,
 		stream: &mut Stream<Transport, Version>,
-		suffix: crate::PathOwned,
+		suffix: crate::Path,
 		absolute: &crate::Path,
 	) -> Result<(), Error> {
 		let Some(advertised) = self.live.remove(&suffix) else {
@@ -1499,7 +1499,7 @@ trait Request: Sized {
 	type Update: Decode<Version> + std::fmt::Debug;
 
 	/// The broadcast and track the request names.
-	fn target(msg: &Self::Message) -> (&crate::Path<'static>, &str);
+	fn target(msg: &Self::Message) -> (&crate::Path, &str);
 
 	/// The publisher instance the request names, if any.
 	fn epoch(msg: &Self::Message) -> Option<&crate::Epoch>;
@@ -1551,7 +1551,7 @@ struct RequestServe<R: Request> {
 	/// Ends the request, even mid-reply, once the session stops allowing its broadcast.
 	gate: Option<crate::auth::Gate>,
 	// Log context, filled in after the decode.
-	absolute: crate::PathOwned,
+	absolute: crate::Path,
 	track: String,
 	// A reply that always has another group ready still lets the session's other tasks run.
 	budget: kio::coop::Budget,
@@ -1659,7 +1659,7 @@ impl<R: Request> RequestServe<R> {
 				RequestState::Decode => {
 					let msg = ready!(stream.reader.poll_decode::<R::Message>(&mut cx))?;
 					let (broadcast, track) = R::target(&msg);
-					self.absolute = self.shared.origin.absolute(broadcast).to_owned();
+					self.absolute = self.shared.origin.absolute(broadcast).clone();
 					self.track = track.to_string();
 					if R::SUBSCRIPTION {
 						self._subscription = Some(self.shared.subscriptions.hold());
@@ -1807,7 +1807,7 @@ impl Request for TrackInfoServe {
 	type Message = lite::Track<'static>;
 	type Update = NoUpdate;
 
-	fn target(msg: &Self::Message) -> (&crate::Path<'static>, &str) {
+	fn target(msg: &Self::Message) -> (&crate::Path, &str) {
 		(&msg.broadcast, &msg.track)
 	}
 
@@ -1858,10 +1858,10 @@ impl Request for TracksServe {
 	const KIND: &'static str = "tracks";
 	const GRACEFUL: bool = false;
 	const HOLDS: bool = false;
-	type Message = lite::Tracks<'static>;
+	type Message = lite::Tracks;
 	type Update = NoUpdate;
 
-	fn target(msg: &Self::Message) -> (&crate::Path<'static>, &str) {
+	fn target(msg: &Self::Message) -> (&crate::Path, &str) {
 		(&msg.broadcast, "")
 	}
 
@@ -1955,7 +1955,7 @@ impl Request for SubscribeServe {
 	type Message = lite::Subscribe<'static>;
 	type Update = lite::SubscribeUpdate;
 
-	fn target(msg: &Self::Message) -> (&crate::Path<'static>, &str) {
+	fn target(msg: &Self::Message) -> (&crate::Path, &str) {
 		(&msg.broadcast, &msg.track)
 	}
 
@@ -2195,7 +2195,7 @@ impl Request for FetchServe {
 	type Message = lite::Fetch<'static>;
 	type Update = NoUpdate;
 
-	fn target(msg: &Self::Message) -> (&crate::Path<'static>, &str) {
+	fn target(msg: &Self::Message) -> (&crate::Path, &str) {
 		(&msg.broadcast, &msg.track)
 	}
 
@@ -2618,7 +2618,7 @@ mod announce_test {
 	#[test]
 	fn initial_replay_keeps_the_last_event_and_its_order() {
 		let update = |prefix: &'static str, cost| announce::Announce {
-			prefix: crate::PathOwned::from(prefix),
+			prefix: crate::Path::from(prefix),
 			captures: None,
 			route: origin::Route::default().with_cost(cost),
 		};
@@ -2663,7 +2663,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").to_owned(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		drop(removed);
@@ -2705,7 +2705,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").to_owned(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		let auth = crate::auth::Link::new(false);
@@ -2747,7 +2747,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").to_owned(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		let auth = crate::auth::Link::new(false);
@@ -2803,7 +2803,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").to_owned(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		drop(unseen);
@@ -2843,7 +2843,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").to_owned(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
 		assert!(
 			run.poll(&mut stream, &consumer, &mut announced, &kio::Waiter::noop())
 				.is_pending()
@@ -2881,15 +2881,14 @@ mod announce_test {
 		}
 
 		/// Decode every announce message written since the last call.
-		fn take_announces(&mut self) -> Vec<lite::AnnounceBroadcast<'static>> {
+		fn take_announces(&mut self) -> Vec<lite::AnnounceBroadcast> {
 			let buf = self.pending();
 			let mut slice = &buf[..];
 			let mut msgs = Vec::new();
 			while !slice.is_empty() {
 				msgs.push(
 					crate::coding::decode_buf(&mut slice, self.version, lite::AnnounceBroadcast::decode)
-						.expect("announce message")
-						.into_owned(),
+						.expect("announce message"),
 				);
 			}
 			self.cursor += buf.len();
@@ -3095,7 +3094,7 @@ mod announce_test {
 			// A restart waits out the update hold like an update.
 			moq_clock::sleep(crate::origin::Config::default().update_hold).await;
 			settle().await;
-			let restarted = |msgs: Vec<lite::AnnounceBroadcast<'static>>| match (version, msgs.as_slice()) {
+			let restarted = |msgs: Vec<lite::AnnounceBroadcast>| match (version, msgs.as_slice()) {
 				(
 					Version::Lite07,
 					[
@@ -7242,7 +7241,7 @@ mod tests {
 		let consumer = origin.consume();
 		let mut announced = consumer.announced();
 
-		let mut run = AnnounceRun::new(crate::PathOwned::default(), self_origin, Version::Lite01);
+		let mut run = AnnounceRun::new(crate::Path::default(), self_origin, Version::Lite01);
 		run.withdraw(&mut stream, &consumer, &mut announced).unwrap();
 		let _ = kio::wait(|waiter| Poll::Ready(run.poll(&mut stream, &consumer, &mut announced, waiter))).await;
 

@@ -390,7 +390,7 @@ struct Shape {
 	caps: gst::Caps,
 	container: hang::catalog::Container,
 	track: String,
-	broadcast: Option<moq_net::path::RelativeOwned>,
+	broadcast: Option<moq_net::path::Relative>,
 	epoch: Option<moq_net::Epoch>,
 }
 
@@ -728,7 +728,7 @@ async fn follow_catalog(
 		shutdown: shutdown.clone(),
 		stop: stopped,
 	};
-	let mut followers: HashMap<moq_net::PathOwned, Followed> = HashMap::new();
+	let mut followers: HashMap<moq_net::Path, Followed> = HashMap::new();
 	// Woken when a follower runs out of renditions, so the run can let it go without waiting for
 	// another catalog update.
 	let emptied = Arc::new(tokio::sync::Notify::new());
@@ -799,7 +799,7 @@ fn reconcile(
 	catalog: &moq_mux::catalog::hang::Catalog,
 	source: &moq_mux::Source,
 	playback: &Playback,
-	followers: &mut HashMap<moq_net::PathOwned, Followed>,
+	followers: &mut HashMap<moq_net::Path, Followed>,
 	tasks: &mut tokio::task::JoinSet<()>,
 	emptied: &Arc<tokio::sync::Notify>,
 	cancel: &watch::Receiver<bool>,
@@ -871,7 +871,7 @@ fn reconcile(
 		tasks.spawn_on(STREAMING.scope(playback.element.clone(), retire), RUNTIME.handle());
 	}
 
-	let mut plans: HashMap<moq_net::PathOwned, Plan> = HashMap::new();
+	let mut plans: HashMap<moq_net::Path, Plan> = HashMap::new();
 	for (rendition, shape) in desired {
 		let Some(path) = source.resolve_reference(shape.broadcast.as_ref()) else {
 			gst::warning!(
@@ -888,7 +888,7 @@ fn reconcile(
 	// one playing out its tail. Its follower stays reachable, with its finished records, while a
 	// disabled rendition still names it or a delisted one drains, so a re-enable or relist reaches
 	// it rather than a new follower. Once it plays nothing, the run lets it go.
-	let held: HashSet<moq_net::PathOwned> = disabled
+	let held: HashSet<moq_net::Path> = disabled
 		.iter()
 		.filter_map(|(_, reference)| source.resolve_reference(reference.broadcast()))
 		.collect();
@@ -998,7 +998,7 @@ struct Plan {
 /// rendition is reading, idle, or playing out its tail is its own state rather than a task's.
 struct Follower {
 	playback: Playback,
-	path: moq_net::PathOwned,
+	path: moq_net::Path,
 	renditions: HashMap<Rendition, Entry>,
 	readers: tokio::task::JoinSet<(Rendition, u64, Exit)>,
 	/// The instance last started.

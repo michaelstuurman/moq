@@ -2481,7 +2481,7 @@ mod tests {
 		let stats = config.build(cluster.origin.clone()).expect("stats");
 		let cluster = cluster.with_stats(stats);
 
-		let path = moq_net::Path::new(".stats").join("node").join("test");
+		let path = moq_net::Path::new(".stats/node/test");
 		let consumer = cluster.origin.consume();
 		let route = tokio::time::timeout(std::time::Duration::from_secs(5), consumer.routed(&path))
 			.await
@@ -3090,7 +3090,7 @@ mod tests {
 			.expect("broadcast resolves")
 			.expect("broadcast present");
 
-		let stats_path = moq_net::Path::new(".stats").join("node").join("test");
+		let stats_path = moq_net::Path::new(".stats/node/test");
 		tokio::time::timeout(Duration::from_secs(5), consumer.routed(&stats_path))
 			.await
 			.expect("stats announced")

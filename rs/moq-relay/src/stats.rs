@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use moq_net::PathOwned;
+use moq_net::Path;
 use moq_net::origin;
 use serde::{Deserialize, Serialize};
 
@@ -125,7 +125,7 @@ impl Config {
 		let prefix = self.prefix.clone();
 		let interval = self.interval();
 		anyhow::ensure!(interval != Some(Duration::ZERO), "stats.interval must be non-zero");
-		let node = self.node.clone().map(PathOwned::from);
+		let node = self.node.clone().map(Path::from);
 		let depth = self.depth;
 		let linger = self.linger();
 		tracing::info!(prefix, ?interval, node = ?node, depth, ?linger, "stats publishing enabled");

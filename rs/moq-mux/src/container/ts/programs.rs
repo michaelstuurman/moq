@@ -24,7 +24,7 @@ use crate::catalog;
 /// and each program reads only the packets on the PIDs its PAT entry and PMT claim.
 pub struct Programs {
 	origin: moq_net::origin::Producer,
-	name: moq_net::PathOwned,
+	name: moq_net::Path,
 	config: catalog::Config,
 	demux: Demux,
 	/// The latest whole PAT, from the first that lists a program, which seeds every program.
@@ -92,10 +92,10 @@ impl Program {
 
 impl Programs {
 	/// Split the multiplex into broadcasts named after `name`, each catalog built from `config`.
-	pub fn new(origin: moq_net::origin::Producer, name: impl moq_net::AsPath, config: catalog::Config) -> Self {
+	pub fn new(origin: moq_net::origin::Producer, name: impl Into<moq_net::Path>, config: catalog::Config) -> Self {
 		Self {
 			origin,
-			name: name.as_path().to_owned(),
+			name: name.into(),
 			config,
 			demux: Demux::new(true),
 			pat: None,

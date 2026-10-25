@@ -21,7 +21,7 @@ pub(crate) async fn dial(
 	client: &Client,
 	url: Url,
 	origin: moq_net::origin::Consumer,
-	path: impl moq_net::AsPath,
+	path: impl Into<moq_net::Path>,
 ) -> Result<()> {
 	let broadcast = origin.request_broadcast(path, None).await?;
 	let source = EgressSource::new(moq_mux::Source::new(origin, broadcast)).await?;
