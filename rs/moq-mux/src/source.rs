@@ -444,23 +444,13 @@ pub(crate) async fn resolved(origin: &moq_net::origin::Producer, path: &str) -> 
 	Source::new(consumer, broadcast)
 }
 
-/// Test helper: serve `broadcast` at `test` (and every other path) on a throwaway origin's
-/// dynamic handler and return a [`Source`] built from it, so exporter tests that build a
-/// local broadcast still resolve references through an origin. The origin is leaked so the
-/// broadcast stays reachable for the source's lifetime (harmless in a test binary).
+/// Test helper: a [`Source`] for a standalone `broadcast`, resolving its references through
+/// a throwaway origin that serves nothing. The origin is leaked so its driver runs for the
+/// source's lifetime (harmless in a test binary).
 #[cfg(test)]
 pub(crate) async fn announced(broadcast: &moq_net::broadcast::Consumer) -> Source {
 	let origin = produce_origin();
-	let dynamic = origin
-		.dynamic_route(moq_net::Path::new("").unwrap(), Default::default())
-		.unwrap();
-	let served = broadcast.clone();
-	tokio::spawn(async move {
-		while let Ok(request) = dynamic.requested_broadcast().await {
-			request.accept(served.clone());
-		}
-	});
-	let source = resolved(&origin, "test").await;
+	let source = Source::new(origin.consume(), broadcast.clone());
 	Box::leak(Box::new(origin));
 	source
 }
@@ -486,9 +476,7 @@ mod tests {
 		let _catalog = origin.publish(Path::new("pub").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "pub").await;
-		let dynamic = origin
-			.dynamic_route(Path::new("media").unwrap(), Default::default())
-			.unwrap();
+		let dynamic = origin.dynamic(moq_net::Path::new("media").unwrap()).unwrap();
 		let binding = source.bind(Some(&Relative::new("media")), None).unwrap();
 		let request = dynamic.requested_broadcast().await.unwrap();
 
@@ -503,9 +491,9 @@ mod tests {
 			_ = std::future::ready(()) => {}
 		}
 
-		let producer = moq_net::broadcast::Info::default().produce();
-		let (first, second, ()) = tokio::join!(binding.broadcast(), binding.broadcast(), async {
-			request.accept(producer.consume());
+		let prepared = request.prepare(moq_net::Epoch::mint()).unwrap();
+		let (first, second, producer) = tokio::join!(binding.broadcast(), binding.broadcast(), async {
+			prepared.publish().unwrap()
 		});
 		let first = first.unwrap();
 		assert!(!first.is_closed());

@@ -1,6 +1,6 @@
 //! Broadcast paths and the patterns that match them.
 //!
-//! [`Path`] is a literal coordinate: `/`-separated segments, normalized, with
+//! [`Path`] is a literal coordinate: `/`-separated non-empty segments, with
 //! segment-aware prefix operations. [`Pattern`] describes a set of paths with
 //! wildcards, and [`Patterns`] is a union of them reduced by containment. The
 //! grammar and algebra live in [`moq-pattern`](moq_pattern); this module

@@ -660,9 +660,11 @@ async fn hop_limit_bounds_receive_and_send() {
 					.unwrap(),
 			)
 		};
-		let _long = source.dynamic_route(Path::new("long").unwrap(), route(2)).unwrap();
-		let _boundary = source.dynamic_route(Path::new("boundary").unwrap(), route(1)).unwrap();
-		let short = source.dynamic_route(Path::new("short").unwrap(), route(0)).unwrap();
+		let _long = source.publish(moq_net::Path::new("long").unwrap(), route(2)).unwrap();
+		let _boundary = source
+			.publish(moq_net::Path::new("boundary").unwrap(), route(1))
+			.unwrap();
+		let short = source.publish(moq_net::Path::new("short").unwrap(), route(0)).unwrap();
 		moq_clock::sim::idle().await;
 		let received = drain(&mut received);
 		assert!(!received.contains_key("long"), "{name}: accepted over-limit path");
@@ -681,12 +683,12 @@ async fn hop_limit_bounds_receive_and_send() {
 				Some(&Kind::End),
 				"{name}"
 			);
-			let _replacement = source.dynamic_route(Path::new("short").unwrap(), route(1)).unwrap();
+			let _replacement = source.publish(moq_net::Path::new("short").unwrap(), route(1)).unwrap();
 			moq_clock::sim::idle().await;
 			assert!(drain(&mut sent).is_empty(), "{name}: forwarded over-limit replacement");
 			continue;
 		}
-		short.update_route(route(1)).unwrap();
+		short.announce(route(1)).unwrap();
 		moq_clock::sim::idle().await;
 		let ended = drain(&mut sent);
 		assert_eq!(
@@ -741,10 +743,12 @@ async fn hop_limit_falls_back_to_a_forwardable_route() {
 				.with_cost(origin::Cost::new(cost))
 		};
 		// Three hops at the relay once the sender is appended: in the cap, but full.
-		let _cheap = far.dynamic_route(Path::new("room").unwrap(), route(100, 2, 1)).unwrap();
+		let _cheap = far
+			.publish(moq_net::Path::new("room").unwrap(), route(100, 2, 1))
+			.unwrap();
 		// Two hops at the relay, so it has room for the relay's own.
 		let pricey = near
-			.dynamic_route(Path::new("room").unwrap(), route(200, 1, 50))
+			.publish(moq_net::Path::new("room").unwrap(), route(200, 1, 50))
 			.unwrap();
 		moq_clock::sim::idle().await;
 		let started = drain(&mut sent);

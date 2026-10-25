@@ -181,7 +181,8 @@ relay_chain_tests! {
 }
 
 /// A worker claiming `pool` without an epoch, answering each request with an output
-/// whose `video` track carries the worker's name.
+/// whose `video` track carries the worker's name. The claim is a peer's, landed through
+/// the hidden `fuzz` module as a session lands it, so its answers carry no exact route.
 struct Worker {
 	origin: origin::Producer,
 	_claim: Rc<origin::Dynamic>,
@@ -192,8 +193,7 @@ impl Worker {
 	fn new(hop: u64) -> Self {
 		let origin = produce_origin(hop);
 		let claim = Rc::new(
-			origin
-				.dynamic_route(Path::new("pool").unwrap(), origin::Route::default())
+			moq_net::fuzz::dynamic_route(&origin, moq_net::Path::new("pool").unwrap(), origin::Route::default())
 				.unwrap(),
 		);
 		let outputs = Rc::new(RefCell::new(Vec::new()));
@@ -203,7 +203,7 @@ impl Worker {
 				let output = broadcast::Info::new().produce();
 				let track = output.create_track("video", timed()).unwrap();
 				write(&track, &format!("{hop}"));
-				request.accept(&output);
+				moq_net::fuzz::accept(request, &output);
 				served.borrow_mut().push((output, track));
 			}
 		}));
@@ -268,7 +268,9 @@ async fn prefix_pool_lite07() {
 }
 
 /// A claim at `live` whose handler answers each request with a fresh output, kept so
-/// the test can write into it: `outputs[n]` answered the `n`th request.
+/// the test can write into it: `outputs[n]` answered the `n`th request. Only a peer's
+/// claim carries an epoch or re-prices, so it lands through the hidden `fuzz` module as
+/// a session lands it.
 struct Claim {
 	dynamic: Rc<origin::Dynamic>,
 	outputs: Rc<RefCell<Vec<(broadcast::Producer, track::Producer)>>>,
@@ -278,14 +280,15 @@ impl Claim {
 	fn new(origin: &origin::Producer, epoch: Option<Epoch>) -> Self {
 		let mut route = origin::Route::default();
 		route.epoch = epoch;
-		let dynamic = Rc::new(origin.dynamic_route(Path::new("live").unwrap(), route).unwrap());
+		let dynamic =
+			Rc::new(moq_net::fuzz::dynamic_route(origin, moq_net::Path::new("live").unwrap(), route).unwrap());
 		let outputs = Rc::new(RefCell::new(Vec::new()));
 		let (handler, served) = (dynamic.clone(), outputs.clone());
 		drop(moq_clock::sim::spawn(async move {
 			while let Ok(request) = handler.requested_broadcast().await {
 				let output = broadcast::Info::new().produce();
 				let track = output.create_track("video", timed()).unwrap();
-				request.accept(&output);
+				moq_net::fuzz::accept(request, &output);
 				served.borrow_mut().push((output, track));
 			}
 		}));
@@ -305,7 +308,11 @@ impl Claim {
 	fn update_epoch(&self, epoch: Option<Epoch>) {
 		let mut route = self.dynamic.route();
 		route.epoch = epoch;
-		self.dynamic.update_route(route).unwrap();
+		self.update_route(route);
+	}
+
+	fn update_route(&self, route: origin::Route) {
+		moq_net::fuzz::update_route(&self.dynamic, route).unwrap();
 	}
 }
 
@@ -333,7 +340,7 @@ async fn dynamic_epoch(version: &str, from: Option<Epoch>, to: Option<Epoch>) {
 	assert_eq!(read(&mut sticky).await, "old:0", "{version}");
 
 	// A re-price at the same epoch is an update at most: every handle survives.
-	claim.dynamic.update_route(claim.dynamic.route().with_cost(5)).unwrap();
+	claim.update_route(claim.dynamic.route().with_cost(5));
 	while let Ok(event) = moq_clock::timeout(Duration::from_secs(1), announced.next()).await {
 		assert!(
 			matches!(event, Some(announce::Event::Update(_))),
@@ -414,12 +421,9 @@ async fn dynamic_epoch_second_route_keeps_winning() {
 	let (a, _) = epochs();
 	let origin = produce_origin(1);
 	let first = Claim::new(&origin, Some(a.clone()));
-	first.dynamic.update_route(first.dynamic.route().with_cost(1)).unwrap();
+	first.update_route(first.dynamic.route().with_cost(1));
 	let second = Claim::new(&origin, Some(a.clone()));
-	second
-		.dynamic
-		.update_route(second.dynamic.route().with_cost(5))
-		.unwrap();
+	second.update_route(second.dynamic.route().with_cost(5));
 	let mut announced = origin.consume().announced();
 	match next_event(&mut announced).await {
 		announce::Event::Start(announce) => assert_eq!(announce.route.epoch.as_ref(), Some(&a)),

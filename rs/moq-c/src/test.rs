@@ -3764,12 +3764,11 @@ fn consume_announced_delivers_a_takeover_once(dynamic_at: &str) {
 	let dynamic = {
 		let _runtime = crate::ffi::RUNTIME.enter();
 		let origin = crate::Id::try_from(origin).unwrap();
-		let route = moq_net::origin::Route::default();
 		State::lock()
 			.origin
 			.get(origin)
 			.unwrap()
-			.dynamic_route(Path::new(dynamic_at).unwrap(), route)
+			.dynamic(Path::new(dynamic_at).unwrap())
 			.unwrap()
 	};
 	let cb = Callback::new();
@@ -3812,15 +3811,15 @@ fn consume_announced_delivers_a_held_takeover_once() {
 	consume_announced_delivers_a_takeover_once("live");
 }
 
-/// Serve `prefix` on `origin` dynamically through `route`.
-fn serve_dynamic(origin: u32, prefix: &str, route: moq_net::origin::Route) -> moq_net::origin::Dynamic {
+/// Serve `prefix` on `origin` dynamically.
+fn serve_dynamic(origin: u32, prefix: &str) -> moq_net::origin::Dynamic {
 	let _runtime = crate::ffi::RUNTIME.enter();
 	let origin = crate::Id::try_from(origin).unwrap();
 	State::lock()
 		.origin
 		.get(origin)
 		.unwrap()
-		.dynamic_route(Path::new(prefix).unwrap(), route)
+		.dynamic(Path::new(prefix).unwrap())
 		.unwrap()
 }
 
@@ -3853,9 +3852,9 @@ extern "C" fn gated_callback(user_data: *mut c_void, code: i32) {
 	}
 }
 
-/// An end is a gap that ended every request on the old route, even when a route above the path
-/// with the same epoch carries the instance on. So the instance serving the path afterwards is
-/// delivered again, though the caller still holds its handle.
+/// An end is a gap that ended every request on the old route, even when a claim above the path
+/// answers under the same epoch. So the instance serving the path afterwards is delivered again,
+/// though the caller still holds a handle to its epoch.
 #[test]
 fn consume_announced_delivers_the_instance_again_after_an_end() {
 	let origin = id(moq_origin_create());
@@ -3883,7 +3882,7 @@ fn consume_announced_delivers_the_instance_again_after_an_end() {
 
 	// Hold the wait inside that delivery so both changes are on hand when it next looks. Seeing
 	// the route above stand before the path's own route left would prove no gap: an update.
-	let dynamic = serve_dynamic(origin, "", route);
+	let dynamic = serve_dynamic(origin, "");
 	{
 		let _runtime = crate::ffi::RUNTIME.enter();
 		run.unannounce();
@@ -3892,9 +3891,8 @@ fn consume_announced_delivers_the_instance_again_after_an_end() {
 	let request = crate::ffi::RUNTIME.block_on(dynamic.requested_broadcast()).unwrap();
 	let served = {
 		let _runtime = crate::ffi::RUNTIME.enter();
-		let served = moq_net::broadcast::Info::new().produce();
-		request.accept(served.consume());
-		served
+		let epoch = route.epoch.clone().unwrap();
+		request.prepare(epoch).unwrap().publish().unwrap()
 	};
 	let again = id(recv());
 
@@ -3911,7 +3909,7 @@ fn consume_announced_delivers_the_instance_again_after_an_end() {
 #[test]
 fn consume_announced_delivers_a_freed_takeover_again() {
 	let origin = id(moq_origin_create());
-	let dynamic = serve_dynamic(origin, "live", moq_net::origin::Route::default());
+	let dynamic = serve_dynamic(origin, "live");
 	let cb = Callback::new();
 	let task = consume_announced(origin, b"live", &cb);
 
@@ -3934,7 +3932,7 @@ fn consume_announced_delivers_a_freed_takeover_again() {
 #[test]
 fn consume_announced_delivers_a_gap_while_resolving_once() {
 	let origin = id(moq_origin_create());
-	let dynamic = serve_dynamic(origin, "", moq_net::origin::Route::default());
+	let dynamic = serve_dynamic(origin, "");
 	let cb = Callback::new();
 	let task = consume_announced(origin, b"live", &cb);
 

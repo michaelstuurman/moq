@@ -59,7 +59,7 @@ fn peer_route(peer: u64, cost: u64) -> origin::Route {
 fn churn_allocs(root: &str, cursors: usize) -> usize {
 	let (producer, _driver) = origin::Producer::new(origin::Config::default());
 	let _winner = producer
-		.dynamic_route(Path::new("room/a").unwrap(), peer_route(1, 1))
+		.publish(moq_net::Path::new("room/a").unwrap(), peer_route(1, 1))
 		.unwrap();
 	let all = Patterns::from(Pattern::all());
 	let mut cursors: Vec<_> = (0..cursors)
@@ -78,7 +78,7 @@ fn churn_allocs(root: &str, cursors: usize) -> usize {
 	let cycle = || {
 		drop(
 			producer
-				.dynamic_route(Path::new("room/a").unwrap(), peer_route(2, 5))
+				.publish(moq_net::Path::new("room/a").unwrap(), peer_route(2, 5))
 				.unwrap(),
 		)
 	};
