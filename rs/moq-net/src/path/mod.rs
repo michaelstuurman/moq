@@ -51,7 +51,7 @@ impl AsPath for Path<'_> {
 /// A borrowed slice of the path, or a suffix of a shared reference-counted buffer.
 ///
 /// The `Shared` variant is what makes owned paths cheap: cloning bumps a refcount and
-/// suffix operations (strip_prefix, next_part) only advance `start`, so one allocation
+/// suffix operations (strip_prefix) only advance `start`, so one allocation
 /// serves every copy of a path as it fans out to consumers.
 #[derive(Clone)]
 enum Repr<'a> {
@@ -227,20 +227,6 @@ impl<'a> Path<'a> {
 		// Segments are never empty, but splitting the empty path would yield one.
 		let s = self.as_str();
 		(!s.is_empty()).then(|| s.split('/')).into_iter().flatten()
-	}
-
-	/// Strip the directory component of the path, if any, and return the rest of the path.
-	pub fn next_part(&'a self) -> Option<(&'a str, Path<'a>)> {
-		let s = self.as_str();
-		if s.is_empty() {
-			return None;
-		}
-
-		if let Some(i) = s.find('/') {
-			Some((&s[..i], self.slice_from(i + 1)))
-		} else {
-			Some((s, Path::empty()))
-		}
 	}
 
 	/// Whether a segment starts with `.`, which hides the path from announce
@@ -905,12 +891,6 @@ mod tests {
 		let stripped = path.strip_prefix(p("customer")).unwrap().to_owned();
 		assert_eq!(stripped.as_str(), "room/broadcast");
 		assert_eq!(stripped.as_str().as_ptr(), path.as_str()["customer/".len()..].as_ptr());
-
-		// next_part shares the rest as well.
-		let (dir, rest) = path.next_part().unwrap();
-		assert_eq!(dir, "customer");
-		let rest = rest.to_owned();
-		assert_eq!(rest.as_str().as_ptr(), stripped.as_str().as_ptr());
 
 		// join produces an owned path whose clones share.
 		let joined = path.join(p("alice"));

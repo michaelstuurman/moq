@@ -62,9 +62,9 @@ fn bench_land(c: &mut Criterion) {
 			let prefix = Path::new("room/incoming").unwrap();
 			b.iter(|| {
 				let snapshot = fuzz::snapshot(&table.producer, &prefix);
-				assert!(!watcher.is_synced());
+				assert!(!watcher.poll_synced(&moq_net::kio::Waiter::noop()).is_ready());
 				drop(snapshot);
-				assert!(watcher.is_synced());
+				assert!(watcher.poll_synced(&moq_net::kio::Waiter::noop()).is_ready());
 			});
 		});
 	}
@@ -81,7 +81,7 @@ fn bench_register(c: &mut Criterion) {
 			let _held = fuzz::snapshot(&table.producer, &Path::new("room/incoming").unwrap());
 			b.iter(|| {
 				let watcher = incoming.announced();
-				assert!(!watcher.is_synced());
+				assert!(!watcher.poll_synced(&moq_net::kio::Waiter::noop()).is_ready());
 			});
 		});
 	}

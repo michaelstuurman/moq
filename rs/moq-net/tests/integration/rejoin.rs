@@ -361,7 +361,7 @@ async fn rejoin_goes_live_without_the_join_head() {
 /// copy idle, or it takes the cached group as the live edge.
 #[moq_clock::test]
 async fn rejoin_during_the_cancel_skips_the_cache() {
-	for version in Version::names() {
+	for version in support::every_version() {
 		moq_clock::timeout(TEST_TIMEOUT, async {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
@@ -370,7 +370,7 @@ async fn rejoin_during_the_cancel_skips_the_cache() {
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
-			let mut options = MockConnectOptions::new(version.parse::<Version>().unwrap());
+			let mut options = MockConnectOptions::new(version);
 			options.server_publish = Some(publisher.consume());
 			options.client_subscribe = Some(relay.clone());
 			options.latency = Duration::from_millis(50);
@@ -425,7 +425,10 @@ async fn rejoin_waits_for_the_answers_first_frame() {
 	// Lite01/02 carry no max age, so the publisher serves the relay's cached head again and
 	// that answer is what makes the cache current.
 	let unbudgeted = ["moq-lite-01", "moq-lite-02"];
-	for version in Version::names().filter(|version| !unbudgeted.contains(version)) {
+	for version in support::every_version()
+		.into_iter()
+		.filter(|version| !unbudgeted.contains(&version.as_str()))
+	{
 		moq_clock::timeout(TEST_TIMEOUT, async {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
@@ -434,7 +437,7 @@ async fn rejoin_waits_for_the_answers_first_frame() {
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
-			let mut options = MockConnectOptions::new(version.parse::<Version>().unwrap());
+			let mut options = MockConnectOptions::new(version);
 			options.server_publish = Some(publisher.consume());
 			options.client_subscribe = Some(relay.clone());
 			let pair = connect_mock(options).await;
