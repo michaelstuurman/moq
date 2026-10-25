@@ -47,7 +47,11 @@ export async function refuse(stream: Stream, version: IetfVersion, kind: Request
  */
 export const refuseUpdate = writeRefusal;
 
-/** Refuse an unrecognized reserved namespace before it reaches the application. */
+/**
+ * Refuse an unrecognized reserved namespace before it reaches the application.
+ *
+ * @internal
+ */
 export async function refuseReserved(request: RequestStream): Promise<void> {
 	await request.refuse("subscribe", {
 		condition: "does_not_exist",

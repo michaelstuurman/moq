@@ -1,7 +1,7 @@
 /**
  * The moq-transport error code registries, per negotiated draft.
  *
- * Draft-19 added INVALID_FILTER and draft-20 removed INVALID_JOINING_REQUEST_ID; the rest
+ * Draft-22 added INVALID_FILTER and removed INVALID_JOINING_REQUEST_ID; the rest
  * holds from draft-18 on. Mirrors the Rust `moq_net::ietf::error` module, and the two have
  * to agree value for value.
  *
@@ -85,11 +85,11 @@ const DOES_NOT_EXIST = 0x10;
 const MALFORMED_TRACK = 0x12;
 const UNINTERESTED = 0x20;
 
-/** FETCH-only errors. INVALID_JOINING_REQUEST_ID was removed in draft-20. */
+/** FETCH-only errors. Draft-22 has no INVALID_JOINING_REQUEST_ID. */
 const INVALID_RANGE = 0x11;
 const INVALID_JOINING_REQUEST_ID = 0x32;
 
-/** Draft-19 added it. */
+/** Draft-22 added it. */
 const INVALID_FILTER = 0x36;
 
 function invalidRange(kind: RequestKind): number | undefined {
@@ -97,7 +97,7 @@ function invalidRange(kind: RequestKind): number | undefined {
 }
 
 function invalidJoiningRequestId(kind: RequestKind, version: IetfVersion): number | undefined {
-	return kind === "fetch" && version <= Version.DRAFT_19 ? INVALID_JOINING_REQUEST_ID : undefined;
+	return kind === "fetch" && version <= Version.DRAFT_18 ? INVALID_JOINING_REQUEST_ID : undefined;
 }
 
 /**
@@ -112,7 +112,7 @@ function invalidJoiningRequestId(kind: RequestKind, version: IetfVersion): numbe
 export function toRequestCode(condition: RequestCondition, kind: RequestKind, version: IetfVersion): number {
 	switch (condition) {
 		case "invalid_filter":
-			return version >= Version.DRAFT_19 ? INVALID_FILTER : INTERNAL_ERROR;
+			return version >= Version.DRAFT_22 ? INVALID_FILTER : INTERNAL_ERROR;
 		case "internal":
 			return INTERNAL_ERROR;
 		case "unauthorized":
@@ -161,7 +161,7 @@ export function fromRequestCode(code: number, kind: RequestKind, version: IetfVe
 			return "not_supported";
 	}
 
-	if (code === INVALID_FILTER && version >= Version.DRAFT_19) return "invalid_filter";
+	if (code === INVALID_FILTER && version >= Version.DRAFT_22) return "invalid_filter";
 	if (code === DOES_NOT_EXIST) return "does_not_exist";
 	if (code === invalidRange(kind)) return "invalid_range";
 	if (code === invalidJoiningRequestId(kind, version)) return "invalid_joining_request_id";

@@ -128,13 +128,7 @@ mod tests {
 	/// carries LARGEST_OBJECT; neither is rejected.
 	#[test]
 	fn test_request_ok_ignores_largest_object() {
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft20,
-			Version::Draft21,
-			Version::Draft22,
-		] {
+		for version in [Version::Draft18, Version::Draft22] {
 			for bytes in [&[0x01, 0x08, 0x05][..], &[0x01, 0x09, 0x05, 0x03]] {
 				let mut buf = Decoder::new(bytes, version.into());
 				RequestOk::decode_msg(&mut buf, version).unwrap_or_else(|e| panic!("{version}: {e}"));

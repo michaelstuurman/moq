@@ -23,7 +23,7 @@ pub struct TrackStatus<'a> {
 	pub track_namespace: Path<'a>,
 	pub track_name: Cow<'a, str>,
 	/// Whether the requester wants Track Properties on the answer (INCLUDE_PROPERTIES,
-	/// draft-20).
+	/// draft-22).
 	pub properties_wanted: bool,
 	/// The publisher instance the requester expects (MoQ Epoch).
 	pub epoch: Option<crate::Epoch>,
@@ -39,7 +39,7 @@ impl Message for TrackStatus<'_> {
 
 		// Only the opt-out is worth bytes, and an older peer would read the
 		// parameter as unknown, which is a protocol violation.
-		let include_properties = (!self.properties_wanted && Filter::is_draft20(version)).then_some(false);
+		let include_properties = (!self.properties_wanted && Filter::is_draft22(version)).then_some(false);
 		let epoch = self.epoch.clone();
 		encode_params!(w, version,
 			0x35 => include_properties,
@@ -165,18 +165,12 @@ mod tests {
 		assert_eq!(decoded.track_name, "video");
 	}
 
-	const ALL: [Version; 5] = [
-		Version::Draft18,
-		Version::Draft19,
-		Version::Draft20,
-		Version::Draft21,
-		Version::Draft22,
-	];
+	const ALL: [Version; 2] = [Version::Draft18, Version::Draft22];
 
-	/// INCLUDE_PROPERTIES only exists from draft-20, so the opt-out is dropped before it,
+	/// INCLUDE_PROPERTIES only exists from draft-22, so the opt-out is dropped before it,
 	/// and the default (1) is never written.
 	#[test]
-	fn test_track_status_opts_out_of_properties_from_draft_20() {
+	fn test_track_status_opts_out_of_properties_from_draft_22() {
 		for version in ALL {
 			for wanted in [true, false] {
 				let msg = TrackStatus {
@@ -188,7 +182,7 @@ mod tests {
 				};
 				let decoded: TrackStatus = decode_message(&encode_message(&msg, version), version)
 					.unwrap_or_else(|e| panic!("{version}: {e}"));
-				let expected = wanted || !Filter::is_draft20(version);
+				let expected = wanted || !Filter::is_draft22(version);
 				assert_eq!(decoded.properties_wanted, expected, "{version} wanted={wanted}");
 			}
 		}
@@ -235,7 +229,7 @@ mod tests {
 
 		#[rustfmt::skip]
 		let cases: [(Version, &[u8]); 1] = [
-			(Version::Draft20, &[
+			(Version::Draft22, &[
 				0x02, // Number of Parameters
 				0x03, 0x03, 0x03, 0x00, 0xAA, // AUTHORIZATION TOKEN
 				0x32, 0x00, // INCLUDE_PROPERTIES (0x35) = 0
@@ -249,7 +243,7 @@ mod tests {
 			let msg = TrackStatus::decode_msg(&mut buf, version).unwrap_or_else(|e| panic!("{version}: {e}"));
 			assert!(buf.is_empty(), "{version}: trailing bytes");
 			assert_eq!(msg.track_name, "video", "{version}");
-			assert_eq!(msg.properties_wanted, version != Version::Draft20, "{version}");
+			assert_eq!(msg.properties_wanted, version != Version::Draft22, "{version}");
 		}
 	}
 }

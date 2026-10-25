@@ -82,15 +82,7 @@ async function acceptInner(
 	if (protocol === Ietf.ALPN.DRAFT_22) {
 		return acceptAlpn(transport, url, Ietf.Version.DRAFT_22, wiring);
 	}
-	if (protocol === Ietf.ALPN.DRAFT_21) {
-		return acceptAlpn(transport, url, Ietf.Version.DRAFT_21, wiring);
-	}
-	if (protocol === Ietf.ALPN.DRAFT_20) {
-		return acceptAlpn(transport, url, Ietf.Version.DRAFT_20, wiring);
-	}
-	if (protocol === Ietf.ALPN.DRAFT_19) {
-		return acceptAlpn(transport, url, Ietf.Version.DRAFT_19, wiring);
-	} else if (protocol === Ietf.ALPN.DRAFT_18) {
+	if (protocol === Ietf.ALPN.DRAFT_18) {
 		return acceptAlpn(transport, url, Ietf.Version.DRAFT_18, wiring);
 	} else if (protocol === Lite.ALPN_07_WIP) {
 		return new Lite.Connection({ url, quic: transport, version: Lite.Version.DRAFT_07, ...wiring });

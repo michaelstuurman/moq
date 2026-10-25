@@ -16,7 +16,7 @@ export class TrackStatusRequest {
 	requestId: bigint;
 	trackNamespace: Path.Valid;
 	trackName: string;
-	/** Whether the requester wants Track Properties on the answer (INCLUDE_PROPERTIES, draft-20). */
+	/** Whether the requester wants Track Properties on the answer (INCLUDE_PROPERTIES, draft-22). */
 	propertiesWanted: boolean;
 	/** The publisher instance the requester expects (EPOCH, MoQ Epoch). */
 	epoch?: Epoch.Valid;
@@ -46,10 +46,10 @@ export class TrackStatusRequest {
 		await Namespace.encode(w, this.trackNamespace);
 		await w.string(this.trackName);
 
-		// Only the opt-out is worth bytes, and a peer before draft-20 would read
+		// Only the opt-out is worth bytes, and a peer before draft-22 would read
 		// INCLUDE_PROPERTIES as unknown, which is a protocol violation.
 		const params = new Parameters();
-		if (!this.propertiesWanted && Filter.isDraft20(version)) params.includeProperties = false;
+		if (!this.propertiesWanted && Filter.isDraft22(version)) params.includeProperties = false;
 		params.epoch = this.epoch;
 		await params.encode(w, version);
 	}

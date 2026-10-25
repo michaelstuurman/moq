@@ -29,14 +29,13 @@ const PAYLOAD: &[u8] = b"frame";
 /// How long a subscriber waits for a group it cannot account for, with no max delay set.
 const GRACE: Duration = Duration::from_secs(1);
 
-/// moq-lite drafts with and without SUBSCRIBE_END, and IETF drafts over the control stream
-/// adapter (14), on their own streams (17), and with subscription fills (20+).
+/// moq-lite drafts with and without SUBSCRIBE_END, and IETF drafts with a joining
+/// FETCH (18) and with subscription fills (22).
 const VERSIONS: &[&str] = &[
 	"moq-lite-03",
 	"moq-lite-05",
 	"moq-lite-07-wip",
 	"moq-transport-18",
-	"moq-transport-20",
 	"moq-transport-22",
 ];
 
@@ -68,7 +67,7 @@ struct Pair {
 	track: moq_net::track::Producer,
 	remote: moq_net::broadcast::Consumer,
 	_keep: (
-		moq_net::broadcast::Producer,
+		moq_net::origin::Publication,
 		moq_net::origin::Producer,
 		moq_net::origin::Producer,
 	),
@@ -143,7 +142,7 @@ async fn round(version: &str, late: Late, final_sequence: u64) -> Outcome {
 	moq_clock::timeout(TIMEOUT, support::harness::subscribed(&track))
 		.await
 		.expect("no subscriber appeared");
-	// Let the publisher answer while the track is still empty. Before draft 20, a group
+	// Let the publisher answer while the track is still empty. Before draft 22, a group
 	// written first sits below SUBSCRIBE_OK's Largest Object, so it would arrive as a
 	// joining FETCH, which the track ending first refuses, not as the subscription's own
 	// late stream. Paused time advances only once every task is idle.
@@ -257,9 +256,8 @@ async fn lite07_empty_track_ends_without_the_grace() {
 	assert!(outcome.elapsed < GRACE / 10, "ended after {:?}", outcome.elapsed);
 }
 
-/// IETF drafts over the control stream adapter (14), on their own streams (17), and with
-/// subscription fills (20+).
-const IETF: &[&str] = &["moq-transport-18", "moq-transport-20", "moq-transport-22"];
+/// IETF drafts with a joining FETCH (18) and with subscription fills (22).
+const IETF: &[&str] = &["moq-transport-18", "moq-transport-22"];
 
 /// A subscriber that leaves while END_OF_TRACK waits for stream credit ends the publisher's
 /// request, instead of parking it until credit that may never come.

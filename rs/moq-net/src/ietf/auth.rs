@@ -560,7 +560,7 @@ mod tests {
 	#[cfg(feature = "async")]
 	#[moq_clock::test]
 	async fn auth_refused_without_credit_spends_no_request_id() {
-		for version in [Version::Draft19] {
+		for version in [Version::Draft18] {
 			for client in [false, true] {
 				let first = if client { 0 } else { 1 };
 				let control = Control::new(client);
@@ -604,13 +604,7 @@ mod tests {
 	/// Every draft that negotiates the extension round-trips the option.
 	#[test]
 	fn setup_option_round_trips_on_supported_drafts() {
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft20,
-			Version::Draft21,
-			Version::Draft22,
-		] {
+		for version in [Version::Draft18, Version::Draft22] {
 			let mut params = super::super::Parameters::default();
 			assert_eq!(from_setup(&params), None);
 			into_setup(&mut params);

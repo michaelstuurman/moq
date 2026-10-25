@@ -100,7 +100,7 @@ export class Publish {
 
 		const params = await Parameters.decode(r, version, "publish");
 		const properties = await Properties.decode(r, version);
-		// GROUP_ORDER is legal here from draft-20; draft-18 and 19 close the session.
+		// GROUP_ORDER is legal here from draft-22; draft-18 closes the session.
 		const groupOrder = properties.groupOrder ?? params.groupOrder ?? 0x02;
 		const forward = params.forward ?? true;
 		const largest = params.largest;
@@ -125,7 +125,7 @@ export const PublishDoneStatus = {
 	INTERNAL_ERROR: 0x0,
 	UNAUTHORIZED: 0x1,
 	TRACK_ENDED: 0x2,
-	/** Removed in draft-20, where 0x3 is unassigned. */
+	/** Unassigned in draft-22. */
 	SUBSCRIPTION_ENDED: 0x3,
 	UPDATE_FAILED: 0x8,
 } as const;
@@ -136,7 +136,6 @@ export function publishDoneClean(statusCode: number, version: IetfVersion): bool
 	if (statusCode !== PublishDoneStatus.SUBSCRIPTION_ENDED) return false;
 	switch (version) {
 		case Version.DRAFT_18:
-		case Version.DRAFT_19:
 			return true;
 		default:
 			return false;

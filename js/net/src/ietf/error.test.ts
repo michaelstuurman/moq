@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { fromRequestCode, type RequestCondition, type RequestKind, toRequestCode } from "./error.ts";
 import { type IetfVersion, Version } from "./version.ts";
 
-const ALL: IetfVersion[] = [Version.DRAFT_18, Version.DRAFT_19, Version.DRAFT_20, Version.DRAFT_21, Version.DRAFT_22];
+const ALL: IetfVersion[] = [Version.DRAFT_18, Version.DRAFT_22];
 
 const KINDS: RequestKind[] = [
 	"subscribe",
@@ -43,7 +43,7 @@ test("fetch refusal codes follow each draft registry", () => {
 		const range = 0x11;
 		expect(toRequestCode("invalid_range", "fetch", version)).toBe(range);
 		expect(fromRequestCode(range, "fetch", version)).toBe("invalid_range");
-		const joining = version <= Version.DRAFT_19 ? 0x32 : undefined;
+		const joining = version <= Version.DRAFT_18 ? 0x32 : undefined;
 		expect(toRequestCode("invalid_joining_request_id", "fetch", version)).toBe(joining ?? 0);
 		if (joining !== undefined)
 			expect(fromRequestCode(joining, "fetch", version)).toBe("invalid_joining_request_id");
@@ -84,11 +84,11 @@ test("going away is 0x6 on every request", () => {
 	}
 });
 
-test("INVALID_FILTER is registered from draft 19", () => {
+test("INVALID_FILTER is registered from draft 22", () => {
 	for (const version of ALL) {
-		expect(toRequestCode("invalid_filter", "subscribe", version)).toBe(version >= Version.DRAFT_19 ? 0x36 : 0);
+		expect(toRequestCode("invalid_filter", "subscribe", version)).toBe(version >= Version.DRAFT_22 ? 0x36 : 0);
 		expect(fromRequestCode(0x36, "fetch", version)).toBe(
-			version >= Version.DRAFT_19 ? "invalid_filter" : undefined,
+			version >= Version.DRAFT_22 ? "invalid_filter" : undefined,
 		);
 	}
 });

@@ -167,7 +167,7 @@ macro_rules! relay_chain_tests {
 relay_chain_tests! {
 	relay_chain_lite06: "moq-lite-06",
 	relay_chain_lite07: "moq-lite-07-wip",
-	relay_chain_ietf19: "moq-transport-19",
+	relay_chain_ietf18: "moq-transport-18",
 	relay_chain_ietf22: "moq-transport-22",
 }
 
@@ -396,7 +396,7 @@ macro_rules! dynamic_epoch_tests {
 dynamic_epoch_tests! {
 	dynamic_epoch_lite06: "moq-lite-06",
 	dynamic_epoch_lite07: "moq-lite-07-wip",
-	dynamic_epoch_ietf19: "moq-transport-19",
+	dynamic_epoch_ietf18: "moq-transport-18",
 	dynamic_epoch_ietf22: "moq-transport-22",
 }
 
@@ -521,9 +521,6 @@ retired_fetch_tests! {
 	retired_fetch_lite06: "moq-lite-06",
 	retired_fetch_lite07: "moq-lite-07-wip",
 	retired_fetch_ietf18: "moq-transport-18",
-	retired_fetch_ietf19: "moq-transport-19",
-	retired_fetch_ietf20: "moq-transport-20",
-	retired_fetch_ietf21: "moq-transport-21",
 	retired_fetch_ietf22: "moq-transport-22",
 }
 
@@ -589,7 +586,7 @@ async fn a_more_specific_source_cannot_fill_a_held_covering_track() {
 /// fresh epoch and published at its exact path, and `outputs[path]` holds the latest.
 struct Pool {
 	_claim: Rc<origin::Dynamic>,
-	outputs: Rc<RefCell<std::collections::HashMap<String, (broadcast::Producer, track::Producer)>>>,
+	outputs: Rc<RefCell<std::collections::HashMap<String, (origin::Publication, track::Producer)>>>,
 	answered: Rc<RefCell<usize>>,
 }
 

@@ -812,8 +812,8 @@ test("open waits for a stream slot instead of rejecting once the peer's limit is
 // arrived in draft-17, and moq-lite's own 48-63 codes are in no draft at all.
 for (const [version, tooFarBehind] of [
 	[QUIC, StreamCode.TooFarBehind],
-	[Version.DRAFT_19, StreamCode.TooFarBehind],
-	[Version.DRAFT_20, StreamCode.TooFarBehind],
+	[Version.DRAFT_18, StreamCode.TooFarBehind],
+	[Version.DRAFT_22, StreamCode.TooFarBehind],
 ] as const) {
 	test(`stream resets select the negotiated registry (${version})`, async () => {
 		for (const [reason, expected] of [
@@ -950,7 +950,7 @@ test("reset codes the registries share decode alike, and the rest as INTERNAL_ER
 test("Writer and Reader varint round-trip every size in both formats", async () => {
 	const values = [0n, 63n, 64n, 127n, 128n, 2n ** 14n, 2n ** 21n, 2n ** 28n, 2n ** 30n, 2n ** 32n, 2n ** 35n];
 	values.push(2n ** 42n, 2n ** 49n, 2n ** 53n, 2n ** 56n, 2n ** 62n - 1n);
-	for (const version of [Lite.DRAFT_06, Lite.DRAFT_07, Version.DRAFT_19]) {
+	for (const version of [Lite.DRAFT_06, Lite.DRAFT_07, Version.DRAFT_18]) {
 		// Only leading-ones varints reach past 62 bits.
 		const all = version === Lite.DRAFT_06 ? values : [...values, 2n ** 62n, 2n ** 64n - 1n];
 		const { stream, written } = createTestWritableStream();

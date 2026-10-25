@@ -6,8 +6,8 @@ use crate::origin;
 use crate::time::{Deadlines, Instant};
 use crate::transport::poll::Session as _;
 use crate::{
-	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06,
-	ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, SessionError, Version, Versions,
+	ALPN_18, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06, ALPN_LITE_07_WIP, Consume,
+	Error, NEGOTIATED, Session, SessionError, Version, Versions,
 	coding::{Encode, Stream},
 	ietf, lite,
 	setup::{self, Role},
@@ -350,12 +350,9 @@ impl Server {
 
 	async fn handshake(&self, runtime: Deadlines, mut session: Transport) -> Result<Handshake, Error> {
 		let supported = match session.protocol() {
-			Some(alpn @ (ALPN_22 | ALPN_21 | ALPN_20 | ALPN_19 | ALPN_18)) => {
+			Some(alpn @ (ALPN_22 | ALPN_18)) => {
 				let draft = match alpn {
 					ALPN_22 => ietf::Version::Draft22,
-					ALPN_21 => ietf::Version::Draft21,
-					ALPN_20 => ietf::Version::Draft20,
-					ALPN_19 => ietf::Version::Draft19,
 					_ => ietf::Version::Draft18,
 				};
 
@@ -1277,7 +1274,7 @@ mod tests {
 			(Error::Unauthorized, Some(stats::Failure::Application)),
 		] {
 			let registry = stats::Registry::new(Default::default());
-			let session = FakeSession::new(ALPN_19, [ietf_setup(ietf::Version::Draft19, None)]);
+			let session = FakeSession::new(ALPN_22, [ietf_setup(ietf::Version::Draft22, None)]);
 			Server::new()
 				.accept_request(moq_clock::now(), session)
 				.await
@@ -1295,10 +1292,10 @@ mod tests {
 	#[moq_clock::test]
 	async fn accept_request_exposes_the_setup_token() {
 		let ietf = FakeSession::new(
-			ALPN_19,
+			ALPN_22,
 			[ietf_setup_with(
-				ietf::Version::Draft19,
-				token_params(ietf::Version::Draft19),
+				ietf::Version::Draft22,
+				token_params(ietf::Version::Draft22),
 			)],
 		);
 		let request = Server::new().accept_request(moq_clock::now(), ietf).await.unwrap();
@@ -1307,9 +1304,9 @@ mod tests {
 
 	#[moq_clock::test]
 	async fn accept_request_without_a_token_reports_none() {
-		let ietf = FakeSession::new(ALPN_19, [ietf_setup(ietf::Version::Draft19, None)]);
+		let ietf = FakeSession::new(ALPN_22, [ietf_setup(ietf::Version::Draft22, None)]);
 		let lite = FakeSession::new(ALPN_LITE_05, [lite05_setup(None, None, None)]);
-		for (name, session) in [("draft-19", ietf), ("lite-05", lite)] {
+		for (name, session) in [("draft-22", ietf), ("lite-05", lite)] {
 			let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
 			assert_eq!(request.token(), None, "{name}");
 		}
@@ -1327,7 +1324,7 @@ mod tests {
 			let mut params = ietf::Parameters::default();
 			params.set_bytes(ietf::ParameterBytes::AuthorizationToken, raw.to_vec());
 
-			let session = FakeSession::new(ALPN_19, [ietf_setup_with(ietf::Version::Draft19, params)]);
+			let session = FakeSession::new(ALPN_22, [ietf_setup_with(ietf::Version::Draft22, params)]);
 			let result = Server::new().accept_request(moq_clock::now(), session.clone()).await;
 			assert!(result.is_err());
 			assert_eq!(session.close_code(), Some(code.to_code()), "{code}");
@@ -1338,7 +1335,7 @@ mod tests {
 	async fn accept_request_reads_ietf_path() {
 		// Every draft gates on the SETUP stream before starting, so the
 		// path is known at authorization time just like lite-05.
-		for (alpn, version) in [(ALPN_18, ietf::Version::Draft18), (ALPN_19, ietf::Version::Draft19)] {
+		for (alpn, version) in [(ALPN_18, ietf::Version::Draft18), (ALPN_22, ietf::Version::Draft22)] {
 			let session = FakeSession::new(alpn, [ietf_setup(version, Some("/team/room"))]);
 			let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
 			assert_eq!(request.path(), "/team/room", "{alpn}");
@@ -1347,14 +1344,14 @@ mod tests {
 
 	#[moq_clock::test]
 	async fn accept_request_ietf_without_path_is_empty() {
-		let session = FakeSession::new(ALPN_19, [ietf_setup(ietf::Version::Draft19, None)]);
+		let session = FakeSession::new(ALPN_22, [ietf_setup(ietf::Version::Draft22, None)]);
 		let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
 		assert_eq!(request.path(), "");
 	}
 
 	#[moq_clock::test]
 	async fn accept_request_ietf_empty_path_is_accepted() {
-		let session = FakeSession::new(ALPN_19, [ietf_setup(ietf::Version::Draft19, Some(""))]);
+		let session = FakeSession::new(ALPN_22, [ietf_setup(ietf::Version::Draft22, Some(""))]);
 		let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
 		assert_eq!(request.path(), "");
 	}

@@ -46,7 +46,7 @@ const VERSIONS: &[&str] = &[
 	"moq-lite-06",
 	"moq-lite-07-wip",
 	"moq-transport-18",
-	"moq-transport-20",
+	"moq-transport-22",
 ];
 
 fn produce_origin(hop: u64) -> origin::Producer {
@@ -144,7 +144,7 @@ async fn frames_arrive_as_published() {
 #[moq_clock::test]
 async fn a_relay_forwards_an_untimed_track_untimed() {
 	for hops in [
-		&["moq-transport-18", "moq-transport-20"][..],
+		&["moq-transport-18", "moq-transport-22"][..],
 		&["moq-lite-07-wip", "moq-lite-07-wip"][..],
 	] {
 		let (frame, info) = frame_through(hops, untimed()).await;
@@ -162,11 +162,11 @@ async fn a_relay_forwards_an_untimed_track_untimed() {
 /// moq-transport: only an unfloored subscriber jumps to the latest group.
 ///
 /// The subscription asks for history the way a resume does, with a budget covering it.
-/// moq-transport before draft 20 can only join a past group through a joining FETCH,
-/// which our publisher refuses for groups before the live one, so draft 20 stands in for it.
+/// moq-transport before draft 22 can only join a past group through a joining FETCH,
+/// which our publisher refuses for groups before the live one, so draft 22 stands in for it.
 #[moq_clock::test]
 async fn an_explicit_start_holds_on_an_untimed_track() {
-	for version in ["moq-lite-03", "moq-lite-06", "moq-lite-07-wip", "moq-transport-20"] {
+	for version in ["moq-lite-03", "moq-lite-06", "moq-lite-07-wip", "moq-transport-22"] {
 		let chain = Chain::new(&[version]).await;
 		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
 		let mut producer = broadcast.create_track("data", untimed()).unwrap();
@@ -201,7 +201,7 @@ async fn an_explicit_start_holds_on_an_untimed_track() {
 /// time that the receiver drops.
 #[moq_clock::test]
 async fn datagrams_arrive_as_published() {
-	for version in ["moq-lite-05", "moq-lite-07-wip", "moq-transport-20"] {
+	for version in ["moq-lite-05", "moq-lite-07-wip", "moq-transport-22"] {
 		let chain = Chain::new(&[version]).await;
 		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
 		let mut producer = broadcast.create_track("data", untimed()).unwrap();
@@ -226,7 +226,7 @@ async fn datagrams_arrive_as_published() {
 /// A standalone FETCH of an untimed track answers with untimed objects.
 #[moq_clock::test]
 async fn a_fetched_untimed_frame_arrives_untimed() {
-	for version in ["moq-lite-06", "moq-lite-07-wip", "moq-transport-19"] {
+	for version in ["moq-lite-06", "moq-lite-07-wip", "moq-transport-18"] {
 		let chain = Chain::new(&[version]).await;
 		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
 		let mut dynamic = broadcast.dynamic();

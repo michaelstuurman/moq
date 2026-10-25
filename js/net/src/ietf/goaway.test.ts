@@ -19,7 +19,7 @@ import { ALPN, Version } from "./version.ts";
 // session keeps serving afterwards so its groups in flight finish while the caller migrates.
 for (const [version, alpn, requestId] of [
 	[Version.DRAFT_18, ALPN.DRAFT_18, 0n],
-	[Version.DRAFT_19, ALPN.DRAFT_19, undefined],
+	[Version.DRAFT_22, ALPN.DRAFT_22, undefined],
 ] as const) {
 	test(`a ${alpn} GOAWAY surfaces its URI and deadline without closing the session`, async () => {
 		const pair = createMockTransportPair(alpn);
@@ -93,7 +93,6 @@ test("a zero GOAWAY timeout reads as no deadline", async () => {
 
 for (const [version, alpn] of [
 	[Version.DRAFT_18, ALPN.DRAFT_18],
-	[Version.DRAFT_21, ALPN.DRAFT_21],
 	[Version.DRAFT_22, ALPN.DRAFT_22],
 ] as const) {
 	for (const end of ["FIN", "reset", "STOP_SENDING"] as const) {
@@ -123,7 +122,7 @@ for (const [version, alpn] of [
 
 for (const [version, alpn] of [
 	[Version.DRAFT_18, ALPN.DRAFT_18],
-	[Version.DRAFT_21, ALPN.DRAFT_21],
+	[Version.DRAFT_22, ALPN.DRAFT_22],
 ] as const) {
 	test(`${alpn} rejects queued duplicate GOAWAYs before exposing a drain`, async () => {
 		const pair = createMockTransportPair(alpn);

@@ -20,8 +20,8 @@ SUBSCRIBE, since #4974.
 
 Serving downstream lifts the one-group refusal ("FETCH spanning several
 groups not supported") in `run_fetch_stream`
-(`rs/moq-net/src/ietf/publisher.rs`) for every draft, including draft-20's
-`FetchType::Filtered`. Capping at the Largest Object also lifts the draft-20
+(`rs/moq-net/src/ietf/publisher.rs`) for every draft, including draft-22's
+`FetchType::Filtered`. Capping at the Largest Object also lifts the draft-22
 refusal of a filter bounded by it ("FETCH relative to Largest Object not
 supported"): no filter, a relative start, or an absolute start with no end.
 A multi-group FETCH keeps its one queue entry and moves with priority updates
@@ -35,13 +35,13 @@ a live track's Largest Object, and test both cases.
 
 Upstream range changes ride the subscription update that already carries the
 aggregate priority (`write_update` in `ietf/subscriber.rs`). Narrowing is
-allowed on every draft. Widening is a bug today: on draft-20 and later, a
+allowed on every draft. Widening is a bug today: on draft-22, a
 subscriber from a future group puts its absolute start in the SUBSCRIBE filter,
-and a live subscriber merged in after it never gets the current group. Draft-20
+and a live subscriber merged in after it never gets the current group. Draft-22
 lets an update lower the start with FILL_PARAMETERS for what it missed, which
-opens a second fill stream on the subscription. Drafts 18 and 19 have no
+opens a second fill stream on the subscription. Draft 18 has no
 fill. `rs/moq-net/tests/integration/subscribe_ranges.rs`
-leaves draft-20+ out for that reason; add it back once the update carries the
+leaves draft-22 out for that reason; add it back once the update carries the
 widened filter.
 
 moq-transport has no time filter, so a downstream `Time(pts)` end is

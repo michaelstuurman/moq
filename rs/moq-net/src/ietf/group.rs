@@ -538,7 +538,7 @@ mod tests {
 	/// to survive decode rather than being stripped with the bit.
 	#[test]
 	fn first_object_round_trips() {
-		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
+		for version in [Version::Draft18, Version::Draft22] {
 			for first_object in [true, false] {
 				let flags = GroupFlags {
 					first_object,
@@ -552,28 +552,6 @@ mod tests {
 				);
 				assert_eq!(GroupFlags::decode(encoded).unwrap().first_object, first_object);
 			}
-		}
-	}
-
-	/// Draft-19 makes no changes to the subgroup header wire format, so the flags
-	/// byte must be byte-identical to draft-18 on both encode and decode.
-	#[test]
-	fn test_draft19_matches_draft18() {
-		for flags in [
-			GroupFlags::default(),
-			GroupFlags {
-				has_subgroup: true,
-				has_extensions: true,
-				has_end: true,
-				has_subgroup_object: false,
-				has_priority: false,
-				first_object: true,
-			},
-		] {
-			let v18 = flags.encode().unwrap();
-			let v19 = flags.encode().unwrap();
-			assert_eq!(v18, v19, "draft-19 must encode the subgroup header like draft-18");
-			assert_eq!(GroupFlags::decode(v19).unwrap(), flags);
 		}
 	}
 

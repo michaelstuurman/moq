@@ -28,7 +28,7 @@ export const SetupOption = {
 	Epoch: 0x40b68n,
 } as const;
 
-// Unknown SETUP options may repeat, including GREASE (draft-21 section 9.1).
+// Unknown SETUP options may repeat, including GREASE (draft-22 section 9.1).
 const KNOWN_SETUP_OPTIONS: readonly bigint[] = Object.values(SetupOption);
 
 /// Setup Options, used in SETUP messages: delta-coded, with no count prefix, to the end of the message.

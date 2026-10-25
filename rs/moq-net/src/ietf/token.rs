@@ -1,4 +1,4 @@
-//! The `AUTHORIZATION TOKEN` Setup Option (draft-ietf-moq-transport-21 section 9.1.4) and
+//! The `AUTHORIZATION TOKEN` Setup Option (draft-ietf-moq-transport-22 section 9.1.4) and
 //! Message Parameter.
 //!
 //! The value is the Token structure of section 8.9: an Alias Type, then fields that
@@ -202,13 +202,7 @@ mod tests {
 		));
 	}
 
-	const VERSIONS: [Version; 5] = [
-		Version::Draft18,
-		Version::Draft19,
-		Version::Draft20,
-		Version::Draft21,
-		Version::Draft22,
-	];
+	const VERSIONS: [Version; 2] = [Version::Draft18, Version::Draft22];
 
 	fn token() -> Token {
 		// A kind past one varint byte and a value that is not text, so neither is mistaken

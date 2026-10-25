@@ -16,13 +16,7 @@ use support::harness::{MockConnectOptions, MockPair, connect_mock};
 const SETTLE: Duration = Duration::from_secs(1);
 
 /// Every moq-transport draft, each of which carries the SOLICIT option.
-const MOQT: [&str; 5] = [
-	"moq-transport-18",
-	"moq-transport-19",
-	"moq-transport-20",
-	"moq-transport-21",
-	"moq-transport-22",
-];
+const MOQT: [&str; 2] = ["moq-transport-18", "moq-transport-22"];
 
 /// The oldest draft we speak, which negotiates MoQ Auth, and the newest.
 const AUTH: [&str; 2] = ["moq-transport-18", "moq-transport-22"];

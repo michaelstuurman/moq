@@ -4,7 +4,7 @@ import type { Parameters } from "./parameters.ts";
 import type { SetupOptions } from "./setup_options.ts";
 
 /**
- * The `AUTHORIZATION TOKEN` Setup Option (draft-ietf-moq-transport-21 section 9.1.4) and
+ * The `AUTHORIZATION TOKEN` Setup Option (draft-ietf-moq-transport-22 section 9.1.4) and
  * Message Parameter.
  *
  * The value is the Token structure of section 8.9: an Alias Type, then fields that type

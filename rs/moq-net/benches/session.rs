@@ -326,7 +326,7 @@ struct Cluster {
 	relays: Vec<origin::Producer>,
 	/// One track per broadcast, indexed like [`path`].
 	tracks: Vec<track::Producer>,
-	_broadcasts: Vec<broadcast::Producer>,
+	_broadcasts: Vec<origin::Publication>,
 	_origins: Vec<origin::Producer>,
 	_pairs: Vec<MockPair>,
 	next_hop: u64,
@@ -880,7 +880,7 @@ impl Dash {
 struct DashRoom {
 	_cluster: Cluster,
 	tracks: Vec<track::Producer>,
-	_broadcasts: Vec<broadcast::Producer>,
+	_broadcasts: Vec<origin::Publication>,
 	dash: Viewer,
 	payload: Bytes,
 }

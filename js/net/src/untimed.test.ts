@@ -30,7 +30,7 @@ const WIRES: Wire[] = [
 	{ name: "lite-05", protocol: Lite.ALPN_05, declares: false },
 	{ name: "lite-06", protocol: Lite.ALPN_06, declares: false },
 	{ name: "lite-07-wip", protocol: Lite.ALPN_07_WIP, declares: true },
-	{ name: "ietf-20", protocol: Ietf.ALPN.DRAFT_20, declares: true },
+	{ name: "ietf-22", protocol: Ietf.ALPN.DRAFT_22, declares: true },
 ];
 
 /** Serve one group of `timestamps` on a track with `timescale`, and read it back over `wire`. */
@@ -101,7 +101,7 @@ test("a forwarded untimed track stays untimed", async () => {
 	// The publisher's hop (lite-04) can't declare a timeline, and the forwarding node must
 	// not claim one on its moq-transport hop either.
 	const upstream = createMockTransportPair(Lite.ALPN_04);
-	const downstream = createMockTransportPair(Ietf.ALPN.DRAFT_20);
+	const downstream = createMockTransportPair(Ietf.ALPN.DRAFT_22);
 	const source = new OriginProducer();
 	const relay = new OriginProducer();
 	const [publisher, ingest, serve, subscriber] = await Promise.all([

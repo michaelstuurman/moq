@@ -45,9 +45,9 @@ async function encodeIetfGoaway(): Promise<Uint8Array> {
 			chunks.push(Uint8Array.from(chunk));
 		},
 	});
-	const writer = new Writer(writable, IetfVersion.DRAFT_19);
+	const writer = new Writer(writable, IetfVersion.DRAFT_22);
 	await writer.u53(GoAway.id);
-	await new GoAway({ newSessionUri: "" }).encode(writer, IetfVersion.DRAFT_19);
+	await new GoAway({ newSessionUri: "" }).encode(writer, IetfVersion.DRAFT_22);
 	const size = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
 	const bytes = new Uint8Array(size);
 	let offset = 0;
@@ -100,7 +100,7 @@ async function sendLiteGoaway(server: WebTransport): Promise<void> {
  * replacement is another instance: the request already open stays on the draining session.
  */
 async function handover(kind: "lite" | "ietf"): Promise<void> {
-	const protocol = kind === "lite" ? ALPN_06 : ALPN.DRAFT_19;
+	const protocol = kind === "lite" ? ALPN_06 : ALPN.DRAFT_22;
 	const pair = createMockTransportPair(protocol);
 	const inject = kind === "ietf" ? captureFirstUni(pair.server) : undefined;
 	const goawayBytes = kind === "ietf" ? await encodeIetfGoaway() : undefined;
@@ -244,7 +244,7 @@ test("ietf: requests open on the draining session until the replacement wins", a
 });
 
 test("announcing and subscribing after GOAWAY still open streams", async () => {
-	for (const version of [IetfVersion.DRAFT_19]) {
+	for (const version of [IetfVersion.DRAFT_18, IetfVersion.DRAFT_22]) {
 		const goaway = new Once<Drain>();
 		goaway.set({ uri: "" });
 		let opened = false;
@@ -290,7 +290,7 @@ async function routeDeath(kind: "lite" | "ietf", after: boolean): Promise<void> 
 	const clock = new Manual();
 	const installed = clock.install();
 	using _clock = { [Symbol.dispose]: () => installed.close() };
-	const protocol = kind === "lite" ? ALPN_06 : ALPN.DRAFT_19;
+	const protocol = kind === "lite" ? ALPN_06 : ALPN.DRAFT_22;
 	const pair = createMockTransportPair(protocol);
 	const inject = kind === "ietf" ? captureFirstUni(pair.server) : undefined;
 	const goawayBytes = kind === "ietf" ? await encodeIetfGoaway() : undefined;

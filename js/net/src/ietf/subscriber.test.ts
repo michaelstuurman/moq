@@ -27,7 +27,7 @@ import { SubscribeNamespace, SubscribeNamespaceEntry, SubscribeNamespaceEntryDon
 import { Subscriber } from "./subscriber.ts";
 import { ALPN, type IetfVersion, Version } from "./version.ts";
 
-const VERSION = Version.DRAFT_19;
+const VERSION = Version.DRAFT_18;
 
 /** How long to wait for a stream before calling it absent. */
 const STREAM_WAIT = 500;
@@ -65,7 +65,7 @@ async function nextStream(transport: WebTransport): Promise<Stream | undefined> 
  * the one that would otherwise never be discovered.
  */
 test("every peer is asked", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 
 	const subscriber = new Subscriber({ session });
@@ -79,8 +79,9 @@ test("every peer is asked", async () => {
  * to a PUBLISH_NAMESPACE that arrives on its own stream instead.
  */
 test("an unsolicited announcement lands", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
-	const session = new NativeSession(pair.server, VERSION, true);
+	const version = Version.DRAFT_22;
+	const pair = createMockTransportPair(ALPN.DRAFT_22);
+	const session = new NativeSession(pair.server, version, true);
 	const subscriber = new Subscriber({ session });
 
 	const announced = subscriber.announced();
@@ -89,7 +90,7 @@ test("an unsolicited announcement lands", async () => {
 	expect(await nextStream(pair.client)).toBeDefined();
 
 	// What the connection dispatch does when a PUBLISH_NAMESPACE arrives instead.
-	const stream = await Stream.open(pair.server, { version: VERSION });
+	const stream = await Stream.open(pair.server, { version: version });
 	const handler = subscriber.runPublishNamespace(
 		new PublishNamespace({ requestId: 0n, trackNamespace: Path.from("surprise") }),
 		stream,
@@ -106,7 +107,7 @@ test("an unsolicited announcement lands", async () => {
 	peer.writer.close();
 	await peer.writer.closed;
 	// A second advertisement is a processing barrier: the FIN must not retract the first.
-	const second = await Stream.open(pair.server, { version: VERSION });
+	const second = await Stream.open(pair.server, { version: version });
 	const other = subscriber.runPublishNamespace(
 		new PublishNamespace({ requestId: 2n, trackNamespace: Path.from("sentinel") }),
 		second,
@@ -129,7 +130,7 @@ test("an unsolicited announcement lands", async () => {
  * only the anonymous mark: identity is the epoch's job, and nothing goes in front of the 0.
  */
 test("an advertisement with no path is anonymous", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true) });
 	const announced = subscriber.announced();
 	expect(await nextStream(pair.client)).toBeDefined();
@@ -187,7 +188,7 @@ async function syncInline(stream: Stream, announced: announce.Consumer, cluster?
  * watcher drops a broadcast that is still being published.
  */
 test("an announcement survives the first of its two sources ending", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 
@@ -224,7 +225,7 @@ test("an announcement survives the first of its two sources ending", async () =>
  * last source goes, the path really is gone and consumers have to hear it.
  */
 test("an announcement ends once its last source does", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 
@@ -260,7 +261,7 @@ test("an announcement ends once its last source does", async () => {
  * for the rest of the session, for every other consumer too.
  */
 test("a subscription that dies releases what it advertised", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 
@@ -287,7 +288,7 @@ test("a subscription that dies releases what it advertised", async () => {
  * for the session with nobody left to release it.
  */
 test("an entry buffered past a consumer close does not pin the path", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 
@@ -322,7 +323,7 @@ const PEER: Hop = HopSchema.parse(9n);
  * route us back to ourselves, so the advertisement is dropped rather than announced.
  */
 test("an inline NAMESPACE that looped back through us is dropped", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -340,7 +341,7 @@ test("an inline NAMESPACE that looped back through us is dropped", async () => {
  * gone even though the message says active.
  */
 test("an inline NAMESPACE that starts looping back is retracted", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -360,7 +361,7 @@ test("an inline NAMESPACE that starts looping back is retracted", async () => {
  * `update`.
  */
 test("a repeated NAMESPACE reprices in place", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -384,7 +385,7 @@ test("a repeated NAMESPACE reprices in place", async () => {
 
 /** The same rule on the other kind of advertisement, which is a request we can refuse. */
 test("a PUBLISH_NAMESPACE that looped back through us is refused", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -405,7 +406,7 @@ test("a PUBLISH_NAMESPACE that looped back through us is refused", async () => {
 	if (!peer) throw new Error("no PUBLISH_NAMESPACE stream");
 	expect(await peer.reader.u53()).toBe(RequestError.id);
 	const err = await RequestError.decode(peer.reader, VERSION);
-	// UNINTERESTED, draft-19 section 15.11.2: stop offering us this namespace.
+	// UNINTERESTED, draft-22 section 16.11.2: stop offering us this namespace.
 	expect(err.errorCode).toBe(0x20);
 
 	// Refused, so nothing was announced: the sentinel is the first thing a consumer hears.
@@ -418,7 +419,7 @@ test("a PUBLISH_NAMESPACE that looped back through us is refused", async () => {
  * repeat it on the next SUBSCRIBE_NAMESPACE.
  */
 test("a NAMESPACE missing its hop path closes the session", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -436,7 +437,7 @@ test("a NAMESPACE missing its hop path closes the session", async () => {
 });
 
 test("a malformed PUBLISH_NAMESPACE update closes the session", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const control = await Stream.open(pair.server, { version: VERSION });
 	const connection = new Connection({
 		url: new URL("https://example.com"),
@@ -482,7 +483,7 @@ test("a malformed PUBLISH_NAMESPACE update closes the session", async () => {
  * path on the same stream brings it back.
  */
 test("a PUBLISH_NAMESPACE update that starts looping back is detached", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -538,7 +539,7 @@ test("a PUBLISH_NAMESPACE update that starts looping back is detached", async ()
  * new cost; the stream ending is what retracts it.
  */
 test("a PUBLISH_NAMESPACE repricing is acknowledged in place", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -587,7 +588,7 @@ test("a PUBLISH_NAMESPACE repricing is acknowledged in place", async () => {
  * the next consume shares it.
  */
 test("a PUBLISH_NAMESPACE update that changes the publisher applies in place", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 
@@ -634,7 +635,7 @@ test("a PUBLISH_NAMESPACE update that changes the publisher applies in place", a
 });
 
 test("a consumed broadcast refuses to list its tracks rather than claim it has none", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, cluster: { self: SELF, peer: PEER } });
 	const consumer = subscriber.consume(Path.from("theirs"));
@@ -650,7 +651,7 @@ test("a consumed broadcast refuses to list its tracks rather than claim it has n
  * update: it is the base draft's duplicate request, a protocol violation.
  */
 test("a repeated PUBLISH_NAMESPACE is a protocol violation", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, quic: pair.server, cluster: { self: SELF, peer: PEER } });
 
@@ -734,7 +735,7 @@ async function subscribeTrack({
 	properties?: Properties;
 	subscription?: track.Subscription;
 } = {}): Promise<{ subscriber: Subscriber; track: track.Subscriber }> {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, version, true);
 	const subscriber = new Subscriber({ session });
 
@@ -814,7 +815,7 @@ test("an object without a Timestamp on a TIMESCALE track is malformed", async ()
 
 test("a compact END_OF_TRACK at object 5 with properties is subgroup 5, refused without ending the track", async () => {
 	// Draft 14 allows the properties and draft 15 refuses them, but the subgroup is refused first.
-	for (const version of [Version.DRAFT_19]) {
+	for (const version of [Version.DRAFT_18]) {
 		const { subscriber, track } = await subscribeTrack({ version });
 		const header = stampedGroup(0);
 		header.flags.hasSubgroupObject = true;
@@ -846,7 +847,7 @@ test("older peer without priority property inherits the default publisher priori
 });
 
 test("an info-only lookup waits for SUBSCRIBE_OK instead of abandoning", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 	const info = subscriber.consume(Path.from("room")).track("video").info();
@@ -864,7 +865,7 @@ test("an info-only lookup waits for SUBSCRIBE_OK instead of abandoning", async (
 });
 
 test("SUBSCRIBE_OK's largest is known before any group arrives", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 	const track = subscriber.consume(Path.from("room")).track("video").subscribe();
@@ -885,7 +886,7 @@ test("SUBSCRIBE_OK's largest is known before any group arrives", async () => {
 
 test.each(["acceptance", "timeout"])("returning demand preserves pending setup until %s", async (outcome) => {
 	jest.useFakeTimers();
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 	const opening = spyOn(session, "openBi");
@@ -964,7 +965,7 @@ test.each(["acceptance", "timeout"])("returning demand preserves pending setup u
 });
 
 test("setup abandonment closes before a queued viewer can attach", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 	const broadcast = subscriber.consume(Path.from("room"));
@@ -1024,7 +1025,7 @@ test("setup abandonment closes before a queued viewer can attach", async () => {
 });
 
 test("early group waits for SUBSCRIBE_OK priority before track acceptance", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 	const track = subscriber.consume(Path.from("room")).track("video").subscribe();
@@ -1069,7 +1070,7 @@ test("early group waits for SUBSCRIBE_OK priority before track acceptance", asyn
  * unusable: the objects on the stream do not decode without the head the filter excluded,
  * and moq-lite cannot represent the hole at all. Delivering it would pass the group's sixth
  * frame off as the keyframe it opens with, so the group is dropped and the track resumes at
- * the next one. Our own publisher never opens such a stream; a draft-20 peer may.
+ * the next one. Our own publisher never opens such a stream; a draft-22 peer may.
  */
 test("a group served from partway through is dropped", async () => {
 	const { subscriber, track } = await subscribeTrack();
@@ -1301,7 +1302,7 @@ test("every object in a chunk reaches the reader before it wakes", async () => {
 });
 
 test("local readers filter hidden unsolicited namespaces from a legacy peer", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true) });
 	const plain = subscriber.announced();
 	const opted = subscriber.announced(undefined, { hidden: true });
@@ -1371,7 +1372,7 @@ test("object extension limit accepts 64 KiB and stops one byte over before readi
  * carry is dropped like a lost datagram, and a malformed one ends the session.
  */
 test("an object datagram is a datagram group", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), quic: pair.server });
 	const track = subscriber.consume(Path.from("room")).track("video").subscribe();
 
@@ -1424,7 +1425,7 @@ test("an object datagram is a datagram group", async () => {
 });
 
 test("a more specific epochless announcement replaces the consumed source", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true) });
 	const announced = subscriber.announced();
 	await acceptSubscribeNamespace(pair.client);
@@ -1465,7 +1466,7 @@ test("a more specific epochless announcement replaces the consumed source", asyn
 	announced.close();
 });
 
-for (const version of [Version.DRAFT_18, Version.DRAFT_19, Version.DRAFT_20, Version.DRAFT_21, Version.DRAFT_22]) {
+for (const version of [Version.DRAFT_18, Version.DRAFT_22]) {
 	test(`status zero without the end bit delivers an empty object and continues (${version})`, async () => {
 		const { subscriber, track } = await subscribeTrack({ version });
 		onTestFinished(() => track.close());
@@ -1516,7 +1517,7 @@ const yieldTask = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** MoQ Active Count: the consumer syncs once the counted NAMESPACEs are read. */
 test("counted NAMESPACEs sync", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, activeCount: true });
 
@@ -1541,7 +1542,7 @@ test("counted NAMESPACEs sync", async () => {
 
 /** Without MoQ Active Count, REQUEST_OK is the best boundary there is. */
 test("an uncounted answer syncs on the OK", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session });
 
@@ -1560,7 +1561,7 @@ test("an ACTIVE_COUNT that does not match the negotiation closes the session", a
 		[true, undefined],
 		[false, 0],
 	] as const) {
-		const pair = createMockTransportPair(ALPN.DRAFT_19);
+		const pair = createMockTransportPair(ALPN.DRAFT_18);
 		const session = new NativeSession(pair.server, VERSION, true);
 		const subscriber = new Subscriber({ session, quic: pair.server, activeCount: negotiated });
 		const warn = spyOn(console, "warn").mockImplementation(() => void 0);
@@ -1574,7 +1575,7 @@ test("an ACTIVE_COUNT that does not match the negotiation closes the session", a
 
 /** A violation on a namespace subscription closes the session through its request, once. */
 test("a namespace subscription closes the session once over a violation", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, quic: pair.server, activeCount: true });
 	const warn = spyOn(console, "warn").mockImplementation(() => void 0);
@@ -1591,7 +1592,7 @@ test("a namespace subscription closes the session once over a violation", async 
 /** A counted set cut short, by a NAMESPACE_DONE or the stream ending, is the peer's fault. */
 test.each(["done", "fin"] as const)("a counted set cut short by %s closes the session", async (cut) => {
 	{
-		const pair = createMockTransportPair(ALPN.DRAFT_19);
+		const pair = createMockTransportPair(ALPN.DRAFT_18);
 		const session = new NativeSession(pair.server, VERSION, true);
 		const subscriber = new Subscriber({ session, quic: pair.server, activeCount: true });
 		const warn = spyOn(console, "warn").mockImplementation(() => void 0);
@@ -1615,7 +1616,7 @@ test.each(["done", "fin"] as const)("a counted set cut short by %s closes the se
 
 for (const negotiated of [false, true]) {
 	test(`subscriber max age is sent only to a declaring peer: ${negotiated}`, async () => {
-		const pair = createMockTransportPair(ALPN.DRAFT_19);
+		const pair = createMockTransportPair(ALPN.DRAFT_18);
 		const subscriber = new Subscriber({
 			session: new NativeSession(pair.server, VERSION, true),
 			maxAge: negotiated,
@@ -1670,7 +1671,7 @@ async function publishEpoch(
 
 /** The route names the advertised instance, and so does every SUBSCRIBE sent for it. */
 test("an advertised epoch reaches the route and the SUBSCRIBE", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), epoch: true });
 	const announced = subscriber.announced();
 	await acceptSubscribeNamespace(pair.client);
@@ -1689,7 +1690,7 @@ test("an advertised epoch reaches the route and the SUBSCRIBE", async () => {
 });
 
 test("an inline NAMESPACE route carries its epoch", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), epoch: true });
 	const announced = subscriber.announced();
 	const subscription = await acceptSubscribeNamespace(pair.client);
@@ -1705,7 +1706,7 @@ test("an inline NAMESPACE route carries its epoch", async () => {
  * restarts and is never absent, and a fresh reader hears the new instance standing.
  */
 test("a NAMESPACE repeated under another epoch restarts the path in place", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), epoch: true });
 	const announced = subscriber.announced();
 	const subscription = await acceptSubscribeNamespace(pair.client);
@@ -1731,7 +1732,7 @@ test("a NAMESPACE repeated under another epoch restarts the path in place", asyn
  * update to the older of the two.
  */
 test("a NAMESPACE repeat under another epoch outranks a later PUBLISH_NAMESPACE", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), epoch: true });
 	const announced = subscriber.announced();
 	const subscription = await acceptSubscribeNamespace(pair.client);
@@ -1754,7 +1755,7 @@ test("a NAMESPACE repeat under another epoch outranks a later PUBLISH_NAMESPACE"
  * losing its epoch is still the violation it would be without the loop.
  */
 test("a reflected NAMESPACE keeps its epoch live", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, quic: pair.server, cluster: { self: SELF, peer: PEER }, epoch: true });
 	const warn = spyOn(console, "warn").mockImplementation(() => void 0);
@@ -1784,7 +1785,7 @@ test("a reflected NAMESPACE keeps its epoch live", async () => {
  * either means the peer skipped the NAMESPACE_DONE.
  */
 test.each(["gains", "loses"] as const)("a NAMESPACE repeat that %s an epoch closes the session", async (change) => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const session = new NativeSession(pair.server, VERSION, true);
 	const subscriber = new Subscriber({ session, quic: pair.server, epoch: true });
 	const warn = spyOn(console, "warn").mockImplementation(() => void 0);
@@ -1818,7 +1819,7 @@ test.each(["gains", "loses"] as const)("a NAMESPACE repeat that %s an epoch clos
  * new advertisement can land before its old one's withdrawal. The newest stands throughout.
  */
 test("a stale instance's withdrawal arriving last keeps the newer epoch", async () => {
-	const pair = createMockTransportPair(ALPN.DRAFT_19);
+	const pair = createMockTransportPair(ALPN.DRAFT_18);
 	const subscriber = new Subscriber({ session: new NativeSession(pair.server, VERSION, true), epoch: true });
 	const announced = subscriber.announced();
 	await acceptSubscribeNamespace(pair.client);

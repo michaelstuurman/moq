@@ -236,13 +236,7 @@ async fn remote_lite_consumer_sees_what_a_local_one_does() {
 async fn remote_ietf_consumer_sees_what_a_local_one_does() {
 	// Each request has its own stream, which has to end a finished track the way
 	// moq-lite does.
-	for version in [
-		"moq-transport-18",
-		"moq-transport-19",
-		"moq-transport-20",
-		"moq-transport-21",
-		"moq-transport-22",
-	] {
+	for version in ["moq-transport-18", "moq-transport-22"] {
 		assert_eq!(lifecycle(Observer::Remote(version)).await, EXPECTED, "{version}");
 	}
 }

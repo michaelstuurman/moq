@@ -149,10 +149,10 @@ pub(crate) mod request {
 	/// The track holds a Mandatory Track Property the endpoint does not understand.
 	const UNSUPPORTED_EXTENSION: u64 = 0x33;
 
-	/// A Range Filter exceeds MAX_FILTER_RANGES (draft-19 and later).
+	/// A Range Filter exceeds MAX_FILTER_RANGES (draft-22 and later).
 	pub(crate) const INVALID_FILTER: u64 = 0x36;
 
-	/// A joining FETCH named no active subscription. Removed from the registry in draft-20.
+	/// A joining FETCH named no active subscription. Removed from the registry in draft-22.
 	const INVALID_JOINING_REQUEST_ID: u64 = 0x32;
 
 	/// The requested broadcast or track is not here.
@@ -179,7 +179,7 @@ pub(crate) mod request {
 			return None;
 		}
 		match version {
-			Version::Draft18 | Version::Draft19 => Some(INVALID_JOINING_REQUEST_ID),
+			Version::Draft18 => Some(INVALID_JOINING_REQUEST_ID),
 			_ => None,
 		}
 	}
@@ -265,13 +265,7 @@ pub(crate) mod request {
 	mod tests {
 		use super::*;
 
-		const ALL: [Version; 5] = [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft20,
-			Version::Draft21,
-			Version::Draft22,
-		];
+		const ALL: [Version; 2] = [Version::Draft18, Version::Draft22];
 
 		const KINDS: [Kind; 6] = [
 			Kind::Subscribe,
@@ -331,14 +325,14 @@ pub(crate) mod request {
 			}
 
 			// A broadcast with no route is, to the peer that asked for it, not here either.
-			assert_eq!(to_code(&Error::Unroutable, Kind::Subscribe, Version::Draft20), 0x10);
+			assert_eq!(to_code(&Error::Unroutable, Kind::Subscribe, Version::Draft22), 0x10);
 
 			// So is a datagram group: never cached, so a FETCH reaching one finds nothing, and
 			// NOT_SUPPORTED would say the endpoint has no FETCH at all.
-			assert_eq!(to_code(&Error::NotFetchable, Kind::Fetch, Version::Draft20), 0x10);
+			assert_eq!(to_code(&Error::NotFetchable, Kind::Fetch, Version::Draft22), 0x10);
 			// Including a lite-07 upstream's NOT_FETCHABLE, bridged by a relay.
 			assert_eq!(
-				to_code(&Error::Stream(StreamError::NotFetchable), Kind::Fetch, Version::Draft20),
+				to_code(&Error::Stream(StreamError::NotFetchable), Kind::Fetch, Version::Draft22),
 				0x10
 			);
 		}
@@ -347,8 +341,8 @@ pub(crate) mod request {
 		#[test]
 		fn an_unroutable_offer_is_uninterested() {
 			for kind in [Kind::Publish, Kind::PublishNamespace, Kind::SubscribeNamespace] {
-				assert_eq!(to_code(&Error::Unroutable, kind, Version::Draft20), 0x20);
-				assert!(matches!(from_code(0x20, kind, Version::Draft20), Error::Unroutable));
+				assert_eq!(to_code(&Error::Unroutable, kind, Version::Draft22), 0x20);
+				assert!(matches!(from_code(0x20, kind, Version::Draft22), Error::Unroutable));
 			}
 		}
 
@@ -382,7 +376,7 @@ pub(crate) mod request {
 				assert_eq!(to_code(&Error::InvalidRange, Kind::Fetch, version), 0x11);
 				assert!(matches!(from_code(0x11, Kind::Fetch, version), Error::InvalidRange));
 				let joining = match version {
-					Version::Draft18 | Version::Draft19 => Some(0x32),
+					Version::Draft18 => Some(0x32),
 					_ => None,
 				};
 				assert_eq!(
@@ -454,7 +448,7 @@ pub(crate) mod request {
 			for err in [Error::Duplicate, Error::Cancel, Error::ProtocolViolation, Error::Closed] {
 				for kind in KINDS {
 					assert_eq!(
-						to_code(&err, kind, Version::Draft20),
+						to_code(&err, kind, Version::Draft22),
 						INTERNAL_ERROR,
 						"{err} is not internal on {kind:?}"
 					);
@@ -462,7 +456,7 @@ pub(crate) mod request {
 			}
 
 			assert!(matches!(
-				from_code(INTERNAL_ERROR, Kind::Subscribe, Version::Draft20),
+				from_code(INTERNAL_ERROR, Kind::Subscribe, Version::Draft22),
 				Error::Remote(0)
 			));
 		}
@@ -547,7 +541,7 @@ mod tests {
 
 	/// Conditions this registry has no value for say INTERNAL_ERROR rather than borrowing
 	/// moq-lite's own 48-63 range or its application offset. A peer treats an unregistered
-	/// code as INTERNAL_ERROR anyway (draft-20 section 14), so the borrowed value would
+	/// code as INTERNAL_ERROR anyway, so the borrowed value would
 	/// carry no more meaning while looking like a registration.
 	#[test]
 	fn unregistered_conditions_are_internal() {

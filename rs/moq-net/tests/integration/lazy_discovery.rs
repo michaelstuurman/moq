@@ -34,7 +34,7 @@ fn produce_origin(hop: u64) -> origin::Producer {
 struct Lazy {
 	subscriber: origin::Producer,
 	pair: MockPair,
-	_broadcasts: Vec<moq_net::broadcast::Producer>,
+	_broadcasts: Vec<moq_net::origin::Publication>,
 }
 
 impl Lazy {
@@ -360,13 +360,7 @@ async fn serving_the_peer_asks_nothing() {
 }
 
 /// Every moq-transport draft. These read what arrived once everything in flight has.
-const IETF: &[&str] = &[
-	"moq-transport-18",
-	"moq-transport-19",
-	"moq-transport-20",
-	"moq-transport-21",
-	"moq-transport-22",
-];
+const IETF: &[&str] = &["moq-transport-18", "moq-transport-22"];
 
 /// Apply what `announced` reports once everything in flight has arrived to `held`, and
 /// say whether any of it ended a prefix.

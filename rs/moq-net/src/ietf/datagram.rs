@@ -1,4 +1,4 @@
-//! OBJECT_DATAGRAM: one Object carried in a QUIC datagram (draft-20 section 11.3.1).
+//! OBJECT_DATAGRAM: one Object carried in a QUIC datagram (draft-22 section 11.2.1).
 //!
 //! Public [`crate::Datagram`] writers emit Object ID 0; private relay metadata preserves
 //! other IDs, properties, and status. The Type is a set of flags.
@@ -201,13 +201,7 @@ mod tests {
 		Ok(datagram)
 	}
 
-	const ALL: [Version; 5] = [
-		Version::Draft18,
-		Version::Draft19,
-		Version::Draft20,
-		Version::Draft21,
-		Version::Draft22,
-	];
+	const ALL: [Version; 2] = [Version::Draft18, Version::Draft22];
 
 	fn single(priority: Option<u8>) -> ObjectDatagram {
 		ObjectDatagram {

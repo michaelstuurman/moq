@@ -10,7 +10,7 @@ use moq_net::Version;
 use support::harness::{MockConnectOptions, connect_mock};
 
 /// Every version, and whether its SETUP carries an implementation.
-const VERSIONS: [(&str, bool); 12] = [
+const VERSIONS: [(&str, bool); 9] = [
 	("moq-lite-01", false),
 	("moq-lite-02", false),
 	("moq-lite-03", false),
@@ -19,9 +19,6 @@ const VERSIONS: [(&str, bool); 12] = [
 	("moq-lite-06", true),
 	("moq-lite-07-wip", true),
 	("moq-transport-18", true),
-	("moq-transport-19", true),
-	("moq-transport-20", true),
-	("moq-transport-21", true),
 	("moq-transport-22", true),
 ];
 

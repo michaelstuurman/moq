@@ -552,7 +552,7 @@ async function announcedUntil(announced: Announce.Consumer, until: string) {
 for (const [protocol, carriesOptIn] of [
 	[Lite.ALPN_07_WIP, true],
 	[Lite.ALPN_06, false],
-	[Ietf.ALPN.DRAFT_19, true],
+	[Ietf.ALPN.DRAFT_18, true],
 ] as const) {
 	test(`integration: ${protocol} hides dot paths from discovery`, async () => {
 		const pair = createMockTransportPair(protocol);
@@ -750,9 +750,6 @@ test("integration: lite draft-05 missing datagram writer does not close streams"
 for (const [name, protocol, version] of [
 	["draft-17", Ietf.ALPN.DRAFT_18, undefined],
 	["draft-18", Ietf.ALPN.DRAFT_18, undefined],
-	["draft-19", Ietf.ALPN.DRAFT_19, undefined],
-	["draft-20", Ietf.ALPN.DRAFT_20, undefined],
-	["draft-21", Ietf.ALPN.DRAFT_21, undefined],
 	["draft-22", Ietf.ALPN.DRAFT_22, undefined],
 ] as const) {
 	for (const timed of [true, false]) {
@@ -1297,9 +1294,6 @@ test("integration: ietf fetch group is unsupported", async () => {
 test("integration: cancelling an ietf track listing preserves an existing subscription", async () => {
 	for (const [protocol, version] of [
 		[Ietf.ALPN.DRAFT_18, Ietf.Version.DRAFT_18],
-		[Ietf.ALPN.DRAFT_19, Ietf.Version.DRAFT_19],
-		[Ietf.ALPN.DRAFT_20, Ietf.Version.DRAFT_20],
-		[Ietf.ALPN.DRAFT_21, Ietf.Version.DRAFT_21],
 		[Ietf.ALPN.DRAFT_22, Ietf.Version.DRAFT_22],
 	] as const) {
 		const pair = createMockTransportPair(protocol);
@@ -1353,10 +1347,6 @@ test("integration: ietf draft-17", async () => {
 
 test("integration: ietf draft-18", async () => {
 	await runPublishSubscribeFlow(Ietf.ALPN.DRAFT_18);
-});
-
-test("integration: ietf draft-19", async () => {
-	await runPublishSubscribeFlow(Ietf.ALPN.DRAFT_19);
 });
 
 // consume(path) dedupes per path: repeat calls for a still-live path share one reference-counted
@@ -1919,7 +1909,7 @@ test("integration: lite republish on one session swaps the handle every generati
 });
 
 // moq-transport withdraws by reset, which the replacement request does not wait behind.
-test.each([Ietf.ALPN.DRAFT_18, Ietf.ALPN.DRAFT_19])(
+test.each([Ietf.ALPN.DRAFT_18, Ietf.ALPN.DRAFT_22])(
 	"integration: %s republish withdrawn by reset swaps the handle",
 	async (protocol) => {
 		await runRepublishCycle(protocol);

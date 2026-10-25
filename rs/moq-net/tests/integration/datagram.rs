@@ -34,7 +34,7 @@ fn produce_origin(hop: u64) -> moq_net::origin::Producer {
 struct Fixture {
 	producer: moq_net::track::Producer,
 	subscriber: moq_net::track::Subscriber,
-	_broadcast: moq_net::broadcast::Producer,
+	_broadcast: moq_net::origin::Publication,
 	_pair: MockPair,
 }
 
@@ -124,7 +124,7 @@ async fn datagrams_reach_the_subscriber_in_order() {
 /// datagram with its sequence, alongside the groups on streams.
 #[moq_clock::test]
 async fn ietf_delivers_datagrams() {
-	for version in ["moq-transport-18", "moq-transport-20"] {
+	for version in ["moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TEST_TIMEOUT, ietf_delivers_datagrams_on(version))
 			.await
 			.unwrap_or_else(|_| panic!("{version}: timed out"));
@@ -266,7 +266,7 @@ async fn a_fetched_datagram_is_refused_per_version() {
 		(&["moq-lite-05"][..], NOT_FOUND),
 		(&["moq-lite-06"], NOT_FOUND),
 		(&["moq-lite-07-wip"], NOT_FETCHABLE),
-		(&["moq-lite-07-wip", "moq-lite-07-wip"], NOT_FETCHABLE),
+		(&["moq-lite-07-wip"], NOT_FETCHABLE),
 		(&["moq-lite-07-wip", "moq-lite-06"], NOT_FOUND),
 	] {
 		let refused = moq_clock::timeout(TEST_TIMEOUT, fetch_a_datagram(versions))

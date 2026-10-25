@@ -587,7 +587,7 @@ mod tests {
 		let mut lite = stop_log(crate::lite::Version::Lite05);
 		lite.abort(&Error::Old);
 
-		let mut ietf = stop_log(crate::ietf::Version::Draft20);
+		let mut ietf = stop_log(crate::ietf::Version::Draft22);
 		ietf.abort(&Error::Old);
 
 		assert_eq!(lite.stream.get_ref().stops, vec![StreamError::Old.to_code()]);
@@ -768,7 +768,7 @@ mod tests {
 		use crate::{Version, ietf, lite, setup};
 		refuses_frame::<lite::Setup, _>(&[0], lite::Version::Lite05, false);
 		refuses_frame::<lite::Goaway, _>(&[0], lite::Version::Lite05, false);
-		refuses_frame::<ietf::GoAway, _>(&[0, 0], ietf::Version::Draft20, false);
+		refuses_frame::<ietf::GoAway, _>(&[0, 0], ietf::Version::Draft22, false);
 		for version in [lite::Version::Lite01, lite::Version::Lite02] {
 			refuses_frame::<setup::Client, _>(&[0x20, 0, 0], Version::Lite(version), false);
 			refuses_frame::<setup::Server, _>(&[0x21, 0, 0], Version::Lite(version), false);
