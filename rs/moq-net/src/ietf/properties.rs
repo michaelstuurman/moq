@@ -1,6 +1,6 @@
 /// Track Properties: relay-visible metadata attached to tracks.
 ///
-/// Draft-17 adds Track Properties to SUBSCRIBE_OK, PUBLISH, and FETCH_OK.
+/// SUBSCRIBE_OK, PUBLISH, and FETCH_OK carry Track Properties.
 /// They appear after the message parameters as a sequence of Key-Value-Pairs
 /// (same delta-encoded format) until the end of the message.
 ///
@@ -42,8 +42,7 @@ const DEFAULT_PUBLISHER_PRIORITY: u64 = 0x0e;
 const DEFAULT_PUBLISHER_GROUP_ORDER: u64 = 0x22;
 
 /// DYNAMIC_GROUPS (0x30): a subscriber may ask the original publisher for a new group with
-/// NEW_GROUP_REQUEST. Draft-16 calls it a Track Extension and draft-15 a SUBSCRIBE_OK
-/// parameter; same number and meaning.
+/// NEW_GROUP_REQUEST.
 const DYNAMIC_GROUPS: u64 = 0x30;
 
 /// Immutable Properties (0x0b): Key-Value-Pairs the original publisher sealed, which a
@@ -102,9 +101,6 @@ impl Properties {
 	/// so the caller must not append anything after it.
 	///
 	/// Properties are serialized in ascending order by type, delta-encoded.
-	///
-	/// Draft 16 gets only DYNAMIC_GROUPS, which it defines and which a subscriber needs
-	/// before it may send NEW_GROUP_REQUEST in an update, and the unknown properties.
 	///
 	/// A property the publisher sealed inside Immutable Properties travels there, so it is
 	/// not restated in the mutable list.
@@ -167,14 +163,8 @@ impl Properties {
 	///
 	/// Unlike an unknown message parameter, an unknown property is kept rather than
 	/// fatal, which is what lets a relay forward properties it does not implement.
-	///
-	/// Drafts before 16 have no such block, so this reads nothing and leaves the buffer alone.
 	pub fn decode(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
 		let mut properties = Self::default();
-
-		// Draft-16 calls the block Track Extensions, draft-17+ Track Properties. Same encoding,
-		// so read either rather than faulting the message for trailing bytes.
-		{}
 
 		let mut prev_type: u64 = 0;
 		let mut i: u64 = 0;
@@ -243,8 +233,8 @@ impl Properties {
 				self.priority = Some(u8::try_from(value).map_err(|_| DecodeError::InvalidValue)?);
 			}
 			DEFAULT_PUBLISHER_GROUP_ORDER => {
-				// Only Ascending and Descending are defined here. Unlike the draft-14
-				// fields, 0x0 has no "publisher decides" meaning to fall back on.
+				// Only Ascending and Descending are defined: 0x0 has no "publisher
+				// decides" meaning to fall back on.
 				self.group_order = match value {
 					1 => Some(GroupOrder::Ascending),
 					2 => Some(GroupOrder::Descending),
@@ -291,7 +281,6 @@ pub(crate) const MAX_FORWARDED: usize = MAX_PROPERTIES as usize - UNDERSTOOD.len
 /// Check a Track Properties' Immutable Properties `block` from a `version` publisher, as
 /// [`Properties::decode`] does.
 pub(crate) fn check_immutable(block: &[u8], version: Version) -> Result<(), DecodeError> {
-	// Track Properties start at draft-16.
 	sealed(
 		&mut Decoder::new(block, version.into()),
 		&mut Properties::default(),
@@ -519,7 +508,7 @@ mod tests {
 	}
 
 	/// Only Ascending and Descending are defined, so 0x0 is a malformed message rather than
-	/// the "publisher decides" it means in the draft-14 fields.
+	/// a "publisher decides".
 	#[test]
 	fn test_rejects_zero_group_order() {
 		let mut buf = Vec::new();
@@ -623,33 +612,32 @@ mod tests {
 	/// in order among the ones we write ourselves.
 	#[test]
 	fn unknown_properties_round_trip() {
-		for version in [Version::Draft22] {
-			// 0x02 = 5000, 0x0b = { 0x02 = 42 }, 0x3801 = "hi"
-			let mut block = Vec::new();
-			let mut w = Encoder::new(&mut block, version.into());
-			w.varint(0x02).unwrap();
-			w.varint(5000).unwrap();
-			w.varint(0x09).unwrap();
-			w.bytes(&[0x02, 42]).unwrap();
-			w.varint(0x3801 - 0x0b).unwrap();
-			w.bytes(b"hi").unwrap();
+		let version = Version::Draft22;
+		// 0x02 = 5000, 0x0b = { 0x02 = 42 }, 0x3801 = "hi"
+		let mut block = Vec::new();
+		let mut w = Encoder::new(&mut block, version.into());
+		w.varint(0x02).unwrap();
+		w.varint(5000).unwrap();
+		w.varint(0x09).unwrap();
+		w.bytes(&[0x02, 42]).unwrap();
+		w.varint(0x3801 - 0x0b).unwrap();
+		w.bytes(b"hi").unwrap();
 
-			let (properties, written) = round_trip(version, &block);
-			assert_eq!(written, block, "{version}");
-			assert_eq!(properties.unknown.len(), 3, "{version}");
-			let track = forwarded(&properties, version);
-			assert!(track.sealed().eq([0x02]), "{version}");
-			assert!(!track.mandatory(), "{version}");
+		let (properties, written) = round_trip(version, &block);
+		assert_eq!(written, block, "{version}");
+		assert_eq!(properties.unknown.len(), 3, "{version}");
+		let track = forwarded(&properties, version);
+		assert!(track.sealed().eq([0x02]), "{version}");
+		assert!(!track.mandatory(), "{version}");
 
-			// Ours interleave by type.
-			let mut ours = properties.clone();
-			ours.dynamic_groups = true;
-			let mut buf = Vec::new();
-			ours.encode(&mut Encoder::new(&mut buf, version.into()), version)
-				.unwrap();
-			let decoded = crate::coding::decode_buf(&mut Bytes::from(buf), version, Properties::decode).unwrap();
-			assert_eq!(decoded, ours, "{version}");
-		}
+		// Ours interleave by type.
+		let mut ours = properties.clone();
+		ours.dynamic_groups = true;
+		let mut buf = Vec::new();
+		ours.encode(&mut Encoder::new(&mut buf, version.into()), version)
+			.unwrap();
+		let decoded = crate::coding::decode_buf(&mut Bytes::from(buf), version, Properties::decode).unwrap();
+		assert_eq!(decoded, ours, "{version}");
 	}
 
 	/// A property sealed inside Immutable Properties is not restated in the mutable list.

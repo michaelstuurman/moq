@@ -137,7 +137,7 @@ pub struct Fetch<'a> {
 	/// Whether the requester wants Track Properties in FETCH_OK (INCLUDE_PROPERTIES,
 	/// draft-20+). Always `true` before draft-20, which has no way to opt out.
 	pub properties_wanted: bool,
-	/// The publisher instance the requester expects (MoQ Epoch, draft-17+). Only on a
+	/// The publisher instance the requester expects (MoQ Epoch). Only on a
 	/// request that names its track: a joining FETCH takes its subscription's.
 	pub epoch: Option<crate::Epoch>,
 }
@@ -299,7 +299,7 @@ impl Message for Fetch<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FetchOk {
 	pub end_of_track: bool,
-	/// Drafts 14-19 use the last object plus one, or Object 0 for the whole End Group;
+	/// Drafts 18 and 19 use the last object plus one, or Object 0 for the whole End Group;
 	/// draft 20 and later use an inclusive End Location.
 	pub end_location: Location,
 	/// The track's properties, as SUBSCRIBE_OK carries them.
@@ -909,7 +909,7 @@ mod object_tests {
 	/// desync the rest of the stream.
 	#[test]
 	fn an_undefined_value_is_refused() {
-		// 0x8D, one past End of Non-Existent Range, in the draft-17+ leading-ones form.
+		// 0x8D, one past End of Non-Existent Range, in the leading-ones form.
 		let mut bytes = bytes::Bytes::from_static(&[0x80, 0x8D, 0x00, 0x00]);
 		assert!(crate::coding::decode_buf(&mut bytes, VERSION, FetchObject::decode).is_err());
 	}

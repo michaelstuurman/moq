@@ -123,13 +123,10 @@ impl Param for GroupOrder {
 	}
 
 	fn param_decode(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		let v = u8::param_decode(r, version)?;
-		match version {
-			_ => match v {
-				1 => Ok(GroupOrder::Ascending),
-				2 => Ok(GroupOrder::Descending),
-				_ => Err(DecodeError::InvalidValue),
-			},
+		match u8::param_decode(r, version)? {
+			1 => Ok(GroupOrder::Ascending),
+			2 => Ok(GroupOrder::Descending),
+			_ => Err(DecodeError::InvalidValue),
 		}
 	}
 }

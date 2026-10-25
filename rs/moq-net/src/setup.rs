@@ -21,8 +21,8 @@ pub(crate) const MAX_SETUP_SIZE: usize = u16::MAX as usize;
 const CLIENT_SETUP: u8 = 0x20;
 const SERVER_SETUP: u8 = 0x21;
 
-/// The unified SETUP message type (varint 0x2F00).
-pub(crate) const SETUP_V17: u64 = 0x2F00;
+/// The moq-transport SETUP message type (varint 0x2F00).
+pub(crate) const SETUP: u64 = 0x2F00;
 
 /// Decode a SETUP Implementation value, refusing one that is not UTF-8.
 pub(crate) fn decode_implementation(bytes: Option<&[u8]>) -> Result<Option<String>, crate::DecodeError> {
@@ -79,13 +79,13 @@ pub(crate) fn implementation(value: &str) -> Option<String> {
 #[serde(default, deny_unknown_fields)]
 #[non_exhaustive]
 pub struct Extensions {
-	/// The MoQ Auth extension: tokens presented and granted on their own stream (draft-17+).
+	/// The MoQ Auth extension: tokens presented and granted on their own stream.
 	pub auth: bool,
 	/// The MoQ Solicit extension: the peer answers our SUBSCRIBE_NAMESPACE rather than
 	/// announcing unasked.
 	pub solicit: bool,
 	/// The MoQ Epoch extension: announcements and requests carry the publisher's
-	/// [`Epoch`](crate::Epoch), as moq-lite 07 does (draft-17+).
+	/// [`Epoch`](crate::Epoch), as moq-lite 07 does.
 	pub epoch: bool,
 	/// The MoQ IETF extension, off by default: a moq-lite 07 hop between relays carries the
 	/// moq-transport object state a relay preserves, such as Object IDs and properties.
@@ -133,7 +133,7 @@ impl Encode<Version> for Setup {
 		if !v.is_ietf() {
 			return Err(EncodeError::Version);
 		}
-		w.varint(SETUP_V17)?;
+		w.varint(SETUP)?;
 		let prefix = w.prefix_u16();
 		w.slice(&self.parameters);
 		w.fill(prefix)
@@ -147,7 +147,7 @@ impl Decode<Version> for Setup {
 			return Err(DecodeError::Version);
 		}
 		let kind = r.varint()?;
-		if kind != SETUP_V17 {
+		if kind != SETUP {
 			return Err(DecodeError::InvalidValue);
 		}
 		let size = r.u16()? as usize;

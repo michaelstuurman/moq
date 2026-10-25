@@ -57,11 +57,10 @@ mod tests {
 	/// Options: an old peer can opt out too.
 	#[test]
 	fn every_version_round_trips() {
-		for version in [Version::Draft20] {
-			let mut params = super::super::Parameters::default();
-			into_setup(&mut params, version);
-			assert_eq!(from_setup(&params, version).unwrap(), Some(true));
-		}
+		let version = Version::Draft20;
+		let mut params = super::super::Parameters::default();
+		into_setup(&mut params, version);
+		assert_eq!(from_setup(&params, version).unwrap(), Some(true));
 	}
 
 	/// A peer that declared nothing wants to be told unasked, which is what keeps this

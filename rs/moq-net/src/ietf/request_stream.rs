@@ -197,7 +197,7 @@ impl Messages {
 	}
 }
 
-/// Refuse a modern request with its complete REQUEST_ERROR, then finish the response.
+/// Refuse a request with its complete REQUEST_ERROR, then finish the response.
 pub(super) async fn reject(
 	mut stream: Stream<Transport, Version>,
 	error: super::RequestError<'_>,
@@ -327,7 +327,7 @@ impl Decode<Version> for Update {
 	}
 }
 
-/// The namespace-only parameters of a modern REQUEST_UPDATE. `TRACKS` marks one on a
+/// The namespace-only parameters of a REQUEST_UPDATE. `TRACKS` marks one on a
 /// SUBSCRIBE_TRACKS, which from draft-19 may also carry TRACK_PROPERTY_FILTER and from
 /// draft-20 FORWARD.
 #[derive(Debug)]

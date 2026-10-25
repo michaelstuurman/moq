@@ -172,9 +172,8 @@ fn route(origin: &origin::Producer, path: &str) -> Option<origin::Route> {
 }
 
 /// MoQ Epoch carries the publisher's epoch, in either direction, only when both sides
-/// offer it on draft-17 or later. A side declining it, or an older draft, leaves the
-/// route epochless exactly as before the extension, and nothing on the wire breaks the
-/// session.
+/// offer it. A side declining it leaves the route epochless exactly as before the
+/// extension, and nothing on the wire breaks the session.
 #[moq_clock::test]
 async fn an_epoch_crosses_only_when_both_offer_it() {
 	for name in MOQT {

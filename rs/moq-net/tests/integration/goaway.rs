@@ -30,8 +30,7 @@ fn produce_origin(hop: Hop) -> moq_net::origin::Producer {
 const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Every version with GOAWAY support, across both wires and their distinct
-/// channels: the lite Goaway control stream, the IETF draft-14-16 shared
-/// control stream, and the IETF draft-17+ SETUP uni streams.
+/// channels: the lite Goaway control stream and the IETF SETUP uni streams.
 const GOAWAY_VERSIONS: &[&str] = &["moq-lite-04", "moq-lite-05", "moq-transport-18", "moq-transport-19"];
 
 /// A full receive window or missing FIN ACK cannot hold a drain beyond its local deadline.
@@ -125,10 +124,10 @@ async fn goaway_send_receive_all_versions() {
 	}
 }
 
-/// The IETF draft-17+ GOAWAY carries a timeout on the wire; the receiver
-/// observes the sender's advertised deadline.
+/// The IETF GOAWAY carries a timeout on the wire; the receiver observes the
+/// sender's advertised deadline.
 #[moq_clock::test]
-async fn goaway_wire_timeout_moq_transport_17() {
+async fn goaway_wire_timeout_moq_transport() {
 	moq_clock::timeout(TEST_TIMEOUT, async {
 		let version: Version = "moq-transport-18".parse().unwrap();
 		let pair = connect_mock(MockConnectOptions::new(version)).await;

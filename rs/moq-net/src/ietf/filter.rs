@@ -261,20 +261,6 @@ impl Filter {
 	}
 }
 
-/// The inline form, used by draft-14 where the filter is message fields rather than a
-/// parameter. Later drafts go through [`Param`] instead.
-impl Encode<Version> for Filter {
-	fn encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		self.encode_tag(w, version)
-	}
-}
-
-impl Decode<Version> for Filter {
-	fn decode(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		Self::decode_tag(r, version)
-	}
-}
-
 impl Param for Filter {
 	/// An unfiltered subscription is the default, so it goes on the wire as an absent
 	/// parameter rather than an empty one.
@@ -283,14 +269,10 @@ impl Param for Filter {
 	}
 
 	fn param_encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		// Inner varints use the draft-15 leading-ones encoding on the drafts that predate
-		// the switch, matching the other length-prefixed parameters.
-		let sv = version;
-
 		let mut buf = Vec::new();
-		let mut inner = Encoder::new(&mut buf, sv.into());
+		let mut inner = Encoder::new(&mut buf, version.into());
 		match version {
-			Version::Draft18 | Version::Draft19 => self.encode_tag(&mut inner, sv)?,
+			Version::Draft18 | Version::Draft19 => self.encode_tag(&mut inner, version)?,
 			Version::Draft20 | Version::Draft21 => self.encode_fields(&mut inner)?,
 			// Draft-22 drops the Length, since the Location Filter Type says which fields follow.
 			_ => return self.encode_typed(w),
@@ -300,17 +282,17 @@ impl Param for Filter {
 	}
 
 	fn param_decode(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		let sv = match version {
-			Version::Draft18 | Version::Draft19 => version,
+		match version {
+			Version::Draft18 | Version::Draft19 => {}
 			// The field count is what carries the meaning, so the value is consumed whole.
 			Version::Draft20 | Version::Draft21 => {
 				return Self::decode_fields(&mut Decoder::new(r.bytes()?, version.into()));
 			}
 			_ => return Self::decode_typed(r),
-		};
+		}
 
-		let mut buf = Decoder::new(r.bytes()?, sv.into());
-		let filter = Self::decode_tag(&mut buf, sv)?;
+		let mut buf = Decoder::new(r.bytes()?, version.into());
+		let filter = Self::decode_tag(&mut buf, version)?;
 		if !buf.is_empty() {
 			return Err(DecodeError::TrailingBytes);
 		}
@@ -375,7 +357,7 @@ mod tests {
 		);
 	}
 
-	/// Draft-17 replaced QUIC's varint with a leading-1-bits one. They agree below 64, so a
+	/// moq-transport uses a leading-1-bits varint, not QUIC's. They agree below 64, so a
 	/// wrong codec stays invisible until group or object ids grow past that.
 	#[test]
 	fn draft20_uses_leading_ones_varints_above_63() {

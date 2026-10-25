@@ -427,7 +427,6 @@ impl Subscriber {
 			return Ok(());
 		};
 		let mut stream = stream?.with_stats(self.origin.stats());
-		// No draft with SUBSCRIBE_TRACKS has MAX_REQUEST_ID, so this never waits on credit.
 		let request_id = self.control.next_request_id();
 		stream.writer.buffer_message(
 			ietf::SubscribeTracks::ID,

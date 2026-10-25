@@ -755,7 +755,6 @@ impl Default for Messages {
 				authorization_token: None,
 				epoch: None,
 			},
-			// Draft-17+ carries the request id in the control message framing instead.
 			ietf_ok: ietf::SubscribeOk {
 				track_alias: 5,
 				largest: Some(ietf::Location {
@@ -1380,7 +1379,7 @@ impl crate::transport::Error for NoError {
 	}
 }
 
-/// Admit modern request IDs for the history benchmark, returning the accepted count.
+/// Admit request IDs for the history benchmark, returning the accepted count.
 pub fn request_history(ids: &[u64]) -> usize {
 	ietf::request_history(ids)
 }

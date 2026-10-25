@@ -511,8 +511,7 @@ fn accepted_info(properties: &ietf::Properties, version: Version) -> track::Info
 		.with_compress(properties.compress)
 		.with_timescale(properties.timescale)
 		.with_max_age(properties.max_cache_duration)
-		// Drafts 14 and 15 carry only per-subgroup priorities, which the model does not keep,
-		// so they get the later drafts' default too.
+		// A track without the property gets the default.
 		.with_priority(super::priority::from_wire(
 			properties.priority.unwrap_or(super::priority::DEFAULT_WIRE),
 		))
@@ -707,8 +706,8 @@ struct Held {
 	epoch: Option<crate::Epoch>,
 }
 
-/// A joining request may be abandoned before it takes an ID. Once allocated, its
-/// header must still reach the peer so drafts 14/15 never see a missing ID.
+/// A joining request may be abandoned before it takes an ID. Once committed, its header
+/// must still reach the peer, which otherwise remembers the ID it never saw.
 struct JoiningTask {
 	work: Option<MaybeSendBox<'static, Result<(), Error>>>,
 	state: kio::Shared<JoiningState>,
@@ -1145,8 +1144,7 @@ impl Subscriber {
 
 	/// Send SUBSCRIBE_NAMESPACE for one prefix on a bidi stream, and read what it reports
 	/// until the peer ends it or `live` closes.
-	/// The caller is responsible for opening the appropriate stream type
-	/// (virtual for v14/v15, real bidi for v16+), one per prefix.
+	/// The caller opens the stream, one per prefix.
 	///
 	/// A failure here is per-prefix, so the caller decides what it means for the
 	/// session: [`is_protocol_violation`] separates the peer's fault (fatal) from a
@@ -1791,7 +1789,7 @@ impl Subscriber {
 			Message(u64, ietf::Body),
 			// The peer finished its send direction.
 			Fin,
-			// Draft-17+: our send direction closed (the peer stopped reading or reset it).
+			// Our send direction closed (the peer stopped reading or reset it).
 			WriterClosed(Result<(), Error>),
 			// The read failed.
 			Failed(Error),
@@ -3327,8 +3325,6 @@ impl Subscriber {
 					if update.priority.is_none() && update.max_age.is_none() && update.new_group.is_none() {
 						return Poll::Pending;
 					}
-					// Draft-14's SUBSCRIBE_UPDATE cannot omit the priority, so it restates the one
-					// in force rather than resetting it to the omission default.
 					Poll::Ready(End::Update(update))
 				})
 				.await;
@@ -4286,12 +4282,12 @@ impl Subscriber {
 
 /// Mark where the track ends, as an END_OF_TRACK object said.
 ///
-/// Draft-14 on carries no end location in PUBLISH_DONE, so this is what lets a subscriber
+/// PUBLISH_DONE carries no end location, so this is what lets a subscriber
 /// learn the end before the live edge reaches it. A boundary at or below a group already
 /// received is the publisher breaking its own end, which no later group can repair. A
 /// marker that lands after the subscription already ended (its grace expired) changes
-/// nothing. Draft-14 lets the marker carry properties, but the end is track-level with
-/// nowhere to keep them, so the track is refused rather than lose them.
+/// nothing. A marker carrying properties has nowhere to keep them, since the end is
+/// track-level, so the track is refused rather than lose them.
 fn end_track(track: &mut track::Producer, end: track::Position, properties: bool) -> Result<(), Error> {
 	if properties {
 		tracing::warn!(?end, "END_OF_TRACK properties are unsupported");
@@ -5325,7 +5321,7 @@ struct FetchPayload {
 struct FetchedObject {
 	group: Option<u64>,
 	object: Option<u64>,
-	/// Draft-16 on lets a fetch carry an Object published as a datagram. A datagram group is
+	/// A fetch may carry an Object published as a datagram. A datagram group is
 	/// never cached, so it is never filled from a fetch.
 	datagram: bool,
 	subgroup_ok: bool,
@@ -5377,9 +5373,8 @@ async fn decode_fetch_object<R: crate::transport::poll::RecvStream>(
 
 /// Absolute Group ID from a fetch object's Group ID field.
 ///
-/// The first object is always absolute. Draft-14 through draft-17 keep sending the
-/// absolute ID when the field is present; draft-18 and later send a Group ID Delta,
-/// resolved here in the ascending order this FETCH requested.
+/// The first object is always absolute; later ones send a Group ID Delta, resolved here
+/// in the ascending order this FETCH requested.
 fn resolve_fetch_group(prior: Option<u64>, wire: Option<u64>) -> Result<Option<u64>, Error> {
 	let Some(wire) = wire else {
 		return Ok(None);
@@ -6669,7 +6664,7 @@ mod tests {
 			writer.varint(ietf::RequestError::ID).await.unwrap();
 			writer
 				.encode(&ietf::RequestError {
-					// DOES_NOT_EXIST, draft-16 section 13.4.2.
+					// DOES_NOT_EXIST.
 					error_code: 0x10,
 					reason_phrase: "not found".into(),
 					retry_interval: 0,
@@ -9419,10 +9414,7 @@ mod tests {
 
 	/// PUBLISH offers one track, but a source attaches per namespace and serves every
 	/// track under it. Rather than invent a namespace-level source from a track-level
-	/// offer, decline the request and leave the session running.
-	///
-	/// Draft-14 answers with PUBLISH_ERROR and its own registry; draft-15 folded the message
-	/// into REQUEST_ERROR, so both shapes have to carry NOT_SUPPORTED.
+	/// offer, decline the request with NOT_SUPPORTED and leave the session running.
 	#[moq_clock::test]
 	async fn publish_is_rejected_without_announcing() {
 		for version in [Version::Draft19] {
@@ -9690,7 +9682,7 @@ mod tests {
 
 	/// An announce's grant ending while its first answer waits on a peer that stopped
 	/// reading retracts the route at once, not once the answer drains: the peer is told
-	/// only afterwards, and on drafts 14-16 with a PUBLISH_NAMESPACE_CANCEL after the OK.
+	/// only afterwards.
 	#[moq_clock::test]
 	async fn a_revoked_token_retracts_an_announce_whose_ok_is_blocked() {
 		for version in [Version::Draft18, Version::Draft22] {
@@ -10256,8 +10248,8 @@ mod tests {
 	}
 
 	/// Per draft-18 section 10.9.1, a refused PUBLISH_NAMESPACE
-	/// renewal ends only that announce at once, by closing its stream (and cancelling it on
-	/// draft-16), not by waiting for the old 60s grant to lapse. The session stays up.
+	/// renewal ends only that announce at once, by closing its stream, not by waiting for
+	/// the old 60s grant to lapse. The session stays up.
 	#[moq_clock::test]
 	async fn a_refused_publish_namespace_renewal_ends_the_announce() {
 		for version in [Version::Draft18] {
@@ -10315,7 +10307,6 @@ mod tests {
 				"the session must stay up: {:?}",
 				session.log.closes()
 			);
-			// Draft-16's request outlives its stream, so the refusal cancels it explicitly.
 		}
 	}
 
@@ -12608,28 +12599,27 @@ mod stitch_tests {
 	/// A datagram's object number does not change its public payload view.
 	#[moq_clock::test]
 	async fn passthrough_accepts_datagrams_past_object_zero() {
-		for version in [Version::Draft22] {
-			let mut h = Harness::with_timescale(Fill::Done, vec![], None);
-			h.subscriber.version = version;
-			let mut consumer = h.track.subscribe(None);
-			let bytes = ietf::ObjectDatagram {
-				track_alias: ALIAS,
-				group_id: SEQUENCE,
-				object_id: Some(6),
-				publisher_priority: Some(128),
-				end_of_group: false,
-				properties: None,
-				body: ietf::DatagramBody::Payload(bytes::Bytes::from_static(b"object-six")),
-			}
-			.encode_bytes(version)
-			.unwrap();
-			h.subscriber.recv_datagram(bytes).unwrap();
-			let received = consumer.poll_recv_datagram(&kio::Waiter::noop());
-			assert!(
-				matches!(&received, Poll::Ready(Ok(Some(data))) if data.payload == b"object-six"[..]),
-				"{version}: {received:?}"
-			);
+		let version = Version::Draft22;
+		let mut h = Harness::with_timescale(Fill::Done, vec![], None);
+		h.subscriber.version = version;
+		let mut consumer = h.track.subscribe(None);
+		let bytes = ietf::ObjectDatagram {
+			track_alias: ALIAS,
+			group_id: SEQUENCE,
+			object_id: Some(6),
+			publisher_priority: Some(128),
+			end_of_group: false,
+			properties: None,
+			body: ietf::DatagramBody::Payload(bytes::Bytes::from_static(b"object-six")),
 		}
+		.encode_bytes(version)
+		.unwrap();
+		h.subscriber.recv_datagram(bytes).unwrap();
+		let received = consumer.poll_recv_datagram(&kio::Waiter::noop());
+		assert!(
+			matches!(&received, Poll::Ready(Ok(Some(data))) if data.payload == b"object-six"[..]),
+			"{version}: {received:?}"
+		);
 	}
 
 	#[moq_clock::test]
@@ -13679,7 +13669,7 @@ mod stitch_tests {
 		}
 	}
 
-	/// One Object published as a datagram, as draft-16 on lets a fetch stream carry it.
+	/// One Object published as a datagram, as a fetch stream may carry it.
 	fn datagram_object(sequence: u64) -> Vec<u8> {
 		let mut properties = Vec::new();
 		let w = &mut Encoder::new(&mut properties, VERSION.into());
@@ -13922,17 +13912,15 @@ mod joining_fetch_tests {
 	}
 
 	fn fetch_error(version: Version) -> Vec<u8> {
-		match version {
-			_ => message_bytes(
-				ietf::RequestError::ID,
-				&ietf::RequestError {
-					error_code: request::NOT_SUPPORTED,
-					reason_phrase: "refused".into(),
-					retry_interval: 0,
-				},
-				version,
-			),
-		}
+		message_bytes(
+			ietf::RequestError::ID,
+			&ietf::RequestError {
+				error_code: request::NOT_SUPPORTED,
+				reason_phrase: "refused".into(),
+				retry_interval: 0,
+			},
+			version,
+		)
 	}
 
 	fn decode_messages(log: &crate::lite::test_transport::Log, version: Version) -> Vec<(u64, bytes::Bytes)> {

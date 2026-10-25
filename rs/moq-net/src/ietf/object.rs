@@ -285,8 +285,7 @@ fn values(block: &crate::model::object::Block, version: Version) -> Result<Vec<P
 /// Read an object's property list on a track in `timescale`. A timed track's frame holds
 /// the object's time, its mutable Timestamp or else a sealed one, so the block does not.
 ///
-/// The caller applies [`check_frame`] once the object has a frame: a draft-14 status
-/// object, whose list arrives before its status, may fill the whole block.
+/// The caller applies [`check_frame`] once the object has a frame.
 pub(crate) fn read(data: &Bytes, version: Version, timescale: Option<Timescale>) -> Result<Decoded, Error> {
 	decode(data, version, timescale, true)
 }

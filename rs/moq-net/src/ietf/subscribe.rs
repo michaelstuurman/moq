@@ -443,7 +443,7 @@ mod tests {
 		build(millis, version).unwrap()
 	}
 
-	/// A subscriber may send RENDEZVOUS_TIMEOUT (draft-17+). We do not honor the wait, but an
+	/// A subscriber may send RENDEZVOUS_TIMEOUT. We do not honor the wait, but an
 	/// unknown message parameter is a session-killing protocol violation, so it still has to
 	/// parse: failing to decode it takes the whole session down instead of answering the
 	/// SUBSCRIBE.
@@ -587,8 +587,7 @@ mod tests {
 	}
 
 	/// LARGEST_OBJECT is required once the track has content, so every draft that defines
-	/// it carries it: a content flag on draft-14, a length-prefixed parameter through
-	/// draft-16, and a bare Location parameter after.
+	/// it carries it as a bare Location parameter.
 	#[test]
 	fn test_subscribe_ok_largest_object_wire_vectors() {
 		let largest = Some(Location { group: 9, object: 3 });
@@ -687,7 +686,7 @@ mod tests {
 		assert!(result.is_err());
 	}
 
-	/// From draft-15 SUBSCRIBER_PRIORITY is a parameter whose omission means 128, not this
+	/// SUBSCRIBER_PRIORITY is a parameter whose omission means 128, not this
 	/// stack's unset 127, so a relay forwards it unchanged.
 	#[test]
 	fn test_subscribe_omitted_priority_is_128() {
@@ -749,8 +748,8 @@ mod tests {
 		assert_eq!(decoded.track_alias, 42);
 	}
 
-	/// The registered priority property is two literal bytes after the message body on
-	/// draft-17+, and absent on older drafts. The decoder returns the same wire value.
+	/// The registered priority property is two literal bytes after the message body. The
+	/// decoder returns the same wire value.
 	#[test]
 	fn subscribe_ok_priority_property_bytes_on_every_draft() {
 		for version in [
@@ -779,9 +778,9 @@ mod tests {
 		}
 	}
 
-	/// GROUP_ORDER (0x22) is only a legal SUBSCRIBE_OK *message parameter* through draft-15;
-	/// a draft-16+ peer closes the session with PROTOCOL_VIOLATION when it sees one. The
-	/// publisher's preference belongs in the DEFAULT_PUBLISHER_GROUP_ORDER track property,
+	/// GROUP_ORDER (0x22) is not a legal SUBSCRIBE_OK *message parameter*; a peer closes the
+	/// session with PROTOCOL_VIOLATION when it sees one. The publisher's preference
+	/// belongs in the DEFAULT_PUBLISHER_GROUP_ORDER track property,
 	/// which shares the number 0x22 in the separate property registry.
 	#[test]
 	fn test_subscribe_ok_v18_group_order_is_a_property() {
@@ -812,8 +811,8 @@ mod tests {
 		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
 	}
 
-	/// GROUP_ORDER left SUBSCRIBE_OK after draft-15. Draft-18 closes the session when a
-	/// known parameter shows up on a message that does not define it.
+	/// Draft-18 closes the session when a known parameter shows up on a message that does
+	/// not define it, such as GROUP_ORDER on SUBSCRIBE_OK.
 	#[test]
 	fn test_subscribe_ok_v18_rejects_group_order_parameter() {
 		#[rustfmt::skip]
@@ -827,8 +826,7 @@ mod tests {
 		assert!(decode_message::<SubscribeOk>(&bytes, Version::Draft18).is_err());
 	}
 
-	/// Draft-18 removes the `required_request_id_delta` field (#1615), so the
-	/// REQUEST_UPDATE wire format is 1 varint shorter than draft-17.
+	/// REQUEST_UPDATE has no `required_request_id_delta` field (moq-wg/moq-transport#1615).
 	#[test]
 	fn test_subscribe_update_v18_round_trip() {
 		let msg = SubscribeUpdate {
@@ -983,8 +981,8 @@ mod tests {
 		}
 	}
 
-	/// AUTHORIZATION TOKEN is a Key-Value-Pair with an odd type through draft-16, so its
-	/// value is length prefixed there too.
+	/// AUTHORIZATION TOKEN is a Key-Value-Pair with an odd type, so its value is length
+	/// prefixed.
 	#[test]
 	fn subscribe_accepts_a_token_on_every_draft() {
 		#[rustfmt::skip]

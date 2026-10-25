@@ -38,9 +38,8 @@
 //! Nothing else happens, so it measures the sessions' own work. Paused time skips waiting.
 //!
 //! `session_churn_*` times one request opened and closed by a session that already
-//! holds others open, swept over sessions and requests held per session. On
-//! moq-transport 14 every close is credited back through the MAX_REQUEST_ID window,
-//! so a slope here is that bookkeeping growing with the sessions or the requests.
+//! holds others open, swept over sessions and requests held per session, so a slope
+//! here is per-request bookkeeping growing with the sessions or the requests.
 //!
 //! Everything runs on one current-thread runtime, so the only work measured is
 //! the protocol and model code, never scheduling across threads.

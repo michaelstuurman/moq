@@ -115,8 +115,7 @@ async fn relay(published: Published, hops: [&str; 2], subscription: moq_net::tra
 	}
 }
 
-/// Hops that carry a start group and negotiate compression: lite-07, and moq-transport
-/// draft-17 and later.
+/// Hops that carry a start group and negotiate compression: lite-07 and moq-transport.
 const RANGED: &[&str] = &["moq-lite-07-wip", "moq-transport-18", "moq-transport-22"];
 
 /// A subscription starting at a group delivers it whole from its first frame across every
@@ -329,7 +328,7 @@ async fn ietf_ingress_stays_compressed_across_protocols() {
 		for downstream in ["moq-lite-07-wip", "moq-transport-22"] {
 			moq_clock::timeout(TIMEOUT, async {
 				let mut fixture = connect(upstream, downstream).await;
-				assert_eq!(fixture.subscriber.info().compress, true, "{upstream} -> {downstream}");
+				assert!(fixture.subscriber.info().compress, "{upstream} -> {downstream}");
 				let mut group = fixture.track.append_group().unwrap();
 				for index in 0..3 {
 					group

@@ -277,7 +277,7 @@ impl Session {
 	/// is still live never finishes, so finish or abort tracks before closing.
 	///
 	/// Both protocols withdraw this session's announcements and wait for their
-	/// delivery. IETF drafts 14 through 16 send withdrawals without waiting.
+	/// delivery.
 	pub async fn close(self) -> Result<(), Error> {
 		if let Ok(mut close) = self.close.write()
 			&& close.is_none()
@@ -366,9 +366,9 @@ impl Session {
 	/// The handle passed to [`Client::with_auth`](crate::Client::with_auth), or else one
 	/// this session created for itself, which ends with it.
 	///
-	/// On moq-lite-07-wip, and on moq-transport draft-17+ when both sides negotiate the
-	/// MoQ Auth extension, each side presents its connection's credential right after
-	/// setup. Older versions, and peers that do not negotiate it, leave the grant `None`.
+	/// On moq-lite-07-wip, and on moq-transport when both sides negotiate the MoQ Auth
+	/// extension, each side presents its connection's credential right after setup.
+	/// Older versions, and peers that do not negotiate it, leave the grant `None`.
 	pub fn auth(&self) -> auth::Handle {
 		self.auth.clone()
 	}

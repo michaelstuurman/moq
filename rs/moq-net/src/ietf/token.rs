@@ -255,15 +255,14 @@ mod tests {
 			kind: 300,
 			value: vec![0x00, 0xff],
 		};
-		for (version, expected) in [(Version::Draft18, [0x03, 0x81, 0x2c, 0x00, 0xff])] {
-			let mut params = Parameters::default();
-			into_setup(&mut params, &token, version).unwrap();
-			assert_eq!(
-				params.get_bytes(ParameterBytes::AuthorizationToken),
-				Some(&expected[..]),
-				"{version:?}"
-			);
-		}
+		let (version, expected) = (Version::Draft18, [0x03, 0x81, 0x2c, 0x00, 0xff]);
+		let mut params = Parameters::default();
+		into_setup(&mut params, &token, version).unwrap();
+		assert_eq!(
+			params.get_bytes(ParameterBytes::AuthorizationToken),
+			Some(&expected[..]),
+			"{version:?}"
+		);
 	}
 
 	#[test]
@@ -320,15 +319,9 @@ mod tests {
 				.unwrap();
 
 			let key = u64::from(ParameterBytes::AuthorizationToken);
-			let (count, keys): (Option<u64>, [u64; 2]) = match version {
-				// Delta-encoded from draft-16, so the repeat is a delta of zero.
-				_ => (None, [key, 0]),
-			};
 			let mut raw = Vec::new();
-			if let Some(count) = count {
-				Encoder::new(&mut raw, version.into()).varint(count).unwrap();
-			}
-			for key in keys {
+			// Delta-encoded, so the repeat is a delta of zero.
+			for key in [key, 0] {
 				Encoder::new(&mut raw, version.into()).varint(key).unwrap();
 				Encoder::new(&mut raw, version.into()).bytes(&value).unwrap();
 			}

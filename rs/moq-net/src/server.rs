@@ -284,7 +284,7 @@ impl Server {
 			PausedHandshake::LiteBare { version, .. } | PausedHandshake::LiteSetup { version, .. } => {
 				version.has_auth()
 			}
-			PausedHandshake::IetfModern(_) | PausedHandshake::Negotiated(_) => false,
+			PausedHandshake::Ietf(_) | PausedHandshake::Negotiated(_) => false,
 		});
 		Ok(Handshake {
 			path,
@@ -360,7 +360,7 @@ impl Server {
 				};
 
 				self.versions.select(Version::Ietf(draft)).ok_or(Error::Version)?;
-				return self.accept_ietf_modern(runtime, session, draft).await;
+				return self.accept_ietf(runtime, session, draft).await;
 			}
 			Some(ALPN_LITE_07_WIP | ALPN_LITE_06 | ALPN_LITE_05 | ALPN_LITE_04 | ALPN_LITE_03) => {
 				return self.handshake_lite(runtime, session).await;
@@ -412,7 +412,7 @@ impl Server {
 
 	/// Read a moq-transport client's SETUP (with its request path) off its uni stream,
 	/// then pause. `ok()` starts the session and hands the stream back for GOAWAY.
-	async fn accept_ietf_modern(
+	async fn accept_ietf(
 		&self,
 		runtime: Deadlines,
 		mut session: Transport,
@@ -435,7 +435,7 @@ impl Server {
 				server: self.clone(),
 				runtime,
 				deadline: None,
-				handshake: PausedHandshake::IetfModern(PausedIetfModern {
+				handshake: PausedHandshake::Ietf(PausedIetf {
 					session,
 					version,
 					peer_setup,
@@ -494,20 +494,20 @@ enum PausedHandshake {
 		version: lite::Version,
 		client_setup: lite::AcceptedSetup,
 	},
-	IetfModern(PausedIetfModern),
+	Ietf(PausedIetf),
 	Negotiated(PausedNegotiated),
 }
 
-/// Modern IETF (17+): the client's SETUP (with its request path) has been
+/// moq-transport: the client's SETUP (with its request path) has been
 /// read off its uni stream; `ok` starts the session, handing that stream back
 /// for GOAWAY monitoring.
-struct PausedIetfModern {
+struct PausedIetf {
 	session: Transport,
 	version: ietf::Version,
 	peer_setup: ietf::PeerSetup,
 }
 
-impl PausedIetfModern {
+impl PausedIetf {
 	/// Complete the handshake with the final server config.
 	fn ok(
 		self,
@@ -666,7 +666,7 @@ impl Handshake {
 	/// The Hop ID declared by the peer, when the negotiated protocol carries one.
 	///
 	/// A moq-lite-05+ endpoint declares this when it attaches a publish or subscribe
-	/// origin; a `moqt-17`+ endpoint declares it via the MoQ Cluster extension. Older
+	/// origin; a moq-transport endpoint declares it via the MoQ Cluster extension. Older
 	/// versions and endpoints without one return `None`.
 	///
 	/// Self-declared, so treat it as a correlation hint rather than an
@@ -800,7 +800,7 @@ impl Handshake {
 					server.stats.control(stats::Control::Session, client_setup.size, true);
 					server.start_lite(runtime, session, version, Some(client_setup), peer_hop, auth)
 				}
-				PausedHandshake::IetfModern(paused) => paused.ok(server, runtime, peer_hop, auth),
+				PausedHandshake::Ietf(paused) => paused.ok(server, runtime, peer_hop, auth),
 				// Boxed so the bidi SETUP write of these old versions doesn't size every caller's future.
 				PausedHandshake::Negotiated(paused) => Box::pin(paused.ok(server, runtime, peer_hop, auth)).await,
 			}
@@ -859,7 +859,7 @@ impl PausedHandshake {
 			Self::LiteBare { session, version } | Self::LiteSetup { session, version, .. } => {
 				(session.clone(), (*version).into())
 			}
-			Self::IetfModern(paused) => (paused.session.clone(), paused.version.into()),
+			Self::Ietf(paused) => (paused.session.clone(), paused.version.into()),
 			Self::Negotiated(paused) => (paused.session.clone(), paused.version.into()),
 		}
 	}
@@ -1131,7 +1131,7 @@ mod tests {
 		buf
 	}
 
-	/// Encode a draft-17+ Setup Stream: the unified SETUP message, whose parameters
+	/// Encode a moq-transport Setup Stream: the unified SETUP message, whose parameters
 	/// carry the request path the same way lite-05's does.
 	fn ietf_setup(version: ietf::Version, path: Option<&str>) -> Vec<u8> {
 		let mut params = ietf::Parameters::default();
@@ -1154,7 +1154,6 @@ mod tests {
 		buf
 	}
 
-	/// Encode a draft 14-16 CLIENT_SETUP, sent on the control bidi stream.
 	/// A moq-lite-02 CLIENT_SETUP, sent on the bidi stream the `moql` ALPN negotiates over.
 	fn moql_setup() -> Vec<u8> {
 		let version = crate::Version::Lite(lite::Version::Lite02);
@@ -1295,14 +1294,14 @@ mod tests {
 
 	#[moq_clock::test]
 	async fn accept_request_exposes_the_setup_token() {
-		let modern = FakeSession::new(
+		let ietf = FakeSession::new(
 			ALPN_19,
 			[ietf_setup_with(
 				ietf::Version::Draft19,
 				token_params(ietf::Version::Draft19),
 			)],
 		);
-		let request = Server::new().accept_request(moq_clock::now(), modern).await.unwrap();
+		let request = Server::new().accept_request(moq_clock::now(), ietf).await.unwrap();
 		assert_eq!(request.token(), Some(&setup_token()));
 	}
 
@@ -1494,7 +1493,7 @@ mod tests {
 				server: Server::new().with_publisher(&origin),
 				runtime: Deadlines::new(moq_clock::now()),
 				deadline: None,
-				handshake: PausedHandshake::IetfModern(PausedIetfModern {
+				handshake: PausedHandshake::Ietf(PausedIetf {
 					session: Transport::new(transport),
 					version,
 					peer_setup: ietf::PeerSetup {

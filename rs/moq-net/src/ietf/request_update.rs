@@ -46,7 +46,7 @@ pub fn supported(version: Version) -> bool {
 /// A request's in-band renewal: the verdict on the token being verified, and the updates that
 /// arrived behind it.
 ///
-/// From draft 17 an answer names no Request ID, so updates are answered in arrival order: one
+/// An answer names no Request ID, so updates are answered in arrival order: one
 /// behind a pending verdict waits here until the verdict ahead of it resolves. The queue is
 /// bounded by MAX_REQUEST_UPDATES, counting the one being verified.
 pub(super) struct Renewal<T> {
@@ -160,14 +160,13 @@ mod tests {
 			);
 		}
 
-		for version in [Version::Draft18] {
-			let mut params = super::super::Parameters::default();
-			into_setup(&mut params, version);
-			assert_eq!(
-				params.get_varint(super::super::ParameterVarInt::MaxRequestUpdates),
-				None,
-				"{version} has no MAX_REQUEST_UPDATES option to advertise"
-			);
-		}
+		let version = Version::Draft18;
+		let mut params = super::super::Parameters::default();
+		into_setup(&mut params, version);
+		assert_eq!(
+			params.get_varint(super::super::ParameterVarInt::MaxRequestUpdates),
+			None,
+			"{version} has no MAX_REQUEST_UPDATES option to advertise"
+		);
 	}
 }

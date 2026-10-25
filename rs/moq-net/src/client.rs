@@ -150,7 +150,7 @@ impl Client {
 	}
 
 	/// Price this link, in the units the rest of the mesh uses (moq-lite-06+, and
-	/// `moqt-17`+ via the MoQ Cluster extension).
+	/// moq-transport via the MoQ Cluster extension).
 	///
 	/// The dialer is the side that knows what a link costs, because it chose the peer:
 	/// use `0` for a sibling in the same datacenter and something large for another

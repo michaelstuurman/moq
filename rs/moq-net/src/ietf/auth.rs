@@ -2,8 +2,7 @@
 //!
 //! The moq-transport binding of the lite Auth Stream (see [`crate::auth`]): each
 //! token rides a request stream of its own, answered with the patterns it grants,
-//! encoded as lite's AUTH_OK encodes them. Negotiated with the AUTH Setup Option on
-//! draft-17+ only, where SETUP is a Key-Value-Pair block.
+//! encoded as lite's AUTH_OK encodes them. Negotiated with the AUTH Setup Option.
 
 #[cfg(feature = "async")]
 use crate::driver::Transport;
@@ -149,7 +148,6 @@ const UNAUTHORIZED: u64 = 0x1;
 const NOT_SUPPORTED: u64 = 0x3;
 const MALFORMED_AUTH_TOKEN: u64 = 0x4;
 const EXPIRED_AUTH_TOKEN: u64 = 0x5;
-/// Draft-17 assigned it, the first draft this extension negotiates on.
 const GOING_AWAY: u64 = 0x6;
 
 /// The AUTH_ERROR code for a refusal. The public API speaks session codes, and the

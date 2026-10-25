@@ -198,7 +198,7 @@ pub struct Publish<'a> {
 	pub largest_location: Option<Location>,
 	pub forward: bool,
 
-	/// Metadata about the track, sent as Track Properties (draft-17+).
+	/// Metadata about the track, sent as Track Properties.
 	pub properties: Properties,
 	/// The subscription's SUBSCRIBER_PRIORITY (draft-20+), `None` when absent: 128.
 	pub subscriber_priority: Option<u8>,
@@ -288,7 +288,7 @@ pub struct PublishOk {
 	pub group_order: Option<GroupOrder>,
 	/// The Location Filter (through draft-19), `None` when absent.
 	pub filter: Option<Filter>,
-	/// NEW_GROUP_REQUEST (drafts 16 to 19), which a dynamic track judges as a join.
+	/// NEW_GROUP_REQUEST (through draft-19), which a dynamic track judges as a join.
 	pub new_group: Option<u64>,
 }
 
@@ -568,9 +568,9 @@ mod tests {
 		}
 	}
 
-	/// GROUP_ORDER (0x22) is only a legal PUBLISH *message parameter* through draft-15; a
-	/// draft-16+ peer closes the session with PROTOCOL_VIOLATION when it sees one. The
-	/// publisher's preference belongs in the DEFAULT_PUBLISHER_GROUP_ORDER track property,
+	/// GROUP_ORDER (0x22) is not a legal PUBLISH *message parameter*; a peer closes the
+	/// session with PROTOCOL_VIOLATION when it sees one. The publisher's preference
+	/// belongs in the DEFAULT_PUBLISHER_GROUP_ORDER track property,
 	/// which shares the number 0x22 in the separate property registry.
 	#[test]
 	fn test_publish_v18_group_order_is_a_property() {

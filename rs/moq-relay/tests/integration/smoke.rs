@@ -789,8 +789,8 @@ async fn internal_unix_round_trip() {
 }
 
 /// Every version whose SETUP carries a request path the server reads: moq-lite-05/06
-/// (Setup Stream) and moq-transport 14-18 (the `Path` SETUP parameter, in-band on
-/// the bidi stream for 14-16 and the uni Setup Stream for 17-18).
+/// (Setup Stream) and moq-transport 18 (the `Path` SETUP parameter on the uni Setup
+/// Stream).
 fn path_versions() -> Vec<moq_net::Version> {
 	["moq-lite-05", "moq-lite-06", "moq-transport-18"]
 		.iter()

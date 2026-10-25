@@ -234,8 +234,8 @@ async fn remote_lite_consumer_sees_what_a_local_one_does() {
 
 #[moq_clock::test]
 async fn remote_ietf_consumer_sees_what_a_local_one_does() {
-	// Drafts 14 to 16 carry each request over the control stream; 17 and later give it
-	// its own stream. Both have to end a finished track the way moq-lite does.
+	// Each request has its own stream, which has to end a finished track the way
+	// moq-lite does.
 	for version in [
 		"moq-transport-18",
 		"moq-transport-19",

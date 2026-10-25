@@ -8,9 +8,7 @@
 //! preference puts `A` ahead. Losing `A` moves `S` to `B`, and `A` returning moves it
 //! back. Between lite-07 routes with the same epoch each move resumes the subscription.
 //! A moq-transport `B` with the MoQ Epoch extension carries the epoch, but its copy's
-//! track info records the draft, so the move onto it is refused. A moq-transport `B`
-//! that cannot carry the epoch (before draft-17) makes each move a restart and a
-//! re-request.
+//! track info records the draft, so the move onto it is refused.
 
 use crate::support;
 

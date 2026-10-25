@@ -507,10 +507,9 @@ pub struct Route {
 	///
 	/// Only a session built on the handle that issued it carries it, as the token on its
 	/// moq-transport PUBLISH_NAMESPACE: any other session, the inline NAMESPACE answering a
-	/// solicited SUBSCRIBE_NAMESPACE from draft 16 on (drafts 14 and 15 answer with a
-	/// PUBLISH_NAMESPACE, which carries it), and moq-lite (which rides the session's scope)
+	/// solicited SUBSCRIBE_NAMESPACE, and moq-lite (which rides the session's scope)
 	/// advertise the route unnamed. Swapping it is an update that renews the request with
-	/// REQUEST_UPDATE from draft 16, or ends and makes it again before. A handle passed to
+	/// REQUEST_UPDATE. A handle passed to
 	/// `Client::with_auth` presents it on every session it backs, so the route keeps it
 	/// across a reconnect. Local, like [`Self::source`]: a relay never forwards it.
 	pub auth: Option<crate::auth::Auth>,

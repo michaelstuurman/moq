@@ -1,12 +1,8 @@
 #![cfg(feature = "async")]
 
-//! A dialed moq-transport session whose peer declares no hop must not be offered
-//! a route learned from that peer, and a SUBSCRIBE that arrives for that route
-//! must not be sent back to the peer that announced it.
-//!
-//! Draft 16 has no cluster extension, so neither side declares a hop. That is the
-//! anonymous dial: the accepting side already stamps one, and the dialing side
-//! has to as well.
+//! A dialed moq-transport session must not be offered a route learned from its
+//! peer, and a SUBSCRIBE that arrives for that route must not be sent back to the
+//! peer that announced it.
 
 use crate::support;
 
@@ -122,7 +118,7 @@ async fn learned_hop(dialer: &origin::Producer, path: &str) -> Hop {
 	}
 }
 
-/// Draft-16 edges dialed by one origin each get their own hop. The edge that
+/// Edges dialed by one origin each get their own hop. The edge that
 /// announced a namespace is not told about it, and the other edge is. A
 /// subscribe from that other edge is fetched from the announcer and is not
 /// sent back to the subscriber.

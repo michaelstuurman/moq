@@ -8,8 +8,8 @@
 //! every frame exactly once, in order, whether the route changes between groups or
 //! in the middle of one, and however it changes.
 //!
-//! moq-transport carries the epoch with the MoQ Epoch extension (draft-17+), so it
-//! behaves the same. Older wire versions cannot carry the epoch, so `R` cannot tell the
+//! moq-transport carries the epoch with the MoQ Epoch extension, so it behaves the
+//! same. Older lite versions cannot carry the epoch, so `R` cannot tell the
 //! two routes serve the same bytes: its subscription stays on its route and ends with
 //! it, while a better route restarts the path for new requests.
 //!

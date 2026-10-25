@@ -1,4 +1,4 @@
-//! IETF moq-transport-14 publish namespace messages
+//! IETF moq-transport publish namespace messages
 
 use crate::{Epoch, Path, coding::*, ietf::RequestId};
 

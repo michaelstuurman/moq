@@ -212,8 +212,7 @@ impl Legacy {
 				"--limits-peer-quic-send-window",
 			);
 		}
-		const REQUESTS: &str =
-			"the request window left with moq-transport drafts 14 to 16; stream flow control bounds requests";
+		const REQUESTS: &str = "stream flow control bounds requests";
 		if self.client_requests.is_some() {
 			found.removed("--limits-client-requests", Some("MOQ_LIMITS_CLIENT_REQUESTS"), REQUESTS);
 		}

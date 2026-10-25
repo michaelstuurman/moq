@@ -386,7 +386,7 @@ mod tests {
 	}
 
 	#[test]
-	fn modern_round_trips() {
+	fn round_trips() {
 		let msg = SubscribeNamespace {
 			request_id: RequestId(4),
 			namespace: Path::new("example/meeting"),

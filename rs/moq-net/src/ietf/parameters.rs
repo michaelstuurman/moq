@@ -565,20 +565,19 @@ mod tests {
 
 	#[test]
 	fn test_param_u8_all_versions() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v, 0x20 => 200u8);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v, 0x20 => val: Option<u8>);
-					assert_eq!(val, Some(200));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v, 0x20 => 200u8);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v, 0x20 => val: Option<u8>);
+				assert_eq!(val, Some(200));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
@@ -605,39 +604,37 @@ mod tests {
 
 	#[test]
 	fn test_param_bool_all_versions() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v, 0x10 => true);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v, 0x10 => val: Option<bool>);
-					assert_eq!(val, Some(true));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v, 0x10 => true);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v, 0x10 => val: Option<bool>);
+				assert_eq!(val, Some(true));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_location_all_versions() {
 		let loc = Location { group: 5, object: 3 };
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v, 0x09 => loc.clone());
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v, 0x09 => val: Option<Location>);
-					assert_eq!(val, Some(Location { group: 5, object: 3 }));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v, 0x09 => loc.clone());
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v, 0x09 => val: Option<Location>);
+				assert_eq!(val, Some(Location { group: 5, object: 3 }));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
@@ -670,215 +667,206 @@ mod tests {
 
 	#[test]
 	fn test_param_filter_all_versions() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v, 0x21 => Filter::NextObject);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v, 0x21 => val: Option<Filter>);
-					assert_eq!(val, Some(Filter::NextObject));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v, 0x21 => Filter::NextObject);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v, 0x21 => val: Option<Filter>);
+				assert_eq!(val, Some(Filter::NextObject));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_multiple_delta_encoding() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v,
-						0x10 => true,
-						0x20 => 200u8,
-						0x21 => Filter::NextObject,
-						0x22 => 2u8,
-					);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v,
-						0x10 => forward: Option<bool>,
-						0x20 => sub_pri: Option<u8>,
-						0x21 => filter: Option<Filter>,
-						0x22 => group_order: Option<u8>,
-					);
-					assert_eq!(forward, Some(true));
-					assert_eq!(sub_pri, Some(200));
-					assert_eq!(filter, Some(Filter::NextObject));
-					assert_eq!(group_order, Some(2));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v,
+					0x10 => true,
+					0x20 => 200u8,
+					0x21 => Filter::NextObject,
+					0x22 => 2u8,
+				);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v,
+					0x10 => forward: Option<bool>,
+					0x20 => sub_pri: Option<u8>,
+					0x21 => filter: Option<Filter>,
+					0x22 => group_order: Option<u8>,
+				);
+				assert_eq!(forward, Some(true));
+				assert_eq!(sub_pri, Some(200));
+				assert_eq!(filter, Some(Filter::NextObject));
+				assert_eq!(group_order, Some(2));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_empty_set() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					encode_params!(w, v,);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v,);
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				encode_params!(w, v,);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v,);
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_option_skip_none() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					let loc: Option<Location> = None;
-					encode_params!(w, v,
-						0x09 => loc,
-						0x10 => true,
-					);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v,
-						0x09 => loc: Option<Location>,
-						0x10 => forward: Option<bool>,
-					);
-					assert_eq!(loc, None);
-					assert_eq!(forward, Some(true));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				let loc: Option<Location> = None;
+				encode_params!(w, v,
+					0x09 => loc,
+					0x10 => true,
+				);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v,
+					0x09 => loc: Option<Location>,
+					0x10 => forward: Option<bool>,
+				);
+				assert_eq!(loc, None);
+				assert_eq!(forward, Some(true));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_option_encode_some() {
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					let loc = Some(Location { group: 10, object: 5 });
-					encode_params!(w, v,
-						0x09 => loc,
-						0x10 => true,
-					);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v,
-						0x09 => loc: Option<Location>,
-						0x10 => forward: Option<bool>,
-					);
-					assert_eq!(loc, Some(Location { group: 10, object: 5 }));
-					assert_eq!(forward, Some(true));
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				let loc = Some(Location { group: 10, object: 5 });
+				encode_params!(w, v,
+					0x09 => loc,
+					0x10 => true,
+				);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v,
+					0x09 => loc: Option<Location>,
+					0x10 => forward: Option<bool>,
+				);
+				assert_eq!(loc, Some(Location { group: 10, object: 5 }));
+				assert_eq!(forward, Some(true));
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_bare_type_defaults() {
 		// Bare types use T::default() when the parameter is absent
-		for version in [Version::Draft18] {
-			round_trip_params(
-				version,
-				|w, v| {
-					// Encode only 0x10, not 0x20
-					encode_params!(w, v, 0x10 => true);
-					Ok(())
-				},
-				|r, v| {
-					decode_params!(r, v,
-						0x10 => forward: bool,
-						0x20 => priority: u8,
-					);
-					assert!(forward);
-					assert_eq!(priority, 0); // u8::default()
-					Ok(())
-				},
-			);
-		}
+		let version = Version::Draft18;
+		round_trip_params(
+			version,
+			|w, v| {
+				// Encode only 0x10, not 0x20
+				encode_params!(w, v, 0x10 => true);
+				Ok(())
+			},
+			|r, v| {
+				decode_params!(r, v,
+					0x10 => forward: bool,
+					0x20 => priority: u8,
+				);
+				assert!(forward);
+				assert_eq!(priority, 0); // u8::default()
+				Ok(())
+			},
+		);
 	}
 
 	#[test]
 	fn test_param_unknown_rejected() {
 		// 0x3E is not a message parameter, which closes the session.
-		for version in [Version::Draft18] {
-			let mut buf = Vec::new();
-			let mut w = Encoder::new(&mut buf, version.into());
-			w.varint(1).unwrap();
-			w.varint(0x3Eu64).unwrap();
-			1u64.param_encode(&mut w, version).unwrap();
+		let version = Version::Draft18;
+		let mut buf = Vec::new();
+		let mut w = Encoder::new(&mut buf, version.into());
+		w.varint(1).unwrap();
+		w.varint(0x3Eu64).unwrap();
+		1u64.param_encode(&mut w, version).unwrap();
 
-			let mut bytes = Decoder::new(&buf, version.into());
-			let result: Result<Option<u8>, DecodeError> = (|| {
-				decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
-				Ok(val)
-			})();
-			assert!(
-				matches!(result, Err(DecodeError::InvalidValue)),
-				"expected InvalidValue for unknown param in {version}"
-			);
-		}
+		let mut bytes = Decoder::new(&buf, version.into());
+		let result: Result<Option<u8>, DecodeError> = (|| {
+			decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
+			Ok(val)
+		})();
+		assert!(
+			matches!(result, Err(DecodeError::InvalidValue)),
+			"expected InvalidValue for unknown param in {version}"
+		);
 	}
 
 	/// EXPIRES (0x08) is a message parameter, but not for a message whose list is only
 	/// SUBSCRIBER_PRIORITY, so it closes the session.
 	#[test]
 	fn known_param_on_the_wrong_message() {
-		for version in [Version::Draft18] {
-			let mut buf = Vec::new();
-			let mut w = Encoder::new(&mut buf, version.into());
-			w.varint(2).unwrap();
-			w.varint(0x08u64).unwrap();
-			5u64.param_encode(&mut w, version).unwrap();
-			w.varint(0x18u64).unwrap(); // delta from 0x08 to 0x20
-			7u8.param_encode(&mut w, version).unwrap();
+		let version = Version::Draft18;
+		let mut buf = Vec::new();
+		let mut w = Encoder::new(&mut buf, version.into());
+		w.varint(2).unwrap();
+		w.varint(0x08u64).unwrap();
+		5u64.param_encode(&mut w, version).unwrap();
+		w.varint(0x18u64).unwrap(); // delta from 0x08 to 0x20
+		7u8.param_encode(&mut w, version).unwrap();
 
-			let mut bytes = Decoder::new(&buf, version.into());
-			let result: Result<Option<u8>, DecodeError> = (|| {
-				decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
-				Ok(val)
-			})();
-			assert!(matches!(result, Err(DecodeError::InvalidValue)));
-		}
+		let mut bytes = Decoder::new(&buf, version.into());
+		let result: Result<Option<u8>, DecodeError> = (|| {
+			decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
+			Ok(val)
+		})();
+		assert!(matches!(result, Err(DecodeError::InvalidValue)));
 	}
 
 	#[test]
 	fn test_param_duplicate_rejected() {
 		// Manually construct a buffer with duplicate key 0x20
-		for version in [Version::Draft18] {
-			let mut buf = Vec::new();
-			let mut w = Encoder::new(&mut buf, version.into());
-			// Encode count = 2
-			w.varint(2).unwrap();
-			// Delta-encoded: first delta=0x20 (abs=0x20), second delta=0 (abs=0x20)
-			w.varint(0x20u64).unwrap();
-			100u8.param_encode(&mut w, version).unwrap();
-			w.varint(0).unwrap();
-			200u8.param_encode(&mut w, version).unwrap();
+		let version = Version::Draft18;
+		let mut buf = Vec::new();
+		let mut w = Encoder::new(&mut buf, version.into());
+		// Encode count = 2
+		w.varint(2).unwrap();
+		// Delta-encoded: first delta=0x20 (abs=0x20), second delta=0 (abs=0x20)
+		w.varint(0x20u64).unwrap();
+		100u8.param_encode(&mut w, version).unwrap();
+		w.varint(0).unwrap();
+		200u8.param_encode(&mut w, version).unwrap();
 
-			let mut bytes = Decoder::new(&buf, version.into());
-			let result: Result<(), DecodeError> = (|| {
-				decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
-				let _ = val;
-				Ok(())
-			})();
-			assert!(
-				matches!(result, Err(DecodeError::Duplicate)),
-				"expected Duplicate for {version}"
-			);
-		}
+		let mut bytes = Decoder::new(&buf, version.into());
+		let result: Result<(), DecodeError> = (|| {
+			decode_params!(&mut bytes, version, 0x20 => val: Option<u8>);
+			let _ = val;
+			Ok(())
+		})();
+		assert!(
+			matches!(result, Err(DecodeError::Duplicate)),
+			"expected Duplicate for {version}"
+		);
 	}
 
 	/// A parameter the draft lets repeat, such as AUTHORIZATION TOKEN, keeps every
@@ -894,23 +882,22 @@ mod tests {
 				value: vec![0xAA],
 			})
 		};
-		for version in [Version::Draft20] {
-			let mut buf = Vec::new();
-			let mut w = Encoder::new(&mut buf, version.into());
-			w.varint(2).unwrap();
-			w.varint(0x03).unwrap();
-			token(0).param_encode(&mut w, version).unwrap();
-			w.varint(0).unwrap();
-			token(1).param_encode(&mut w, version).unwrap();
+		let version = Version::Draft20;
+		let mut buf = Vec::new();
+		let mut w = Encoder::new(&mut buf, version.into());
+		w.varint(2).unwrap();
+		w.varint(0x03).unwrap();
+		token(0).param_encode(&mut w, version).unwrap();
+		w.varint(0).unwrap();
+		token(1).param_encode(&mut w, version).unwrap();
 
-			let mut r = Decoder::new(&buf, version.into());
-			let tokens = (|| -> Result<Vec<RequestToken>, DecodeError> {
-				decode_params!(&mut r, version, 0x03 => tokens: Vec<RequestToken>);
-				Ok(tokens)
-			})()
-			.unwrap_or_else(|e| panic!("{version}: {e}"));
-			assert_eq!(tokens, vec![token(0), token(1)], "{version}");
-			assert!(r.is_empty(), "{version}");
-		}
+		let mut r = Decoder::new(&buf, version.into());
+		let tokens = (|| -> Result<Vec<RequestToken>, DecodeError> {
+			decode_params!(&mut r, version, 0x03 => tokens: Vec<RequestToken>);
+			Ok(tokens)
+		})()
+		.unwrap_or_else(|e| panic!("{version}: {e}"));
+		assert_eq!(tokens, vec![token(0), token(1)], "{version}");
+		assert!(r.is_empty(), "{version}");
 	}
 }

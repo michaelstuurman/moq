@@ -340,7 +340,6 @@ impl Message for TrackProperties {
 		let Some(crate::Version::Ietf(version)) = crate::Version::from_code(code) else {
 			return Err(DecodeError::InvalidValue);
 		};
-		// Track Properties start at draft-16.
 		let properties = crate::model::object::TrackProperties {
 			version,
 			values: decode_list(r, version)?,
@@ -622,15 +621,13 @@ mod tests {
 		let decoded = round_trip(&TrackProperties(Some(Arc::new(properties.clone())))).unwrap();
 		assert_eq!(decoded.0.as_deref(), Some(&properties));
 
-		// Drafts 14 and 15 have no Track Properties, but their objects may have properties.
-		for version in [Draft::Draft22] {
-			let bare = crate::model::object::TrackProperties {
-				version,
-				values: Vec::new(),
-			};
-			let decoded = round_trip(&TrackProperties(Some(Arc::new(bare.clone())))).unwrap();
-			assert_eq!(decoded.0.as_deref(), Some(&bare), "{version}");
-		}
+		// An empty list still names its draft.
+		let bare = crate::model::object::TrackProperties {
+			version: Draft::Draft22,
+			values: Vec::new(),
+		};
+		let decoded = round_trip(&TrackProperties(Some(Arc::new(bare.clone())))).unwrap();
+		assert_eq!(decoded.0.as_deref(), Some(&bare));
 
 		let none = crate::coding::Encode::encode_bytes(&TrackProperties(None), V).unwrap();
 		assert_eq!(&none[1..], [0], "a moq-lite track is a lone 0");

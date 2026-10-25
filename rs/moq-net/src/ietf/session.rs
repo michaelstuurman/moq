@@ -63,21 +63,21 @@ pub struct Config {
 	/// falling back to 1; that is what a server accepting a connection passes, since it
 	/// has no per-peer configuration of its own.
 	///
-	/// Only `moqt-17`+ negotiates the MoQ Cluster extension. Earlier drafts carry no
-	/// cost at all, so nothing is charged and their routes rank on hop count alone.
+	/// A peer that does not negotiate the MoQ Cluster extension carries no cost at all, so
+	/// nothing is charged and its routes rank on hop count alone.
 	pub cost: Option<u64>,
 
 	pub version: Version,
 
-	/// The request path we advertise in our SETUP (draft-17+ clients on URL-less
+	/// The request path we advertise in our SETUP (clients on URL-less
 	/// transports). A server passes `None`.
 	pub path: Option<String>,
 
 	/// The URI authority we advertise in our SETUP, under the same rules as `path`.
 	pub authority: Option<String>,
 
-	/// The peer's SETUP stream, when it was already read before [`start`] (a draft-17+
-	/// server that gated on the client's path via [`accept_setup`]). It becomes the
+	/// The peer's SETUP stream, when it was already read before [`start`] (a server
+	/// that gated on the client's path via [`accept_setup`]). It becomes the
 	/// GOAWAY channel; `None` lets the uni loop read the SETUP itself.
 	pub peer_setup_stream: Option<Reader<crate::transport::boxed::RecvStream, crate::Version>>,
 
@@ -162,8 +162,8 @@ pub fn start(config: Config) -> Result<(Driver, crate::goaway::Handle), Error> {
 	let peer_grant = auth::peer_grant(publish.as_ref(), subscribe.as_ref());
 
 	// Present the connection's own credential (the empty token) right away, so both
-	// sides learn their grant without waiting on the app. Draft-17+ only; the peer's
-	// SETUP then decides whether it is ever sent.
+	// sides learn their grant without waiting on the app. The peer's SETUP then decides
+	// whether it is ever sent.
 	// A handle that already knows the peer declined (a gated server accept) skips it.
 	let setup_token = match auth.supported() {
 		true => auth.present(bytes::Bytes::new(), true).ok(),
@@ -502,7 +502,7 @@ fn self_origin(publish: Option<&origin::Consumer>, subscribe: Option<&origin::Pr
 		.unwrap_or_else(Hop::random)
 }
 
-/// Server (draft-17+): read the peer's SETUP off its uni stream before starting the
+/// Server: read the peer's SETUP off its uni stream before starting the
 /// session, returning that stream plus what it declared.
 ///
 /// Blocks on the peer's Setup Stream. Any other uni stream racing ahead of it (padding,
@@ -526,7 +526,7 @@ pub async fn accept_setup(session: &mut Transport, version: Version) -> Result<P
 			}
 			Err(err) => return Err(err),
 		};
-		if kind != setup::SETUP_V17 {
+		if kind != setup::SETUP {
 			early.push(reader);
 			continue;
 		}
@@ -596,8 +596,8 @@ fn peer_from_params(params: &ietf::Parameters, version: Version) -> Result<peer:
 	})
 }
 
-/// Send our SETUP on a uni stream and keep it alive: on draft-17+ this stream is
-/// also our GOAWAY channel, so a fired drain trigger encodes the GOAWAY here.
+/// Send our SETUP on a uni stream and keep it alive: this stream is also our GOAWAY
+/// channel, so a fired drain trigger encodes the GOAWAY here.
 ///
 /// `path` is the request path we advertise (clients on URL-less transports); a
 /// server passes `None`. `self_origin` and `cost` are the MoQ Cluster options, which
@@ -722,7 +722,7 @@ const PADDING: u64 = 0x132B3E28;
 /// What a unidirectional stream's type names on the negotiated draft.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UniType {
-	/// The peer's SETUP, which then carries its GOAWAY (draft-17+).
+	/// The peer's SETUP, which then carries its GOAWAY.
 	Setup,
 	/// A SUBGROUP_HEADER, carrying one subgroup of a subscription.
 	Subgroup,
@@ -735,9 +735,9 @@ enum UniType {
 impl UniType {
 	/// `None` is a type the draft does not define, which MUST close the session
 	/// (draft-21 section 6.4.1, and its equivalent in every draft we negotiate).
-	fn classify(kind: u64, version: Version) -> Option<Self> {
-		// Draft-14-17 use SUBGROUP_HEADER types 0x10-0x1D and 0x30-0x3D; draft-18 adds
-		// 0x40 (FIRST_OBJECT), also covering 0x50-0x5D and 0x70-0x7D. A reserved
+	fn classify(kind: u64) -> Option<Self> {
+		// SUBGROUP_HEADER types are 0x10-0x1D and 0x30-0x3D, plus 0x40 (FIRST_OBJECT)
+		// covering 0x50-0x5D and 0x70-0x7D. A reserved
 		// SUBGROUP_ID_MODE (0b11) or a bit the draft lacks is invalid, which MUST close the
 		// session too (draft-21 section 11.3.1).
 		if ietf::GroupFlags::decode(kind).is_ok() {
@@ -746,10 +746,7 @@ impl UniType {
 
 		match kind {
 			FetchHeader::TYPE => Some(Self::Fetch),
-			setup::SETUP_V17 => match version {
-				// SETUP rides the bidi control stream.
-				_ => Some(Self::Setup),
-			},
+			setup::SETUP => Some(Self::Setup),
 			PADDING => Some(Self::Padding),
 			_ => None,
 		}
@@ -768,7 +765,7 @@ struct UniSetup {
 	goaway: crate::goaway::Protocol,
 }
 
-/// Accept incoming uni streams, including SETUP and GOAWAY on draft-17+.
+/// Accept incoming uni streams, including SETUP and GOAWAY.
 ///
 /// Each stream reads its own type in its own child. QUIC opens every lower-numbered
 /// stream once a higher one arrives, so the next stream accepted can be one whose bytes
@@ -905,7 +902,7 @@ impl Uni {
 			Err(err) => return Err(err),
 		};
 
-		let Some(ty) = UniType::classify(kind, version) else {
+		let Some(ty) = UniType::classify(kind) else {
 			tracing::warn!(kind, "unknown uni stream type");
 			return Err(Error::UnexpectedStream);
 		};
@@ -1340,20 +1337,19 @@ mod tests {
 	/// is not UTF-8 refuses the SETUP.
 	#[test]
 	fn peer_setup_reads_the_implementation() {
-		for version in [Version::Draft22] {
-			let encode = |value: Option<&[u8]>| {
-				let mut params = ietf::Parameters::default();
-				if let Some(value) = value {
-					params.set_bytes(ietf::ParameterBytes::Implementation, value.to_vec());
-				}
-				params.encode_bytes(version).unwrap()
-			};
-			let (_, implementation) = decode_peer_setup(encode(Some(b"moq-net-rs/1")), version, true).unwrap();
-			assert_eq!(implementation.as_deref(), Some("moq-net-rs/1"));
-			let (_, implementation) = decode_peer_setup(encode(None), version, true).unwrap();
-			assert_eq!(implementation, None);
-			assert!(decode_peer_setup(encode(Some(&[0xff])), version, true).is_err());
-		}
+		let version = Version::Draft22;
+		let encode = |value: Option<&[u8]>| {
+			let mut params = ietf::Parameters::default();
+			if let Some(value) = value {
+				params.set_bytes(ietf::ParameterBytes::Implementation, value.to_vec());
+			}
+			params.encode_bytes(version).unwrap()
+		};
+		let (_, implementation) = decode_peer_setup(encode(Some(b"moq-net-rs/1")), version, true).unwrap();
+		assert_eq!(implementation.as_deref(), Some("moq-net-rs/1"));
+		let (_, implementation) = decode_peer_setup(encode(None), version, true).unwrap();
+		assert_eq!(implementation, None);
+		assert!(decode_peer_setup(encode(Some(&[0xff])), version, true).is_err());
 	}
 
 	#[moq_clock::test]
@@ -1413,7 +1409,7 @@ mod tests {
 	}
 
 	#[moq_clock::test]
-	async fn auth_ids_share_the_modern_request_history() {
+	async fn auth_ids_share_the_request_history() {
 		for version in [
 			Version::Draft18,
 			Version::Draft19,
@@ -1925,7 +1921,6 @@ mod tests {
 			let credit = kio::Producer::new(true);
 			let session =
 				crate::lite::test_transport::SinkSession::gated_bi(gate.consume()).with_open_bi_gate(credit.consume());
-			// Credit for draft-16's control stream only, opened before the driver runs.
 			let (log, _driver) = client_on(version, session, subscribe.clone(), None).await;
 			*credit.write().ok().unwrap() = false;
 			let opened = log.bi_opens();
@@ -2396,7 +2391,7 @@ mod tests {
 		assert_eq!(log.closes(), vec![], "nothing may close the transport");
 	}
 
-	/// A draft-17+ client advertises its AUTHORITY in the SETUP it writes on its uni stream.
+	/// A client advertises its AUTHORITY in the SETUP it writes on its uni stream.
 	#[moq_clock::test]
 	async fn setup_carries_the_authority() {
 		const AUTHORITY: &[u8] = b"relay.example.com:4443";
@@ -2942,8 +2937,7 @@ mod tests {
 	}
 
 	/// A request's AUTHORIZATION TOKEN decodes by the SETUP option's rules, so one this
-	/// endpoint cannot use closes the session with the draft's code. Draft-14 carries the
-	/// request on the control stream, a strict draft on its own stream.
+	/// endpoint cannot use closes the session with the draft's code.
 	#[moq_clock::test]
 	async fn a_request_token_that_cannot_be_used_closes_the_session() {
 		for version in [Version::Draft22] {
@@ -2967,11 +2961,8 @@ mod tests {
 				),
 			] {
 				let payload = subscribe_with_token(version, token);
-				let session = match version {
-					_ => {
-						crate::lite::test_transport::ScriptedSession::new(Vec::new()).with_incoming_bidis(vec![payload])
-					}
-				};
+				let session =
+					crate::lite::test_transport::ScriptedSession::new(Vec::new()).with_incoming_bidis(vec![payload]);
 				let log = session.log.clone();
 				let session = crate::driver::Transport::new(session.clone());
 				let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();

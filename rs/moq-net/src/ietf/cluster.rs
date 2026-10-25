@@ -13,7 +13,6 @@
 //!
 //! The semantics are the same ones moq-lite carries natively (see
 //! [`crate::origin::Route`]); this module is only the moq-transport binding.
-//! Negotiated on draft-17+ only, where SETUP is a Key-Value-Pair block.
 
 use crate::coding::{Decode, DecodeError, Decoder, Encode, EncodeError, Encoder};
 use crate::{Hop, Hops};
