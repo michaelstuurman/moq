@@ -289,7 +289,7 @@ fn lite_session_over_webtransport() {
 				.with_subscriber(sub_origin.clone())
 				.connect(
 					moq_net::time::Instant::now(),
-					moq_tokio::transport::Session::new(session, moq_net::transport::Binding::Uri),
+					moq_tokio::transport::Session::new(session, moq_net::transport::Address::Uri),
 				)
 				.await
 				.expect("connect");
@@ -345,7 +345,7 @@ fn lite_session_over_webtransport() {
 					moq_net::time::Instant::now(),
 					moq_uring::transport::Local::new(moq_uring::transport::Session::new(
 						session,
-						moq_net::transport::Binding::Uri,
+						moq_net::transport::Address::Uri,
 					)),
 				)
 				.await
