@@ -4,6 +4,10 @@ How to update your invocation and config for each breaking change, newest first.
 
 ## Unreleased
 
+### `--broadcast` refuses empty segments (#6648)
+
+A broadcast name or prefix with a leading, trailing, or doubled `/` is an error instead of being collapsed: pass `--broadcast room/cam`, not `/room/cam/`.
+
 ### `import --linger` sets how long a finished broadcast stays up
 
 A cleanly ended import used to stay up for its `--max-age`; it now stays up for `--linger` (default 30 s), counted from the end, and `--max-age` only sets retention.

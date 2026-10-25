@@ -5,6 +5,11 @@ Rolling a cluster across a release also follows the [upgrade guide](https://moq.
 
 ## Unreleased
 
+### Paths with an empty segment are refused (#6648)
+
+A session dialed at a URL path with a trailing or doubled `/`, such as `/room/` or `/room//cam`, is refused instead of collapsed; dial `/room`. An auth grant whose `root`, `mounts`, or `label` has one is refused as unavailable, and `stats.prefix`, `stats.node`, and `--cluster-tier` with one refuse to start.
+Embedders: `auth::Token::new` and `auth::Lease::new` return a `Result`.
+
 ### Auth `server_name` is the SNI only (#6509)
 
 The auth request's `server_name` no longer falls back to the HTTP `Host` header, `:authority`, or the WebTransport CONNECT host: it is absent over plain `http://` and `ws://` and for an IP-literal dial, while HTTPS and `wss://` report the SNI.

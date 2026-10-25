@@ -4,6 +4,10 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### Paths with an empty segment are refused (#6648)
+
+Publishing, serving, or requesting a broadcast at a path with a leading, trailing, or doubled `/` throws instead of collapsing it. Pass the canonical path, such as `room/cam`.
+
 ### Connection state
 
 `Moq.connect` returns a connecting native session. Replace `status()`, `connects()`, and failure polls with `session.state()` and `session.stateChanged(state.revision)`. `ConnectionState` carries `phase`, `connects`, `failure`, and `version`; `ConnectionPhase` replaces `ConnectionStatus`.

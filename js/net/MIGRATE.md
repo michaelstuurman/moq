@@ -4,17 +4,16 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
-### Published names refuse empty segments
+### `Path.from` refuses empty segments (#6648)
 
-`Origin.Producer.createBroadcast` and `dynamic` take the name as a plain `string` and throw on a leading, trailing, or doubled `/` rather than relying on `Path.from` to collapse it, so a name has one spelling.
-Pass the canonical name (`room/cam`, not `/room/cam/` or `room//cam`); a `Path.Valid` is already canonical and still works.
-Scope roots and subscription paths keep normalizing.
+`Path.from` throws on a component with a leading, trailing, or doubled `/` instead of collapsing it, so a path has one spelling, and `Path.decode` refuses one off the wire.
+Pass canonical components: `Path.from("room/cam")` or `Path.from(prefix, "cam")`, where an empty component is the root, rather than `` Path.from(`${prefix}/cam`) `` or `Path.from("room/")`.
 
 ### Published names refuse navigation segments
 
 Broadcast creation and route publication now refuse literal `.` and `..` segments, including segments in the producer's root.
 Resolve relative references before publishing, or rename broadcasts that used these segments.
-Path normalization, relative references, and subscription paths retain their semantics.
+Relative references and subscription paths retain their semantics.
 
 ### A listing says whether a removed track finished (#6399)
 

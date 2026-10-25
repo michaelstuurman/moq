@@ -4,6 +4,10 @@ How to update your OBS setup for each breaking change, newest first.
 
 ## Unreleased
 
+### Broadcast names with an empty segment are refused (#6648)
+
+A broadcast name with a leading, trailing, or doubled `/` fails to publish or play instead of being collapsed. Use the canonical name, such as `room/cam`.
+
 Connection state and first-dial failures now arrive through one lifecycle watcher. UI reads no longer poll the Client or Session for failure separately.
 
 ### Key logging is opt-in (#5907)

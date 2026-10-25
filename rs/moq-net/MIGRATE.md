@@ -9,18 +9,19 @@ How to update your code for each breaking change, newest first.
 Rename `moq_net::stats::Refusal` to `moq_net::stats::RefusalKind`, so it no longer shares a name with `moq_auth::Refusal`; its variants and `Refusals` are unchanged.
 Replace `moq_net::time::now()` with `moq_net::time::Instant::now()`, the one way to read the clock.
 
-### Published names refuse empty segments
+### Building a `Path` refuses empty segments (#6648)
 
-`origin::Producer::create_broadcast` and `dynamic` refuse a string name with a leading, trailing, or doubled `/` with `Error::EmptySegment`, instead of collapsing it, so a name has one spelling.
-Pass the canonical name (`room/cam`, not `/room/cam/` or `room//cam`); a `Path` is already canonical and still works.
-`AsPath` gains a provided `is_normalized` method. Scope roots and subscription paths keep normalizing.
+`Path::new` returns `Result<Path, Error>` and fails with `Error::EmptySegment` on a leading, trailing, or doubled `/` instead of collapsing it, so a path has one spelling. The empty path is still the root.
+`AsPath` is implemented only for `Path` and `&Path`, so every API taking a path takes one built up front: replace `origin.create_broadcast("room/cam")` with `origin.create_broadcast(Path::new("room/cam")?)`, and convert an owned `String` with `PathOwned::try_from(s)?` or `s.parse::<PathOwned>()?`. `From<&str>` and `From<String>` are gone.
+A prefix needs no trailing `/`: `Path::new("room")?` covers `room/cam`.
+moq-lite decoding refuses a path with an empty segment as a protocol violation.
 
 ### Published names refuse navigation segments
 
 Broadcast creation and route publication now refuse literal `.` and `..` segments, including segments in the producer's root.
 Resolve relative references before publishing, or rename broadcasts that used these segments.
 Rust reports `Error::NavigationSegment`; the existing protocol error codes carry the refusal to a peer.
-Path normalization, relative references, and subscription paths retain their semantics.
+Relative references and subscription paths retain their semantics.
 
 ### A listing says whether a removed track finished (#6399)
 

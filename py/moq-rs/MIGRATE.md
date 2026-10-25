@@ -4,6 +4,10 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### Paths with an empty segment are refused (#6648)
+
+Publishing, serving, or requesting a broadcast at a path with a leading, trailing, or doubled `/` raises instead of collapsing it. Pass the canonical path, such as `room/cam`.
+
 ### Connection state
 
 Client entry returns a connecting native session. Replace `Session.status()`, `connects()`, and both `failure()` polls with `state()` and `await state_changed(state.revision)`. The `ConnectionState` fields include `phase`, `connects`, `failure`, and `version`; `ConnectionPhase` replaces `ConnectionStatus`. Wait for `CONNECTED` when work requires an established transport, or await `closed()` for the terminal result.

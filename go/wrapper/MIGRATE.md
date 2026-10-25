@@ -4,6 +4,10 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### Paths with an empty segment are refused (#6648)
+
+Publishing, serving, or requesting a broadcast at a path with a leading, trailing, or doubled `/` returns an error instead of collapsing it. Pass the canonical path, such as `room/cam`.
+
 ### Connection state
 
 `Dial` returns a connecting native client. Replace `Session.Status`, `Connects`, and `Failure` with `State()` and `StateChanged(ctx, state.Revision)`. `ConnectionState` carries `Phase`, `Connects`, `Failure`, and `Version`; `ConnectionPhase` replaces `ConnectionStatus`. Cancelling a state wait only cancels that wait. Cancel the session itself to stop its dial.

@@ -127,6 +127,7 @@ Any broadcasts and subscriptions are transparently proxied by the CDN behind the
 ## Broadcast
 A Broadcast is a collection of Tracks named by a path.
 This corresponds to a MoqTransport's "track namespace".
+A path is a sequence of non-empty segments joined by `/` (0x2F), so it never starts or ends with `/` or contains two in a row; the empty path has no segments and prefixes every path.
 A publisher instance is identified by an Epoch, carried on its routes (see [ANNOUNCE_START](#announce-start)): a path and an Epoch name one Broadcast, and a publisher MUST NOT serve different content under the same pair.
 A restarted publisher mints a new Epoch rather than reusing the path's old one, while replicas of the same content MAY share one.
 A route without an Epoch names no instance: nothing says another route serves the same bytes.
@@ -1797,6 +1798,8 @@ The `Message Length` describes the payload size on the wire.
 # Appendix A: Changelog
 
 ## moq-lite-07
+
+- A path never has an empty segment, so a leading, trailing, or doubled `/` is a PROTOCOL_VIOLATION rather than a second spelling of the same path.
 
 - Added the SETUP `Implementation` parameter (0x6): the sender's software as `name/version` product tokens. Earlier versions with a Setup Stream ignore it as an unknown parameter.
 
