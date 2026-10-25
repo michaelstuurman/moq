@@ -1385,7 +1385,7 @@ mod tests {
 			crate::time::sim(),
 			crate::driver::Transport::new(session.clone()),
 			origin.consume(),
-			Control::new(None, false),
+			Control::new(false),
 			None,
 			setup,
 			version,
@@ -1497,9 +1497,6 @@ mod tests {
 	fn update(request_id: u64, forward: bool) -> ietf::SubscribeUpdate {
 		ietf::SubscribeUpdate {
 			request_id: RequestId(request_id),
-			subscription_request_id: None,
-			start_location: Location { group: 0, object: 0 },
-			end_group: 0,
 			subscriber_priority: None,
 			forward: Some(forward),
 			// Join at the live edge: draft-20 moved the filter off PUBLISH_OK.
@@ -2594,7 +2591,7 @@ mod tests {
 				crate::time::sim(),
 				crate::driver::Transport::new(h.session.clone()),
 				h._origin.consume(),
-				Control::new(None, false),
+				Control::new(false),
 				None,
 				setup,
 				version,

@@ -35,9 +35,6 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 const GOAWAY_VERSIONS: &[&str] = &[
 	"moq-lite-04",
 	"moq-lite-05",
-	"moq-transport-14",
-	"moq-transport-16",
-	"moq-transport-17",
 	"moq-transport-18",
 	"moq-transport-19",
 ];
@@ -138,7 +135,7 @@ async fn goaway_send_receive_all_versions() {
 #[moq_clock::test]
 async fn goaway_wire_timeout_moq_transport_17() {
 	moq_clock::timeout(TEST_TIMEOUT, async {
-		let version: Version = "moq-transport-17".parse().unwrap();
+		let version: Version = "moq-transport-18".parse().unwrap();
 		let pair = connect_mock(MockConnectOptions::new(version)).await;
 
 		pair.server
@@ -253,7 +250,7 @@ async fn goaway_client_redirect_refused_moq_transport_19() {
 #[moq_clock::test]
 async fn goaway_timeout_force_close_moq_transport_17() {
 	moq_clock::timeout(TEST_TIMEOUT, async {
-		let version: Version = "moq-transport-17".parse().unwrap();
+		let version: Version = "moq-transport-18".parse().unwrap();
 		let pair = connect_mock(MockConnectOptions::new(version)).await;
 
 		pair.server

@@ -104,10 +104,10 @@ const IETF_VERSIONS: &[ietf::Version] = &[
 ];
 
 /// How many types [`lite_wire`] dispatches over.
-const LITE_KINDS: u8 = 22;
+const LITE_KINDS: u8 = 24;
 
 /// How many types [`ietf_wire`] dispatches over.
-const IETF_KINDS: u8 = 44;
+const IETF_KINDS: u8 = 27;
 
 /// Split the two selector bytes off the input: a version and a type.
 fn select(data: &[u8], versions: usize) -> Option<(usize, u8, &[u8])> {
@@ -161,7 +161,7 @@ fn datagram(data: &[u8], version: lite::Version) -> bool {
 	let mut any = false;
 	for &negotiated in negotiated {
 		for timescale in [Some(crate::Timescale::MILLI), None] {
-			for ietf in [None, Some(ietf::Version::Draft14), Some(ietf::Version::Draft22)] {
+			for ietf in [None, Some(ietf::Version::Draft18), Some(ietf::Version::Draft22)] {
 				for compressed in [false, true] {
 					let framing = lite::Framing {
 						timescale,
@@ -223,6 +223,8 @@ pub fn lite_wire(data: &[u8]) -> bool {
 		19 => datagram(rest, version),
 		20 => roundtrip::<lite::Parameters, _>(rest, version),
 		21 => roundtrip::<lite::ietf::TrackProperties, _>(rest, version),
+		22 => roundtrip::<crate::setup::Client, _>(rest, crate::Version::Lite(version)),
+		23 => roundtrip::<crate::setup::Server, _>(rest, crate::Version::Lite(version)),
 		_ => unreachable!("kind is taken modulo LITE_KINDS"),
 	}
 }
@@ -588,47 +590,30 @@ pub fn ietf_wire(data: &[u8]) -> bool {
 		0 => roundtrip::<ietf::GoAway<'static>, _>(rest, version),
 		1 => roundtrip::<ietf::Fetch<'static>, _>(rest, version),
 		2 => roundtrip::<ietf::FetchOk, _>(rest, version),
-		3 => roundtrip::<ietf::FetchError<'static>, _>(rest, version),
-		4 => roundtrip::<ietf::FetchCancel, _>(rest, version),
-		5 => roundtrip::<ietf::FetchHeader, _>(rest, version),
-		6 => roundtrip::<ietf::FetchType<'static>, _>(rest, version),
-		7 => roundtrip::<ietf::PublishNamespace<'static>, _>(rest, version),
-		8 => roundtrip::<ietf::PublishNamespaceOk, _>(rest, version),
-		9 => roundtrip::<ietf::PublishNamespaceError<'static>, _>(rest, version),
-		10 => roundtrip::<ietf::PublishNamespaceDone<'static>, _>(rest, version),
-		11 => roundtrip::<ietf::PublishNamespaceCancel<'static>, _>(rest, version),
-		12 => roundtrip::<ietf::TrackStatus<'static>, _>(rest, version),
-		13 => roundtrip::<ietf::Publish<'static>, _>(rest, version),
-		14 => roundtrip::<ietf::PublishOk, _>(rest, version),
-		15 => roundtrip::<ietf::PublishError<'static>, _>(rest, version),
-		16 => roundtrip::<ietf::PublishDone<'static>, _>(rest, version),
-		17 => roundtrip::<ietf::PublishSkipped<'static>, _>(rest, version),
-		18 => roundtrip::<ietf::Subscribe<'static>, _>(rest, version),
-		19 => roundtrip::<ietf::SubscribeOk, _>(rest, version),
-		20 => roundtrip::<ietf::SubscribeError<'static>, _>(rest, version),
-		21 => roundtrip::<ietf::SubscribeUpdate, _>(rest, version),
-		22 => roundtrip::<ietf::Unsubscribe, _>(rest, version),
-		23 => roundtrip::<ietf::SubscribeNamespace<'static>, _>(rest, version),
-		24 => roundtrip::<ietf::SubscribeNamespaceLegacy<'static>, _>(rest, version),
-		25 => roundtrip::<ietf::SubscribeNamespaceOk, _>(rest, version),
-		26 => roundtrip::<ietf::SubscribeNamespaceError<'static>, _>(rest, version),
-		27 => roundtrip::<ietf::UnsubscribeNamespace<'static>, _>(rest, version),
-		28 => roundtrip::<ietf::Namespace<'static>, _>(rest, version),
-		29 => roundtrip::<ietf::NamespaceDone<'static>, _>(rest, version),
-		30 => roundtrip::<ietf::MaxRequestId, _>(rest, version),
-		31 => roundtrip::<ietf::RequestsBlocked, _>(rest, version),
-		32 => roundtrip::<ietf::RequestOk, _>(rest, version),
-		33 => roundtrip::<ietf::RequestError<'static>, _>(rest, version),
-		34 => roundtrip::<ietf::GroupHeader, _>(rest, version),
-		35 => roundtrip::<ietf::Parameters, _>(rest, version),
-		36 => roundtrip::<ietf::Location, _>(rest, version),
-		37 => roundtrip::<ietf::FetchObject, _>(rest, version),
-		38 => roundtrip::<ietf::PublishNamespaceUpdate, _>(rest, version),
-		39 => roundtrip::<ietf::ObjectDatagram, _>(rest, version),
-		40 => roundtrip::<ietf::SubscribeTracks<'static>, _>(rest, version),
-		41 => setup::<crate::setup::Setup>(rest, version, |setup| &setup.parameters),
-		42 => setup::<crate::setup::Client>(rest, version, |setup| &setup.parameters),
-		43 => setup::<crate::setup::Server>(rest, version, |setup| &setup.parameters),
+		3 => roundtrip::<ietf::FetchHeader, _>(rest, version),
+		4 => roundtrip::<ietf::FetchType<'static>, _>(rest, version),
+		5 => roundtrip::<ietf::PublishNamespace<'static>, _>(rest, version),
+		6 => roundtrip::<ietf::TrackStatus<'static>, _>(rest, version),
+		7 => roundtrip::<ietf::Publish<'static>, _>(rest, version),
+		8 => roundtrip::<ietf::PublishOk, _>(rest, version),
+		9 => roundtrip::<ietf::PublishDone<'static>, _>(rest, version),
+		10 => roundtrip::<ietf::PublishSkipped<'static>, _>(rest, version),
+		11 => roundtrip::<ietf::Subscribe<'static>, _>(rest, version),
+		12 => roundtrip::<ietf::SubscribeOk, _>(rest, version),
+		13 => roundtrip::<ietf::SubscribeUpdate, _>(rest, version),
+		14 => roundtrip::<ietf::SubscribeNamespace<'static>, _>(rest, version),
+		15 => roundtrip::<ietf::Namespace<'static>, _>(rest, version),
+		16 => roundtrip::<ietf::NamespaceDone<'static>, _>(rest, version),
+		17 => roundtrip::<ietf::RequestOk, _>(rest, version),
+		18 => roundtrip::<ietf::RequestError<'static>, _>(rest, version),
+		19 => roundtrip::<ietf::GroupHeader, _>(rest, version),
+		20 => roundtrip::<ietf::Parameters, _>(rest, version),
+		21 => roundtrip::<ietf::Location, _>(rest, version),
+		22 => roundtrip::<ietf::FetchObject, _>(rest, version),
+		23 => roundtrip::<ietf::PublishNamespaceUpdate, _>(rest, version),
+		24 => roundtrip::<ietf::ObjectDatagram, _>(rest, version),
+		25 => roundtrip::<ietf::SubscribeTracks<'static>, _>(rest, version),
+		26 => setup::<crate::setup::Setup>(rest, version, |setup| &setup.parameters),
 		_ => unreachable!("kind is taken modulo IETF_KINDS"),
 	}
 }
@@ -657,9 +642,9 @@ where
 
 /// Decode a varint with whichever codec the selected version uses.
 ///
-/// Byte 0 picks the version, which is the whole point: lite-01 to lite-06 and drafts
-/// 14-16 use the QUIC two-bit length tag, while lite-07 and draft-17+ count leading
-/// ones, and the two disagree about which byte sequences are even legal.
+/// Byte 0 picks the version, which is the whole point: lite-01 to lite-06 use the QUIC
+/// two-bit length tag, while lite-07 and the moq-transport drafts count leading ones, and
+/// the two disagree about which byte sequences are even legal.
 ///
 /// The leading-ones form spans the full `u64`, while the QUIC form stops at
 /// [`crate::coding::varint::MAX_QUIC`]; a value always re-encodes in the form it was read in.
@@ -1072,7 +1057,7 @@ pub fn seeds() -> Vec<Seed> {
 	for (index, version) in IETF_VERSIONS.iter().enumerate() {
 		let outer = crate::Version::Ietf(*version);
 		let parameters = ietf::Parameters::default().encode_bytes(*version).unwrap();
-		let messages = vec![(41, crate::setup::Setup { parameters }.encode_bytes(outer).unwrap())];
+		let messages = vec![(26, crate::setup::Setup { parameters }.encode_bytes(outer).unwrap())];
 		for (kind, message) in messages {
 			let mut data = vec![index as u8, kind];
 			data.extend(message);
@@ -1125,9 +1110,9 @@ pub fn seeds() -> Vec<Seed> {
 		});
 	}
 
-	// A SUBSCRIBE_OK carrying LARGEST_OBJECT, whose value encoding changed at draft-17
-	// from a length-prefixed Location to two bare varints. A uniform fill never lands a
-	// valid parameter count followed by a Location, so build it from the encoder.
+	// A SUBSCRIBE_OK carrying LARGEST_OBJECT, whose value is two bare varints. A uniform
+	// fill never lands a valid parameter count followed by a Location, so build it from
+	// the encoder.
 	for (index, version) in IETF_VERSIONS.iter().enumerate() {
 		let subscribe_ok = ietf::SubscribeOk {
 			track_alias: 0,
@@ -1139,11 +1124,11 @@ pub fn seeds() -> Vec<Seed> {
 			continue;
 		};
 
-		let mut data = vec![index as u8, 19];
+		let mut data = vec![index as u8, 12];
 		data.extend_from_slice(&encoded);
 		seeds.push(Seed {
 			target: "ietf",
-			kind: 19,
+			kind: 12,
 			data,
 		});
 	}

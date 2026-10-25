@@ -101,7 +101,6 @@ The endpoint does not support the PUBLISH method.
 UNINTERESTED (0x4):
 The namespace or track is not of interest to the endpoint.
 
-
 */
 
 use std::borrow::Cow;
@@ -420,147 +419,6 @@ mod tests {
 		crate::coding::decode_buf(&mut buf, version, M::decode_msg)
 	}
 
-	#[test]
-	fn test_publish_v14_round_trip() {
-		let msg = Publish {
-			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
-			track_name: "video".into(),
-			track_alias: 42,
-			largest_location: Some(Location { group: 10, object: 5 }),
-			forward: true,
-			properties: Properties {
-				group_order: Some(GroupOrder::Descending),
-				..Default::default()
-			},
-			subscriber_priority: None,
-			group_order: None,
-			filter: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: Publish = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(1));
-		assert_eq!(decoded.track_namespace.as_str(), "test/ns");
-		assert_eq!(decoded.track_name, "video");
-		assert_eq!(decoded.track_alias, 42);
-		assert_eq!(decoded.largest_location, Some(Location { group: 10, object: 5 }));
-		assert!(decoded.forward);
-	}
-
-	#[test]
-	fn test_publish_v15_round_trip() {
-		let msg = Publish {
-			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
-			track_name: "video".into(),
-			track_alias: 42,
-			largest_location: Some(Location { group: 10, object: 5 }),
-			forward: true,
-			properties: Properties {
-				group_order: Some(GroupOrder::Descending),
-				..Default::default()
-			},
-			subscriber_priority: None,
-			group_order: None,
-			filter: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft15);
-		let decoded: Publish = decode_message(&encoded, Version::Draft15).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(1));
-		assert_eq!(decoded.track_namespace.as_str(), "test/ns");
-		assert_eq!(decoded.track_name, "video");
-		assert_eq!(decoded.track_alias, 42);
-		assert_eq!(decoded.largest_location, Some(Location { group: 10, object: 5 }));
-		assert!(decoded.forward);
-	}
-
-	#[test]
-	fn test_publish_ok_v14_round_trip() {
-		let msg = PublishOk {
-			forward: true,
-			subscriber_priority: Some(128),
-			group_order: Some(GroupOrder::Descending),
-			filter: Some(Filter::NextObject),
-			new_group: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: PublishOk = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, Some(RequestId(7)));
-		assert!(decoded.forward);
-		assert_eq!(decoded.subscriber_priority, Some(128));
-	}
-
-	#[test]
-	fn test_publish_ok_v15_round_trip() {
-		let msg = PublishOk {
-			forward: true,
-			subscriber_priority: Some(128),
-			group_order: Some(GroupOrder::Descending),
-			filter: Some(Filter::NextObject),
-			new_group: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft15);
-		let decoded: PublishOk = decode_message(&encoded, Version::Draft15).unwrap();
-
-		assert_eq!(decoded.request_id, Some(RequestId(7)));
-		assert!(decoded.forward);
-		assert_eq!(decoded.subscriber_priority, Some(128));
-	}
-
-	#[test]
-	fn test_publish_v17_round_trip() {
-		let msg = Publish {
-			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
-			track_name: "video".into(),
-			track_alias: 42,
-			largest_location: Some(Location { group: 10, object: 5 }),
-			forward: true,
-			properties: Properties {
-				group_order: Some(GroupOrder::Descending),
-				..Default::default()
-			},
-			subscriber_priority: None,
-			group_order: None,
-			filter: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: Publish = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(1));
-		assert_eq!(decoded.track_namespace.as_str(), "test/ns");
-		assert_eq!(decoded.track_name, "video");
-		assert_eq!(decoded.track_alias, 42);
-		assert_eq!(decoded.largest_location, Some(Location { group: 10, object: 5 }));
-		assert!(decoded.forward);
-	}
-
-	#[test]
-	fn test_publish_ok_v17_round_trip() {
-		let msg = PublishOk {
-			forward: true,
-			subscriber_priority: Some(128),
-			group_order: Some(GroupOrder::Descending),
-			filter: Some(Filter::NextObject),
-			new_group: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: PublishOk = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, None);
-		assert!(decoded.forward);
-		assert_eq!(decoded.subscriber_priority, Some(128));
-	}
-
 	fn publish_with_param(version: Version, key: u64, value: u64) -> Vec<u8> {
 		let mut buf = Vec::new();
 		let w = &mut Encoder::new(&mut buf, version.into());
@@ -583,25 +441,23 @@ mod tests {
 		buf
 	}
 
-	/// SUBSCRIBER_PRIORITY is known in draft-16 but not defined for PUBLISH until draft-20.
-	/// OBJECT_DELIVERY_TIMEOUT is legal on PUBLISH again from draft-20.
+	/// SUBSCRIBER_PRIORITY is not defined for PUBLISH until draft-20. OBJECT_DELIVERY_TIMEOUT
+	/// is legal on PUBLISH again from draft-20.
 	#[test]
 	fn publish_parameters_follow_the_draft() {
-		decode_message::<Publish>(&publish_with_param(Version::Draft16, 0x20, 1), Version::Draft16)
-			.expect("draft-16 ignores SUBSCRIBER_PRIORITY");
 		assert!(decode_message::<Publish>(&publish_with_param(Version::Draft18, 0x20, 1), Version::Draft18).is_err());
 		decode_message::<Publish>(&publish_with_param(Version::Draft20, 0x02, 1), Version::Draft20)
 			.expect("draft-20 accepts OBJECT_DELIVERY_TIMEOUT");
 	}
 
-	/// PUBLISH_OK carries the delivery timeout through draft-19, and NEW_GROUP_REQUEST from
-	/// draft-16 through draft-19. Draft-20 no longer carries FORWARD.
+	/// PUBLISH_OK carries the delivery timeout and NEW_GROUP_REQUEST through draft-19.
+	/// Draft-20 no longer carries FORWARD.
 	#[test]
 	fn publish_ok_parameters_follow_the_draft() {
 		decode_message::<PublishOk>(&publish_ok_with_param(Version::Draft19, 0x02, 1), Version::Draft19)
 			.expect("draft-19 accepts DELIVERY_TIMEOUT");
-		decode_message::<PublishOk>(&publish_ok_with_param(Version::Draft16, 0x32, 1), Version::Draft16)
-			.expect("draft-16 accepts NEW_GROUP_REQUEST");
+		decode_message::<PublishOk>(&publish_ok_with_param(Version::Draft19, 0x32, 1), Version::Draft19)
+			.expect("draft-19 accepts NEW_GROUP_REQUEST");
 		assert!(
 			decode_message::<PublishOk>(&publish_ok_with_param(Version::Draft20, 0x10, 0), Version::Draft20).is_err()
 		);
@@ -772,73 +628,6 @@ mod tests {
 		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
 	}
 
-	/// Draft-15 is the last version that takes it as a message parameter, and has no track
-	/// properties to put it in.
-	#[test]
-	fn test_publish_v15_group_order_is_a_parameter() {
-		let msg = Publish {
-			request_id: RequestId(1),
-			track_namespace: Path::new("ns"),
-			track_name: "video".into(),
-			track_alias: 42,
-			largest_location: None,
-			forward: true,
-			properties: Properties {
-				unknown: Default::default(),
-				dynamic_groups: false,
-				compress: false,
-				max_cache_duration: None,
-				timescale: None,
-				priority: None,
-				group_order: Some(GroupOrder::Descending),
-			},
-			subscriber_priority: None,
-			group_order: None,
-			filter: None,
-		};
-
-		#[rustfmt::skip]
-		let expected = vec![
-			1,                            // request id
-			1,                            // namespace tuple count
-			2, b'n', b's',                // "ns"
-			5, b'v', b'i', b'd', b'e', b'o', // "video"
-			42,                           // track alias
-			2,                            // two message parameters
-			0x10, 0x01,                   // FORWARD = true
-			0x22, 0x02,                   // GROUP_ORDER = descending
-		];
-		assert_eq!(encode_message(&msg, Version::Draft15), expected);
-
-		let decoded: Publish = decode_message(&expected, Version::Draft15).unwrap();
-		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
-	}
-
-	/// Draft-18 drops the required_request_id_delta varint (#1615).
-	/// For Publish (#1D) the field is a single zero varint = 1 byte.
-	#[test]
-	fn test_publish_v18_is_one_byte_shorter_than_v17() {
-		let msg = Publish {
-			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
-			track_name: "video".into(),
-			track_alias: 42,
-			largest_location: None,
-			forward: true,
-			properties: Properties {
-				group_order: Some(GroupOrder::Descending),
-				..Default::default()
-			},
-			subscriber_priority: None,
-			group_order: None,
-			filter: None,
-		};
-
-		let v17 = encode_message(&msg, Version::Draft17);
-		let v18 = encode_message(&msg, Version::Draft18);
-		assert_eq!(v17.len(), v18.len() + 1);
-	}
-
 	#[test]
 	fn test_publish_ok_v18_round_trip() {
 		let msg = PublishOk {
@@ -852,7 +641,6 @@ mod tests {
 		let encoded = encode_message(&msg, Version::Draft18);
 		let decoded: PublishOk = decode_message(&encoded, Version::Draft18).unwrap();
 
-		assert_eq!(decoded.request_id, None);
 		assert!(decoded.forward);
 		assert_eq!(decoded.subscriber_priority, Some(128));
 	}
@@ -860,10 +648,9 @@ mod tests {
 	/// Draft-18 lets PUBLISH_OK carry EXPIRES; it is ignored rather than rejected.
 	#[test]
 	fn test_publish_ok_ignores_expires() {
-		let bytes = [0x04, 0x01, 0x08, 0x05];
+		let bytes = [0x01, 0x08, 0x05];
 
-		let decoded: PublishOk = decode_message(&bytes, Version::Draft16).unwrap();
-		assert_eq!(decoded.request_id, Some(RequestId(4)));
+		let decoded: PublishOk = decode_message(&bytes, Version::Draft18).unwrap();
 		assert!(decoded.forward);
 	}
 

@@ -510,15 +510,6 @@ mod tests {
 			.unwrap(),
 			bytes
 		);
-		assert!(matches!(
-			write(
-				&decoded.properties,
-				Some(Version::Draft22),
-				decoded.timestamp,
-				milli
-			),
-			Err(Error::Unsupported)
-		));
 		// Its units cannot follow the egress's, or vanish with them, without rewriting the block.
 		for timescale in [Some(Timescale::MICRO), None] {
 			assert!(matches!(
@@ -685,30 +676,18 @@ mod tests {
 	fn a_status_object_keeps_its_timestamp() {
 		let milli = Some(Timescale::MILLI);
 		let list = Bytes::from_static(&[0x10, 7, 0x3e, 1]);
-		let framed = read(&list, milli).unwrap();
+		let framed = read(&list, Version::Draft18, milli).unwrap();
 		assert_eq!(framed.timestamp, Some(Timestamp::new(7, Timescale::MILLI).unwrap()));
-		let status = unframed(&list, milli).unwrap();
+		let status = unframed(&list, Version::Draft18, milli).unwrap();
 		assert_eq!(
-			write(&status, Some(Version::Draft14), None, None).unwrap(),
+			write(&status, Some(Version::Draft18), None, Version::Draft18, None).unwrap(),
 			list.to_vec()
 		);
 
 		// Over the lite hop, only a status block may hold it.
 		let block = status.block.unwrap().bytes;
-		assert!(check(&block, milli, false).is_ok());
-		assert!(check(&block, milli, true).is_err());
-	}
-
-	/// A draft-14 block crosses the lite hop in ascending order, as ingress sorts it, so
-	/// one whose absolute IDs descend is malformed. Its Immutable Properties may not ascend.
-	#[test]
-	fn a_draft14_block_ascends() {
-		let milli = Some(Timescale::MILLI);
-		assert!(check(&Bytes::from_static(&[0x02, 1, 0x20, 1]), milli, true).is_ok());
-		assert!(check(&Bytes::from_static(&[0x02, 1, 0x02, 2]), milli, true).is_ok());
-		assert!(check(&Bytes::from_static(&[0x20, 1, 0x02, 1]), milli, true).is_err());
-		let sealed = Bytes::from_static(&[0x02, 1, 0x0b, 4, 0x20, 1, 0x02, 1]);
-		assert!(check(&sealed, milli, true).is_ok());
+		assert!(check(&block, Version::Draft18, milli, false).is_ok());
+		assert!(check(&block, Version::Draft18, milli, true).is_err());
 	}
 
 	/// Draft-19 assigns 0x06 to SUBGROUP_DELIVERY_TIMEOUT, so it cannot cross that boundary.
@@ -801,7 +780,7 @@ mod tests {
 		for bytes in [&[0x0b, 2, 0x0b, 0][..], &[0x0b, 0, 0, 0][..], &[0x0b, 1, 2][..]] {
 			assert!(read(&Bytes::copy_from_slice(bytes), Version::Draft22, None).is_err());
 		}
-		// Draft-18 permits this nonminimal seven-byte value; draft-17 cannot read it.
+		// Draft-18 permits this nonminimal seven-byte value.
 		let bytes = Bytes::from_static(&[0x0b, 8, 2, 0xfc, 0, 0, 0, 0, 0, 1]);
 		let decoded = read(&bytes, Version::Draft18, None).unwrap();
 		assert_eq!(
@@ -815,16 +794,6 @@ mod tests {
 			.unwrap(),
 			bytes
 		);
-		assert!(read(&bytes, None).is_err());
-		assert!(matches!(
-			write(
-				&decoded.properties,
-				Some(Version::Draft18),
-				decoded.timestamp,
-				None
-			),
-			Err(Error::Unsupported)
-		));
 	}
 }
 

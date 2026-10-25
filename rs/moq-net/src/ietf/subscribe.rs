@@ -372,37 +372,8 @@ mod tests {
 			epoch: None,
 		};
 
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: Subscribe = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(1));
-		assert_eq!(decoded.track_namespace.as_str(), "test");
-		assert_eq!(decoded.track_name, "video");
-		assert_eq!(decoded.subscriber_priority, 128);
-	}
-
-	#[test]
-	fn test_subscribe_round_trip_v15() {
-		let msg = Subscribe {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(1),
-			track_namespace: Path::new("test"),
-			track_name: "video".into(),
-			subscriber_priority: 128,
-			group_order: GroupOrder::Descending,
-			filter: Filter::NextObject,
-			fill: None,
-			properties_wanted: true,
-			forward: true,
-			rendezvous: false,
-			range_filters: false,
-			authorization_token: None,
-			epoch: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft15);
-		let decoded: Subscribe = decode_message(&encoded, Version::Draft15).unwrap();
+		let encoded = encode_message(&msg, Version::Draft18);
+		let decoded: Subscribe = decode_message(&encoded, Version::Draft18).unwrap();
 
 		assert_eq!(decoded.request_id, RequestId(1));
 		assert_eq!(decoded.track_namespace.as_str(), "test");
@@ -411,7 +382,7 @@ mod tests {
 	}
 
 	/// Build a SUBSCRIBE body carrying a single RENDEZVOUS_TIMEOUT parameter.
-	const VERSIONS: [Version; 9] = [
+	const VERSIONS: [Version; 5] = [
 		Version::Draft18,
 		Version::Draft19,
 		Version::Draft20,
@@ -419,12 +390,11 @@ mod tests {
 		Version::Draft22,
 	];
 
-	/// NEW_GROUP_REQUEST survives SUBSCRIBE and REQUEST_UPDATE from draft 16 on, and is
-	/// never written before.
+	/// NEW_GROUP_REQUEST survives SUBSCRIBE and REQUEST_UPDATE.
 	#[test]
-	fn new_group_request_round_trips_where_the_draft_has_it() {
+	fn new_group_request_round_trips() {
 		for version in VERSIONS {
-			let expected = has_new_group_request(version).then_some(7);
+			let expected = Some(7);
 			let subscribe = Subscribe {
 				new_group: Some(7),
 				max_age: None,
@@ -497,11 +467,11 @@ mod tests {
 	/// that carries it is ignored. Draft-16 dropped the id, which makes it unknown.
 	#[test]
 	fn cache_duration_on_subscribe_follows_the_draft() {
-		let draft15 = subscribe_with_rendezvous(0, Version::Draft15);
-		decode_message::<Subscribe>(&draft15, Version::Draft15).expect("draft-15 ignores MAX_CACHE_DURATION");
+		let draft15 = subscribe_with_rendezvous(0, Version::Draft18);
+		decode_message::<Subscribe>(&draft15, Version::Draft18).expect("draft-15 ignores MAX_CACHE_DURATION");
 
-		let draft16 = subscribe_with_rendezvous(0, Version::Draft16);
-		decode_message::<Subscribe>(&draft16, Version::Draft16).expect_err("draft-16 rejects unknown parameter 0x04");
+		let draft16 = subscribe_with_rendezvous(0, Version::Draft18);
+		decode_message::<Subscribe>(&draft16, Version::Draft18).expect_err("draft-16 rejects unknown parameter 0x04");
 	}
 
 	/// The first message parameter key on an encoded SUBSCRIBE, or `None` when it carries no
@@ -579,8 +549,8 @@ mod tests {
 			epoch: None,
 		};
 
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: Subscribe = decode_message(&encoded, Version::Draft14).unwrap();
+		let encoded = encode_message(&msg, Version::Draft18);
+		let decoded: Subscribe = decode_message(&encoded, Version::Draft18).unwrap();
 
 		assert_eq!(decoded.track_namespace.as_str(), "conference/room123");
 	}
@@ -593,35 +563,20 @@ mod tests {
 			properties: Properties::default(),
 		};
 
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: SubscribeOk = decode_message(&encoded, Version::Draft14).unwrap();
+		let encoded = encode_message(&msg, Version::Draft18);
+		let decoded: SubscribeOk = decode_message(&encoded, Version::Draft18).unwrap();
 
-		assert_eq!(decoded.request_id, Some(RequestId(42)));
+		assert_eq!(decoded.track_alias, 42);
 	}
 
+	/// The parameter value is two bare varints. The empty Track Properties block follows the
+	/// parameters.
 	#[test]
 	fn test_subscribe_ok_accepts_largest_object() {
-		// request_id=4, track_alias=4, one LARGEST_OBJECT parameter at {5, 0}.
-		let payload = [0x04, 0x04, 0x01, 0x09, 0x02, 0x05, 0x00];
-		for version in [Version::Draft16] {
-			let decoded: SubscribeOk = decode_message(&payload, version).unwrap();
-
-			assert_eq!(decoded.request_id, Some(RequestId(4)));
-			assert_eq!(decoded.track_alias, 4);
-			assert_eq!(decoded.largest, Some(Location { group: 5, object: 0 }), "{version}");
-		}
-	}
-
-	/// From draft-17 the parameter value is two bare varints, so the same Location costs
-	/// one byte less than the length-prefixed form above. The empty Track Properties block
-	/// follows the parameters.
-	#[test]
-	fn test_subscribe_ok_accepts_largest_object_draft17_on() {
 		let payload = [0x04, 0x01, 0x09, 0x05, 0x00];
 		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			let decoded: SubscribeOk = decode_message(&payload, version).unwrap();
 
-			assert_eq!(decoded.request_id, None, "{version}");
 			assert_eq!(decoded.track_alias, 4, "{version}");
 			assert_eq!(decoded.largest, Some(Location { group: 5, object: 0 }), "{version}");
 		}
@@ -653,9 +608,6 @@ mod tests {
 		let largest = Some(Location { group: 9, object: 3 });
 
 		for (version, expected) in [
-			(Version::Draft14, &[7, 42, 0, 1, 1, 9, 3, 0][..]),
-			(Version::Draft16, &[7, 42, 1, 0x09, 0x02, 0x09, 0x03][..]),
-			(Version::Draft17, &[42, 1, 0x09, 0x09, 0x03][..]),
 			(Version::Draft18, &[42, 1, 0x09, 0x09, 0x03][..]),
 			(Version::Draft19, &[42, 1, 0x09, 0x09, 0x03][..]),
 			(Version::Draft20, &[42, 1, 0x09, 0x09, 0x03][..]),
@@ -671,49 +623,6 @@ mod tests {
 			let decoded: SubscribeOk = decode_message(expected, version).unwrap();
 			assert_eq!(decoded.largest, largest, "{version}");
 		}
-	}
-
-	#[test]
-	fn test_subscribe_ok_v15() {
-		let msg = SubscribeOk {
-			track_alias: 42,
-			largest: None,
-			properties: Properties::default(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft15);
-		let decoded: SubscribeOk = decode_message(&encoded, Version::Draft15).unwrap();
-
-		assert_eq!(decoded.request_id, Some(RequestId(42)));
-		assert_eq!(decoded.track_alias, 42);
-	}
-
-	#[test]
-	fn test_subscribe_error() {
-		let msg = SubscribeError {
-			request_id: RequestId(123),
-			error_code: 500,
-			reason_phrase: "Not found".into(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: SubscribeError = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(123));
-		assert_eq!(decoded.error_code, 500);
-		assert_eq!(decoded.reason_phrase, "Not found");
-	}
-
-	#[test]
-	fn test_unsubscribe() {
-		let msg = Unsubscribe {
-			request_id: RequestId(999),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: Unsubscribe = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(999));
 	}
 
 	/// Every parameter the draft lets a message carry has to parse, even the ones we act on
@@ -788,26 +697,8 @@ mod tests {
 			0x00, // num_params
 		];
 
-		let result: Result<Subscribe, _> = decode_message(&invalid_bytes, Version::Draft14);
+		let result: Result<Subscribe, _> = decode_message(&invalid_bytes, Version::Draft18);
 		assert!(result.is_err());
-	}
-
-	/// Draft-16 registers Filter Types 0x1-0x4 and requires PROTOCOL_VIOLATION for any
-	/// other. Moxygen's `SubscribeRequest::make` defaults to its unregistered LargestGroup
-	/// (0xFA), so its interop client sends this exact SUBSCRIBE; refuse it rather than
-	/// guess a meaning.
-	#[test]
-	fn test_subscribe_v16_rejects_unregistered_filter_type() {
-		let subscribe = |filter_type: &[u8]| {
-			let mut bytes = vec![0x00]; // request_id
-			bytes.extend_from_slice(b"\x01\x0bnonexistent\x0dno-such-track"); // namespace, name
-			bytes.extend_from_slice(&[0x01, 0x21, filter_type.len() as u8]); // one SUBSCRIPTION_FILTER
-			bytes.extend_from_slice(filter_type);
-			decode_message::<Subscribe>(&bytes, Version::Draft16)
-		};
-
-		assert!(matches!(subscribe(&[0x40, 0xfa]), Err(DecodeError::InvalidValue)));
-		assert_eq!(subscribe(&[0x02]).unwrap().filter, Filter::NextObject);
 	}
 
 	/// From draft-15 SUBSCRIBER_PRIORITY is a parameter whose omission means 128, not this
@@ -827,164 +718,6 @@ mod tests {
 			let msg = decode_message::<Subscribe>(&bytes, version).unwrap();
 			assert_eq!(msg.subscriber_priority, 128, "{version}");
 		}
-	}
-
-	#[test]
-	fn test_subscribe_update_v15_round_trip() {
-		let msg = SubscribeUpdate {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(10),
-			subscription_request_id: Some(RequestId(5)),
-			subscriber_priority: Some(200),
-			forward: Some(true),
-			filter: Some(Filter::NextObject),
-			authorization_token: None,
-			fill: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft15);
-		let decoded: SubscribeUpdate = decode_message(&encoded, Version::Draft15).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(10));
-		assert_eq!(decoded.subscription_request_id, Some(RequestId(5)));
-		assert_eq!(decoded.subscriber_priority, Some(200));
-		assert_eq!(decoded.forward, Some(true));
-	}
-
-	#[test]
-	fn test_subscribe_update_v14_round_trip() {
-		let msg = SubscribeUpdate {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(10),
-			subscription_request_id: Some(RequestId(5)),
-			start_location: Location { group: 1, object: 2 },
-			end_group: 100,
-			subscriber_priority: Some(200),
-			forward: Some(true),
-			filter: Some(Filter::NextObject),
-			authorization_token: None,
-			fill: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: SubscribeUpdate = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(10));
-		assert_eq!(decoded.subscription_request_id, Some(RequestId(5)));
-		assert_eq!(decoded.start_location, Location { group: 1, object: 2 });
-		assert_eq!(decoded.end_group, 100);
-		assert_eq!(decoded.subscriber_priority, Some(200));
-		assert_eq!(decoded.forward, Some(true));
-	}
-
-	#[test]
-	fn test_subscribe_ok_ignores_expires_v14() {
-		#[rustfmt::skip]
-		let bytes = [
-			0x01, // request_id
-			0x00, // track_alias
-			0x05, // expires = 5
-			0x02, // group_order
-			0x00, // content_exists
-			0x00, // num_params
-		];
-
-		let decoded: SubscribeOk = decode_message(&bytes, Version::Draft14).unwrap();
-		assert_eq!(decoded.request_id, Some(RequestId(1)));
-	}
-
-	/// The SUBSCRIBE_OK aiomoqt 0.11.0 sends: EXPIRES = 0 and nothing else (#4172).
-	#[test]
-	fn test_subscribe_ok_ignores_expires_aiomoqt() {
-		let bytes = [0x03, 0x00, 0x01, 0x08, 0x00];
-
-		let decoded: SubscribeOk = decode_message(&bytes, Version::Draft16).unwrap();
-		assert_eq!(decoded.request_id, Some(RequestId(3)));
-		assert_eq!(decoded.track_alias, 0);
-		assert!(decoded.largest.is_none());
-	}
-
-	/// The SUBSCRIBE_OK a libquicr relay sends: EXPIRES = 0 followed by five track
-	/// properties (#4172).
-	#[test]
-	fn test_subscribe_ok_ignores_expires_libquicr() {
-		let bytes = [
-			0x02, 0xde, 0x53, 0x15, 0xbf, 0xd6, 0x39, 0x31, 0x88, 0x01, 0x08, 0x00, 0x02, 0x00, 0x02, 0x00, 0x0a, 0x01,
-			0x14, 0x01, 0x0e, 0x01,
-		];
-
-		let decoded: SubscribeOk = decode_message(&bytes, Version::Draft16).unwrap();
-		assert_eq!(decoded.request_id, Some(RequestId(2)));
-		assert_eq!(decoded.properties.priority, Some(1));
-		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Ascending));
-	}
-
-	#[test]
-	fn test_subscribe_v17_round_trip() {
-		let msg = Subscribe {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(1),
-			track_namespace: Path::new("test"),
-			track_name: "video".into(),
-			subscriber_priority: 128,
-			group_order: GroupOrder::Descending,
-			filter: Filter::NextObject,
-			fill: None,
-			properties_wanted: true,
-			forward: true,
-			rendezvous: false,
-			range_filters: false,
-			authorization_token: None,
-			epoch: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: Subscribe = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(1));
-		assert_eq!(decoded.track_namespace.as_str(), "test");
-		assert_eq!(decoded.track_name, "video");
-		assert_eq!(decoded.subscriber_priority, 128);
-	}
-
-	#[test]
-	fn test_subscribe_ok_v17_round_trip() {
-		let msg = SubscribeOk {
-			track_alias: 42,
-			largest: None,
-			properties: Properties::default(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: SubscribeOk = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, None);
-		assert_eq!(decoded.track_alias, 42);
-	}
-
-	#[test]
-	fn test_subscribe_update_v17_round_trip() {
-		let msg = SubscribeUpdate {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(10),
-			subscriber_priority: Some(200),
-			forward: Some(true),
-			filter: Some(Filter::NextObject),
-			authorization_token: None,
-			fill: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: SubscribeUpdate = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(10));
-		assert_eq!(decoded.subscription_request_id, None);
-		assert_eq!(decoded.subscriber_priority, Some(200));
-		assert_eq!(decoded.forward, Some(true));
 	}
 
 	#[test]
@@ -1027,7 +760,6 @@ mod tests {
 		let encoded = encode_message(&msg, Version::Draft18);
 		let decoded: SubscribeOk = decode_message(&encoded, Version::Draft18).unwrap();
 
-		assert_eq!(decoded.request_id, None);
 		assert_eq!(decoded.track_alias, 42);
 	}
 
@@ -1094,96 +826,6 @@ mod tests {
 		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
 	}
 
-	/// Draft-15 is the one version that takes it as a message parameter, and has no track
-	/// properties to put it in.
-	#[test]
-	fn test_subscribe_ok_v15_group_order_is_a_parameter() {
-		let msg = SubscribeOk {
-			track_alias: 42,
-			largest: None,
-			properties: Properties {
-				unknown: Default::default(),
-				dynamic_groups: false,
-				compress: false,
-				max_cache_duration: None,
-				timescale: None,
-				priority: None,
-				group_order: Some(GroupOrder::Descending),
-			},
-		};
-
-		#[rustfmt::skip]
-		let expected = vec![
-			7,    // request id
-			42,   // track alias
-			1,    // one message parameter
-			0x22, // GROUP_ORDER
-			0x02, // descending
-		];
-		assert_eq!(encode_message(&msg, Version::Draft15), expected);
-
-		let decoded: SubscribeOk = decode_message(&expected, Version::Draft15).unwrap();
-		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
-	}
-
-	/// Draft-15 has no properties block, so DYNAMIC_GROUPS is a SUBSCRIBE_OK parameter.
-	#[test]
-	fn test_subscribe_ok_v15_dynamic_groups_is_a_parameter() {
-		let msg = SubscribeOk {
-			track_alias: 42,
-			largest: None,
-			properties: Properties {
-				dynamic_groups: true,
-				compress: false,
-				..Default::default()
-			},
-		};
-
-		#[rustfmt::skip]
-		let expected = vec![
-			7,    // request id
-			42,   // track alias
-			1,    // one message parameter
-			0x30, // DYNAMIC_GROUPS
-			0x01,
-		];
-		assert_eq!(encode_message(&msg, Version::Draft15), expected);
-		assert!(
-			decode_message::<SubscribeOk>(&expected, Version::Draft15)
-				.unwrap()
-				.properties
-				.dynamic_groups
-		);
-
-		// A boolean: anything above 1 is malformed.
-		let malformed = [7, 42, 1, 0x30, 0x02];
-		assert!(decode_message::<SubscribeOk>(&malformed, Version::Draft15).is_err());
-	}
-
-	/// Draft-16 has the block too, under the name Track Extensions. We don't write one there,
-	/// but a peer that does used to fail the whole message as `Long`.
-	#[test]
-	fn test_subscribe_ok_v16_reads_track_extensions() {
-		#[rustfmt::skip]
-		let body = vec![
-			7,    // request id
-			42,   // track alias
-			0,    // zero message parameters
-			0x22, // DEFAULT_PUBLISHER_GROUP_ORDER
-			0x02, // descending
-		];
-
-		// Go through the size-prefixed path: that's what rejects unread trailing bytes.
-		let mut buf = Vec::new();
-		Encoder::new(&mut buf, Version::Draft16.into()).u16(body.len() as u16);
-		buf.extend_from_slice(&body);
-
-		let mut bytes = bytes::Bytes::from(buf);
-		let decoded = crate::coding::decode_buf(&mut bytes, SubscribeOk::decode).unwrap();
-		assert_eq!(decoded.track_alias, 42);
-		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
-	}
-
 	/// GROUP_ORDER left SUBSCRIBE_OK after draft-15. Draft-18 closes the session when a
 	/// known parameter shows up on a message that does not define it.
 	#[test]
@@ -1218,31 +860,8 @@ mod tests {
 		let decoded: SubscribeUpdate = decode_message(&encoded, Version::Draft18).unwrap();
 
 		assert_eq!(decoded.request_id, RequestId(10));
-		assert_eq!(decoded.subscription_request_id, None);
 		assert_eq!(decoded.subscriber_priority, Some(200));
 		assert_eq!(decoded.forward, Some(true));
-	}
-
-	/// Cross-check: draft-17 emits an extra 0-byte (required_request_id_delta) that
-	/// draft-18 does not. So a draft-18 encoding should be exactly 1 byte shorter
-	/// than draft-17 for SUBSCRIBE_UPDATE.
-	#[test]
-	fn test_subscribe_update_v17_v18_size_differs() {
-		let v17_msg = SubscribeUpdate {
-			new_group: None,
-			max_age: None,
-			request_id: RequestId(10),
-			subscriber_priority: Some(200),
-			forward: Some(true),
-			filter: Some(Filter::NextObject),
-			authorization_token: None,
-			fill: None,
-		};
-		let v18_msg = SubscribeUpdate { ..v17_msg.clone() };
-
-		let v17 = encode_message(&v17_msg, Version::Draft17);
-		let v18 = encode_message(&v18_msg, Version::Draft18);
-		assert_eq!(v17.len(), v18.len() + 1);
 	}
 
 	/// The head of a SUBSCRIBE (draft-20 Figure 10) up to its Number of Parameters:
@@ -1396,20 +1015,11 @@ mod tests {
 			Version::Draft19,
 			Version::Draft20,
 		] {
-			let mut body = body.clone();
-			let wire = body;
+			let wire = body.clone();
 			let mut buf = Decoder::new(&wire, version.into());
 			Subscribe::decode_msg(&mut buf, version).unwrap_or_else(|e| panic!("{version}: {e}"));
 			assert!(buf.is_empty(), "{version}: trailing bytes");
 		}
-	}
-
-	/// Draft-15 ignores a parameter it does not know. From draft-16 on, a parameter from
-	/// a later draft is unknown, which closes the session.
-	#[test]
-	fn subscribe_ignores_unrecognized_parameters_in_draft15() {
-		let body = subscribe_body(&[0x01, 0x32, 0x00]);
-		decode_message::<Subscribe>(&body, Version::Draft15).expect("draft-15 ignores NEW_GROUP_REQUEST");
 	}
 
 	/// A parameter from a later draft is still an unknown parameter, which the draft makes
@@ -1417,8 +1027,7 @@ mod tests {
 	#[test]
 	fn subscribe_refuses_parameters_before_their_draft() {
 		for (version, params) in [
-			// SUBGROUP_DELIVERY_TIMEOUT arrived in draft-18, and 0x06 is not a draft-16 id.
-			(Version::Draft16, &[0x01, 0x06, 0x00][..]),
+			// SUBGROUP_DELIVERY_TIMEOUT arrived in draft-18,
 			// The Range Filters arrived in draft-19.
 			(Version::Draft18, &[0x01, 0x25, 0x00][..]),
 			// INCLUDE_PROPERTIES arrived in draft-20.
@@ -1450,22 +1059,17 @@ mod tests {
 		assert_eq!(decoded.request_id, RequestId(2));
 	}
 
-	/// SUBGROUP_DELIVERY_TIMEOUT (0x06) is not a draft-16 parameter. Draft-18 defines it
-	/// for SUBSCRIBE, and the value is dropped.
+	/// Draft-18 defines SUBGROUP_DELIVERY_TIMEOUT (0x06) for SUBSCRIBE, and the value is
+	/// dropped.
 	#[test]
 	fn subgroup_delivery_timeout_follows_its_draft() {
 		let head: &[u8] = &[
 			0x01, 0x01, 0x04, b'l', b'i', b'v', b'e', 0x05, b'v', b'i', b'd', b'e', b'o',
 		];
 		let body = [head, &[0x01, 0x06, 0x00][..]].concat();
-		assert!(decode_message::<Subscribe>(&body, Version::Draft16).is_err());
 		decode_message::<Subscribe>(&body, Version::Draft18).expect("draft-18 accepts SUBGROUP_DELIVERY_TIMEOUT");
 
-		// GROUP_ORDER (0x22) is known in draft-16 but not defined for REQUEST_UPDATE.
-		// Request ID, Subscription Request ID, one parameter, absolute key, varint value.
-		let update16: &[u8] = &[0x02, 0x0A, 0x01, 0x22, 0x02];
-		decode_message::<SubscribeUpdate>(update16, Version::Draft16).expect("draft-16 ignores GROUP_ORDER");
-		// Draft-18 has no Subscription Request ID. The value is a uint8.
+		// GROUP_ORDER (0x22) is not defined for REQUEST_UPDATE.
 		let update18: &[u8] = &[0x02, 0x01, 0x22, 0x02];
 		assert!(decode_message::<SubscribeUpdate>(update18, Version::Draft18).is_err());
 	}
@@ -1499,7 +1103,7 @@ mod cache_duration_tests {
 	}
 
 	#[test]
-	fn legacy_never_sends_cache_duration_and_modern_preserves_optional_value() {
+	fn cache_duration_preserves_optional_value() {
 		for version in [
 			Version::Draft18,
 			Version::Draft19,
@@ -1507,10 +1111,8 @@ mod cache_duration_tests {
 			Version::Draft21,
 			Version::Draft22,
 		] {
-			let legacy = false;
 			for age in [None, Some(Duration::ZERO), Some(Duration::from_secs(30))] {
 				let ok = SubscribeOk {
-					request_id: legacy.then_some(RequestId(0)),
 					track_alias: 0,
 					largest: None,
 					properties: Properties {
@@ -1524,7 +1126,7 @@ mod cache_duration_tests {
 				let got = crate::coding::decode_buf(&mut payload.as_slice(), version, SubscribeOk::decode_msg).unwrap();
 				assert_eq!(
 					got.properties.max_cache_duration,
-					if legacy { None } else { age },
+					age,
 					"{version}"
 				);
 			}

@@ -193,7 +193,7 @@ async fn before_draft_18_the_listing_is_refused() {
 	let a = broadcast.create_track("a", None).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
-	let (subscriber, _pair) = connect(&publisher, "moq-transport-17").await;
+	let (subscriber, _pair) = connect(&publisher, "moq-transport-18").await;
 	let remote = resolve(&subscriber, "bcast").await;
 	let mut tracks = remote.tracks().unwrap();
 	assert_eq!(

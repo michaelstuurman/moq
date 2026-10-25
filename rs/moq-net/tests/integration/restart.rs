@@ -520,10 +520,6 @@ retired_fetch_tests! {
 	retired_fetch_lite05: "moq-lite-05",
 	retired_fetch_lite06: "moq-lite-06",
 	retired_fetch_lite07: "moq-lite-07-wip",
-	retired_fetch_ietf14: "moq-transport-14",
-	retired_fetch_ietf15: "moq-transport-15",
-	retired_fetch_ietf16: "moq-transport-16",
-	retired_fetch_ietf17: "moq-transport-17",
 	retired_fetch_ietf18: "moq-transport-18",
 	retired_fetch_ietf19: "moq-transport-19",
 	retired_fetch_ietf20: "moq-transport-20",
@@ -544,7 +540,6 @@ async fn withdrawal_refuses_new_fetches_but_keeps_open_reads() {
 		"moq-lite-05",
 		"moq-lite-06",
 		"moq-lite-07-wip",
-		"moq-transport-14",
 		"moq-transport-22",
 	] {
 		let version: Version = version.parse().unwrap();
@@ -573,7 +568,6 @@ async fn a_more_specific_source_cannot_fill_a_held_covering_track() {
 		"moq-lite-05",
 		"moq-lite-06",
 		"moq-lite-07-wip",
-		"moq-transport-14",
 		"moq-transport-22",
 	] {
 		let version: Version = name.parse().unwrap();
@@ -714,7 +708,6 @@ claim_restart_tests! {
 	claim_restart_lite05: "moq-lite-05",
 	claim_restart_lite06: "moq-lite-06",
 	claim_restart_lite07: "moq-lite-07-wip",
-	claim_restart_ietf14: "moq-transport-14",
-	claim_restart_ietf16: "moq-transport-16",
+	claim_restart_ietf18: "moq-transport-18",
 	claim_restart_ietf22: "moq-transport-22",
 }

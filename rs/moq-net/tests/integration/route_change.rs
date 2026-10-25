@@ -468,7 +468,7 @@ macro_rules! route_change_tests {
 
 route_change_tests! {
 	lite_07: "moq-lite-07-wip",
-	ietf_17: "moq-transport-17",
+	ietf_18: "moq-transport-18",
 	ietf_19: "moq-transport-19",
 	ietf_22: "moq-transport-22",
 }
@@ -512,8 +512,6 @@ pinned_tests! {
 	lite_06: "moq-lite-06",
 	lite_05: "moq-lite-05",
 	lite_04: "moq-lite-04",
-	ietf_14: "moq-transport-14",
-	ietf_16: "moq-transport-16",
 }
 
 /// `P` feeds `A` slowly and `B` promptly, and `R` reads through `A` until that route dies
@@ -614,7 +612,7 @@ async fn lite_resumes_after_a_lagging_route_dies() {
 
 #[moq_clock::test]
 async fn ietf_17_resumes_after_a_lagging_route_dies() {
-	lagging_route_dies("moq-transport-17".parse().unwrap()).await;
+	lagging_route_dies("moq-transport-18".parse().unwrap()).await;
 }
 
 #[moq_clock::test]

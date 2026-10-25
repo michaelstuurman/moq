@@ -376,22 +376,6 @@ mod tests {
 		assert_eq!(decoded.scale(), Timescale::MICRO);
 	}
 
-	/// No Timescale rides along with the object; the track declared it once.
-	#[test]
-	fn test_object_time_omits_the_timescale() {
-		let ts = Timestamp::new(96_000, Timescale::MILLI).unwrap();
-		let buf = encode_time(ts, Timescale::MILLI, Version::Draft16);
-		assert_eq!(varints(&buf, Version::Draft16), [PROP_TIMESTAMP, 96_000]);
-	}
-
-	/// Draft-14/15 write absolute property types rather than deltas.
-	#[test]
-	fn test_object_time_legacy_uses_absolute_types() {
-		let ts = Timestamp::new(96_000, Timescale::MILLI).unwrap();
-		let buf = encode_time(ts, Timescale::MILLI, Version::Draft15);
-		assert_eq!(varints(&buf, Version::Draft15), [PROP_TIMESTAMP, 96_000]);
-	}
-
 	/// An object-scope Timescale (which LOC permits) is ignored: the track's units apply.
 	#[test]
 	fn test_object_time_ignores_an_object_scope_timescale() {
@@ -575,21 +559,6 @@ mod tests {
 				);
 				assert_eq!(GroupFlags::decode(encoded).unwrap().first_object, first_object);
 			}
-		}
-	}
-
-	/// The bit arrived in draft-18. Earlier drafts carry no such signal, so a group there
-	/// is taken at its word rather than read as starting partway through.
-	#[test]
-	fn older_drafts_have_no_first_object_signal() {
-		for version in [Version::Draft15] {
-			let flags = GroupFlags {
-				first_object: false,
-				..Default::default()
-			};
-			let encoded = flags.encode().unwrap();
-			assert_eq!(encoded & GroupFlags::FIRST_OBJECT_BIT, 0, "{version}");
-			assert!(GroupFlags::decode(encoded).unwrap().first_object, "{version}");
 		}
 	}
 

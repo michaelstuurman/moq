@@ -91,9 +91,6 @@ fn frames(sequence: u64) -> Vec<Vec<u8>> {
 /// Draft-17 is absent: its TRACK_STATUS answer cannot say whether the track is timed,
 /// so it still SUBSCRIBEs to learn the track.
 const VERSIONS: &[&str] = &[
-	"moq-transport-14",
-	"moq-transport-15",
-	"moq-transport-16",
 	"moq-transport-18",
 	"moq-transport-19",
 	"moq-transport-22",

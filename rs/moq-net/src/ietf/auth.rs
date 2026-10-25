@@ -565,7 +565,7 @@ mod tests {
 		for version in [Version::Draft19] {
 			for client in [false, true] {
 				let first = if client { 0 } else { 1 };
-				let control = Control::new(Some(RequestId(first + 1)), client);
+				let control = Control::new(client);
 				let present = Present {
 					runtime: crate::time::sim(),
 					stats: Default::default(),
@@ -578,15 +578,12 @@ mod tests {
 					id: 0,
 				};
 				assert!(matches!(present.run(Bytes::new()).await, Error::NoStreamCredit));
-				assert_eq!(
-					control.poll_next_request_id(&kio::Waiter::noop()),
-					Poll::Ready(RequestId(first))
-				);
+				assert_eq!(control.next_request_id(), RequestId(first));
 			}
 		}
 	}
 
-	const VERSION: Version = Version::Draft17;
+	const VERSION: Version = Version::Draft18;
 
 	fn patterns(texts: &[&str]) -> Patterns {
 		texts.iter().map(|text| Pattern::try_from(*text).unwrap()).collect()
@@ -606,8 +603,7 @@ mod tests {
 		got
 	}
 
-	/// Every draft that negotiates the extension round-trips the option; the drafts
-	/// before the unified SETUP carry none.
+	/// Every draft that negotiates the extension round-trips the option.
 	#[test]
 	fn setup_option_round_trips_on_supported_drafts() {
 		for version in [
@@ -618,15 +614,9 @@ mod tests {
 			Version::Draft22,
 		] {
 			let mut params = super::super::Parameters::default();
-			assert_eq!(from_setup(&params, version), None);
-			into_setup(&mut params, version);
-			assert_eq!(from_setup(&params, version), Some(true), "{version:?}");
-		}
-		for version in [Version::Draft15] {
-			let mut params = super::super::Parameters::default();
-			into_setup(&mut params, version);
-			assert_eq!(params.get_varint(super::super::ParameterVarInt::Auth), None);
-			assert_eq!(from_setup(&params, version), None, "{version:?}");
+			assert_eq!(from_setup(&params), None);
+			into_setup(&mut params);
+			assert_eq!(from_setup(&params), Some(true), "{version:?}");
 		}
 	}
 
@@ -636,7 +626,7 @@ mod tests {
 	fn only_one_negotiates() {
 		let mut params = super::super::Parameters::default();
 		params.set_varint(super::super::ParameterVarInt::Auth, 0);
-		assert_eq!(from_setup(&params, VERSION), Some(false));
+		assert_eq!(from_setup(&params), Some(false));
 	}
 
 	#[test]
@@ -703,21 +693,6 @@ mod tests {
 		w.varint(MAX_REASON as u64 + 1).unwrap();
 		let err = AuthError::decode_msg(&mut Decoder::new(&buf, VERSION.into()), VERSION).unwrap_err();
 		assert!(matches!(err, DecodeError::InvalidValue), "{err:?}");
-	}
-
-	#[test]
-	fn older_drafts_have_no_auth() {
-		for version in [Version::Draft15] {
-			let msg = Auth {
-				request_id: RequestId(0),
-				token: Bytes::new(),
-			};
-			assert!(matches!(encode_msg(&msg, version), Err(EncodeError::Version)));
-			assert!(matches!(
-				Auth::decode_msg(&mut Decoder::new(&[0, 0], version.into()), version),
-				Err(DecodeError::Version)
-			));
-		}
 	}
 
 	/// A reply with bytes past its message is refused, like any other framed message.

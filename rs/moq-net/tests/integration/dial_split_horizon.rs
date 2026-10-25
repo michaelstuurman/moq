@@ -22,7 +22,7 @@ use support::{
 const SETTLE: Duration = Duration::from_secs(1);
 
 fn version() -> Version {
-	"moq-transport-16".parse().unwrap()
+	"moq-transport-18".parse().unwrap()
 }
 
 fn produce(hop: u64) -> origin::Producer {

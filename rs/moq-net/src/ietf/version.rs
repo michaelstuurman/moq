@@ -103,8 +103,6 @@ mod tests {
 		};
 
 		let subscribe_ok = SubscribeOk {
-			// Draft-17 and newer carry the request on the stream, not in the message.
-			request_id: None,
 			track_alias: 4,
 			largest: Some(Location { group: 5, object: 2 }),
 			properties: properties.clone(),

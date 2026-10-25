@@ -19,10 +19,6 @@ const VERSIONS: &[&str] = &[
 	"moq-lite-07-wip",
 	"moq-lite-06",
 	"moq-lite-03",
-	"moq-transport-14",
-	"moq-transport-15",
-	"moq-transport-16",
-	"moq-transport-17",
 	"moq-transport-18",
 	"moq-transport-22",
 ];
@@ -123,7 +119,6 @@ async fn relay(published: Published, hops: [&str; 2], subscription: moq_net::tra
 /// draft-17 and later.
 const RANGED: &[&str] = &[
 	"moq-lite-07-wip",
-	"moq-transport-17",
 	"moq-transport-18",
 	"moq-transport-22",
 ];
@@ -200,7 +195,7 @@ async fn relay_serves_every_version() {
 				fixture.subscriber.info().compress,
 				!matches!(
 					version,
-					"moq-lite-06" | "moq-lite-03" | "moq-transport-14" | "moq-transport-15" | "moq-transport-16"
+					"moq-lite-06" | "moq-lite-03"
 				),
 				"{version}: compression declared"
 			);
@@ -249,8 +244,7 @@ async fn datagrams_serve_every_version() {
 	for &version in &[
 		"moq-lite-07-wip",
 		"moq-lite-06",
-		"moq-transport-16",
-		"moq-transport-17",
+		"moq-transport-18",
 		"moq-transport-22",
 	] {
 		moq_clock::timeout(TIMEOUT, async {
@@ -343,18 +337,16 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 /// Negotiated IETF ingress stays compressed across a relay to IETF or lite-07 egress.
 #[moq_clock::test]
 async fn ietf_ingress_stays_compressed_across_protocols() {
-	for upstream in ["moq-transport-17", "moq-transport-18", "moq-transport-22"] {
+	for upstream in ["moq-transport-18", "moq-transport-22"] {
 		for downstream in [
 			"moq-lite-07-wip",
-			"moq-transport-16",
 			"moq-transport-22",
-			"moq-transport-14",
 		] {
 			moq_clock::timeout(TIMEOUT, async {
 				let mut fixture = connect(upstream, downstream).await;
 				assert_eq!(
 					fixture.subscriber.info().compress,
-					!matches!(downstream, "moq-transport-14" | "moq-transport-16"),
+					true,
 					"{upstream} -> {downstream}"
 				);
 				let mut group = fixture.track.append_group().unwrap();
@@ -397,7 +389,7 @@ async fn ietf_ingress_stays_compressed_across_protocols() {
 /// A finished compressed track remains fetchable without subscribing to its live feed.
 #[moq_clock::test]
 async fn ietf_fetch_keeps_the_stored_form() {
-	for version in ["moq-transport-16", "moq-transport-18", "moq-transport-22"] {
+	for version in [ "moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
 			let broadcast = publisher.create_broadcast("bcast").unwrap();
@@ -419,7 +411,7 @@ async fn ietf_fetch_keeps_the_stored_form() {
 			origin.consume().routed("bcast").await.unwrap();
 			let remote = origin.consume().request_broadcast("bcast", None).await.unwrap();
 			let consumer = remote.track("data").unwrap();
-			assert_eq!(consumer.query().await.unwrap().compress, version != "moq-transport-16");
+			assert!(consumer.query().await.unwrap().compress, "{version}");
 			let mut fetched = consumer.fetch_group(0, moq_net::group::Fetch::default()).await.unwrap();
 			for index in 0..3 {
 				assert_eq!(

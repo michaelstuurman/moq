@@ -16,10 +16,6 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const VERSIONS: &[&str] = &[
 	"moq-lite-06",
 	"moq-lite-07-wip",
-	"moq-transport-14",
-	"moq-transport-15",
-	"moq-transport-16",
-	"moq-transport-17",
 	"moq-transport-18",
 	"moq-transport-19",
 	"moq-transport-20",

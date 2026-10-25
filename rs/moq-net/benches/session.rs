@@ -1000,9 +1000,8 @@ fn allocations() {
 	}
 }
 
-/// Versions for the churn sweep: the one draft with a MAX_REQUEST_ID window, the
-/// newest draft without it, and lite.
-const CHURN_VERSIONS: [&str; 3] = ["moq-transport-14", "moq-transport-22", "moq-lite-06"];
+/// Versions for the churn sweep: the newest moq-transport draft and lite.
+const CHURN_VERSIONS: [&str; 2] = ["moq-transport-22", "moq-lite-06"];
 
 /// Sessions on one relay, each holding `held` subscriptions open while it churns one more.
 #[derive(Clone, Copy)]
@@ -1156,7 +1155,7 @@ impl IdleRoom {
 
 fn idle(c: &mut Criterion) {
 	let mut group = c.benchmark_group("session_idle");
-	for version in ["moq-lite-06", "moq-transport-16", "moq-transport-22"] {
+	for version in ["moq-lite-06", "moq-transport-22"] {
 		for sessions in [1, 64, 1024] {
 			for consumers in [0, 1, 8] {
 				group.throughput(Throughput::Elements(sessions as u64));

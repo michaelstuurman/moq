@@ -18,7 +18,7 @@ const LITE: &[&str] = &["moq-lite-05", "moq-lite-06", "moq-lite-07-wip"];
 /// Draft-20 and later are left out: the first subscriber's absolute start goes upstream
 /// in the SUBSCRIBE filter, and the subscriber never widens it when a live one joins
 /// (`quest/m1/subscribe-ranges/ietf.md`), so group 3 never arrives.
-const TRANSPORT: &[&str] = &["moq-transport-14", "moq-transport-17"];
+const TRANSPORT: &[&str] = &[ "moq-transport-18"];
 
 fn produce_origin(hop: u64) -> moq_net::origin::Producer {
 	let (producer, driver) =

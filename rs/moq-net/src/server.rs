@@ -8,7 +8,7 @@ use crate::transport::poll::Session as _;
 use crate::{
 	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06, ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, SessionError,
 	Version, Versions,
-	coding::{Decode, Encode, Stream},
+	coding::{Encode, Stream},
 	ietf, lite,
 	setup::{self, Role},
 	stats,
@@ -1155,16 +1155,15 @@ mod tests {
 	}
 
 	/// Encode a draft 14-16 CLIENT_SETUP, sent on the control bidi stream.
-	fn legacy_setup(version: ietf::Version, params: ietf::Parameters) -> Vec<u8> {
+	/// A moq-lite-02 CLIENT_SETUP, sent on the bidi stream the `moql` ALPN negotiates over.
+	fn moql_setup() -> Vec<u8> {
+		let version = crate::Version::Lite(lite::Version::Lite02);
 		let mut buf = Vec::new();
 		setup::Client {
-			versions: crate::coding::Versions::from([crate::Version::Ietf(version).into()]),
-			parameters: params.encode_bytes(version).unwrap(),
+			versions: crate::coding::Versions::from([version.into()]),
+			parameters: Bytes::new(),
 		}
-		.encode(
-			&mut crate::coding::Encoder::new(&mut buf, (crate::Version::Ietf(version)).into()),
-			crate::Version::Ietf(version),
-		)
+		.encode(&mut crate::coding::Encoder::new(&mut buf, version.into()), version)
 		.unwrap();
 		buf
 	}
@@ -1186,20 +1185,13 @@ mod tests {
 	/// session the driver then runs, through the REAL accept path (`accept_request` -> `ok`).
 	/// The session's own `auth()` (the handle the driver polls) routes a request token to that
 	/// pre-ok consumer instead of falling to the `Unsupported` default, and granting admits.
-	/// Both a no-AUTH-extension legacy session (draft-14, `Handle::new(false)`) and the modern
-	/// uni-SETUP path (draft-18); a QUIC server has no other point to install the verifier.
+	/// A QUIC server has no other point to install the verifier.
 	#[moq_clock::test]
 	async fn a_pre_ok_verifier_governs_the_session() {
-		let cases = [
-			(
-				FakeSession::new(ALPN_14, [])
-					.with_bi(legacy_setup(ietf::Version::Draft14, ietf::Parameters::default())),
-			),
-			(
-				FakeSession::new(ALPN_18, [ietf_setup(ietf::Version::Draft18, Some("room/alice"))]),
-				ietf::Version::Draft18,
-			),
-		];
+		let cases = [(
+			FakeSession::new(ALPN_18, [ietf_setup(ietf::Version::Draft18, Some("room/alice"))]),
+			ietf::Version::Draft18,
+		)];
 
 		for (session, version) in cases {
 			let mut request = Server::new()
@@ -1233,10 +1225,8 @@ mod tests {
 	#[moq_clock::test]
 	async fn a_reply_the_peer_never_takes_fails_at_the_deadline() {
 		let registry = stats::Registry::new(Default::default());
-		let version = ietf::Version::Draft16;
-		let session = FakeSession::new(ALPN_16, [])
-			.with_bi(legacy_setup(version, ietf::Parameters::default()))
-			.withholding_credit();
+		let version = Version::Lite(lite::Version::Lite02);
+		let session = FakeSession::new(ALPN_LITE, []).with_bi(moql_setup()).withholding_credit();
 		let start = moq_clock::now();
 		let deadline = start + std::time::Duration::from_secs(10);
 		let request = Server::new()
@@ -1252,7 +1242,7 @@ mod tests {
 		assert_eq!(moq_clock::now(), deadline);
 		assert_eq!(
 			session.close_code(),
-			Some(Version::Ietf(version).session_code(&SessionError::Timeout))
+			Some(version.session_code(&SessionError::Timeout))
 		);
 		let failed = registry.snapshot().sessions()[0].1.sessions_failed;
 		assert_eq!(failed.count(stats::Failure::Application), 1, "{failed:?}");
@@ -1263,10 +1253,8 @@ mod tests {
 	#[moq_clock::test]
 	async fn an_abandoned_reply_fails_like_the_deadline() {
 		let registry = stats::Registry::new(Default::default());
-		let version = ietf::Version::Draft16;
-		let session = FakeSession::new(ALPN_16, [])
-			.with_bi(legacy_setup(version, ietf::Parameters::default()))
-			.withholding_credit();
+		let version = Version::Lite(lite::Version::Lite02);
+		let session = FakeSession::new(ALPN_LITE, []).with_bi(moql_setup()).withholding_credit();
 		let request = Server::new()
 			.accept_request(moq_clock::now(), session.clone())
 			.await
@@ -1276,7 +1264,7 @@ mod tests {
 		assert!(abandoned.is_err(), "a reply the peer never took completed");
 		assert_eq!(
 			session.close_code(),
-			Some(Version::Ietf(version).session_code(&SessionError::Timeout))
+			Some(version.session_code(&SessionError::Timeout))
 		);
 		let failed = registry.snapshot().sessions()[0].1.sessions_failed;
 		assert_eq!(failed.count(stats::Failure::Application), 1, "{failed:?}");
@@ -1316,14 +1304,8 @@ mod tests {
 				token_params(ietf::Version::Draft19),
 			)],
 		);
-		let legacy = FakeSession::new(ALPN_16, []).with_bi(legacy_setup(
-			ietf::Version::Draft16,
-			token_params(ietf::Version::Draft16),
-		));
-		for (name, session) in [("draft-19", modern), ("draft-16", legacy)] {
-			let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
-			assert_eq!(request.token(), Some(&setup_token()), "{name}");
-		}
+		let request = Server::new().accept_request(moq_clock::now(), modern).await.unwrap();
+		assert_eq!(request.token(), Some(&setup_token()));
 	}
 
 	#[moq_clock::test]
@@ -1336,8 +1318,7 @@ mod tests {
 		}
 	}
 
-	/// A SETUP the server refuses closes the session with the code naming why, on both
-	/// the draft-17+ uni stream and the draft 14-16 bidi stream.
+	/// A SETUP the server refuses closes the session with the code naming why.
 	#[moq_clock::test]
 	async fn a_refused_setup_token_closes_with_its_code() {
 		let delete = [0x0, 0x7]; // DELETE alias 7
@@ -1349,22 +1330,18 @@ mod tests {
 			let mut params = ietf::Parameters::default();
 			params.set_bytes(ietf::ParameterBytes::AuthorizationToken, raw.to_vec());
 
-			let modern = FakeSession::new(ALPN_19, [ietf_setup_with(ietf::Version::Draft19, params.clone())]);
-			let legacy = FakeSession::new(ALPN_16, []).with_bi(legacy_setup(ietf::Version::Draft16, params));
-			for (name, session) in [("draft-19", modern), ("draft-16", legacy)] {
-				let result = Server::new().accept_request(moq_clock::now(), session.clone()).await;
-				assert!(result.is_err(), "{name}");
-				assert_eq!(session.close_code(), Some(code.to_code()), "{name} {code}");
-			}
+			let session = FakeSession::new(ALPN_19, [ietf_setup_with(ietf::Version::Draft19, params)]);
+			let result = Server::new().accept_request(moq_clock::now(), session.clone()).await;
+			assert!(result.is_err());
+			assert_eq!(session.close_code(), Some(code.to_code()), "{code}");
 		}
 	}
 
 	#[moq_clock::test]
 	async fn accept_request_reads_ietf_path() {
-		// Every draft-17+ version gates on the SETUP stream before starting, so the
+		// Every draft gates on the SETUP stream before starting, so the
 		// path is known at authorization time just like lite-05.
 		for (alpn, version) in [
-			(ALPN_17, ietf::Version::Draft17),
 			(ALPN_18, ietf::Version::Draft18),
 			(ALPN_19, ietf::Version::Draft19),
 		] {

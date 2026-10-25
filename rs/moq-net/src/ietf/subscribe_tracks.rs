@@ -280,7 +280,7 @@ mod tests {
 	#[test]
 	fn subscribe_tracks_starts_at_draft_18() {
 		let mut buf = Vec::new();
-		let version = Version::Draft17;
+		let version = Version::Draft18;
 		assert!(
 			paused()
 				.encode_msg(&mut Encoder::new(&mut buf, version.into()), version)

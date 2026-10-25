@@ -24,9 +24,7 @@ const VERSIONS: &[&str] = &[
 	"moq-lite-05",
 	"moq-lite-06",
 	"moq-lite-07-wip",
-	"moq-transport-14",
-	"moq-transport-16",
-	"moq-transport-17",
+	"moq-transport-18",
 	"moq-transport-20",
 	"moq-transport-22",
 ];
@@ -133,7 +131,7 @@ async fn each_wire_refuses_only_the_anchors_it_drops() {
 		let timed = !matches!(
 			version,
 			Some(
-				"moq-lite-03" | "moq-lite-04" | "moq-lite-05" | "moq-lite-06" | "moq-transport-14" | "moq-transport-16"
+				"moq-lite-03" | "moq-lite-04" | "moq-lite-05" | "moq-lite-06"
 			)
 		);
 		for (range, held) in anchored() {

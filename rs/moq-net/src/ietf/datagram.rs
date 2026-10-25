@@ -96,8 +96,6 @@ impl crate::model::datagram::Wire {
 	}
 }
 
-
-
 impl Encode<Version> for ObjectDatagram {
 	fn encode(&self, w: &mut Encoder<'_>, _: Version) -> Result<(), EncodeError> {
 		let kind = self.kind();
@@ -203,7 +201,7 @@ mod tests {
 		Ok(datagram)
 	}
 
-	const ALL: [Version; 9] = [
+	const ALL: [Version; 5] = [
 		Version::Draft18,
 		Version::Draft19,
 		Version::Draft20,
@@ -231,19 +229,6 @@ mod tests {
 			assert_eq!(buf[0], 0x07, "{version}: properties, end of group, object 0");
 			assert_eq!(decode(&buf, version).unwrap(), datagram, "{version}");
 		}
-	}
-
-	#[test]
-	fn default_priority_needs_draft15() {
-		assert!(matches!(
-			single(None).encode_bytes(Version::Draft14),
-			Err(EncodeError::InvalidState)
-		));
-		assert!(decode(&[0x0C, 0x01, 0x02], Version::Draft14).is_err());
-
-		let buf = single(None).encode_bytes(Version::Draft16).unwrap();
-		assert_eq!(buf[0], 0x0F);
-		assert_eq!(decode(&buf, Version::Draft16).unwrap(), single(None));
 	}
 
 	#[test]
@@ -312,7 +297,7 @@ mod tests {
 		// PROPERTIES and ZERO_OBJECT_ID, alias 1, group 2, priority 0, empty block.
 		let bytes = [0x05, 0x01, 0x02, 0x00, 0x00, b'x'];
 		assert!(matches!(
-			ObjectDatagram::decode_slice(&bytes, Version::Draft16),
+			ObjectDatagram::decode_slice(&bytes, Version::Draft18),
 			Err(DecodeError::InvalidValue)
 		));
 	}

@@ -504,9 +504,9 @@ mod tests {
 
 	#[test]
 	fn properties_round_trip() {
-		// An immutable block in draft-16 holding a gap of 2 (0x3e) and a timestamp.
+		// An immutable block holding a gap of 2 (0x3e) and a timestamp.
 		let mut sealed = Vec::new();
-		let e = &mut Encoder::new(&mut sealed, Draft::Draft16.into());
+		let e = &mut Encoder::new(&mut sealed, Draft::Draft18.into());
 		for value in [0x10u64, 77, 0x3e - 0x10, 2] {
 			e.varint(value).unwrap();
 		}
@@ -522,16 +522,16 @@ mod tests {
 		];
 		let properties = Properties {
 			sealed_time: Some(crate::Timestamp::new(77, Timescale::MILLI).unwrap()),
-			block: crate::ietf::object::block(&values, Draft::Draft16).unwrap(),
+			block: crate::ietf::object::block(&values, Draft::Draft18).unwrap(),
 		};
 		let body = encode_properties(&properties);
-		let decoded = decode_properties(body, from(Draft::Draft16, Some(Timescale::MILLI)), true).unwrap();
+		let decoded = decode_properties(body, from(Draft::Draft18, Some(Timescale::MILLI)), true).unwrap();
 		assert_eq!(decoded.properties, properties);
 		assert_eq!(decoded.gap, Some(2));
 
 		// None at all is an empty body.
 		assert!(encode_properties(&Properties::default()).is_empty());
-		let empty = decode_properties(&[], from(Draft::Draft16, Some(Timescale::MILLI)), true).unwrap();
+		let empty = decode_properties(&[], from(Draft::Draft18, Some(Timescale::MILLI)), true).unwrap();
 		assert_eq!(empty.properties, Properties::default());
 
 		// An untimed track's Timestamp has no frame to hold it, so it stays in the block.
@@ -674,13 +674,6 @@ mod tests {
 			decode(&wire(&[opaque(0x40)], 0)).is_err(),
 			"properties on a moq-lite track"
 		);
-		for version in [Draft::Draft15] {
-			assert!(decode(&wire(&[], code(version))).is_ok(), "{version}");
-			assert!(
-				decode(&wire(&[opaque(0x40)], code(version))).is_err(),
-				"{version} has no Track Properties"
-			);
-		}
 		for code in [1, 0xff000099, crate::Version::Lite(V).code()] {
 			assert!(decode(&wire(&[], code)).is_err(), "{code:#x} is no moq-transport draft");
 		}
@@ -789,7 +782,7 @@ mod tests {
 	/// could not cross is refused where it arrives rather than where it would be sent.
 	#[test]
 	fn track_properties_that_cannot_cross_are_refused_at_ingress() {
-		let version = Draft::Draft16;
+		let version = Draft::Draft18;
 		// The most a draft-16 answer holds beside a Request ID and an empty parameter count.
 		let size = super::super::message::MAX_MESSAGE_SIZE - 2;
 		// DYNAMIC_GROUPS, then the last ID whose delta from it fits four bytes.
@@ -839,7 +832,7 @@ mod tests {
 			};
 			let decoded = decode_datagram(
 				&mut Decoder::new(&datagram(&wire), V.into()),
-				from(Draft::Draft14, None),
+				from(Draft::Draft18, None),
 			);
 			assert_eq!(decoded.is_ok(), ok, "{status}");
 		}
@@ -963,36 +956,21 @@ mod tests {
 		}
 	}
 
-	/// Only draft-14 lets a status object carry properties, so the END_OF_GROUP record has a
-	/// block only on a draft-14 track.
+	/// A status object carries no properties, so the END_OF_GROUP record has no block.
 	#[cfg(feature = "async")]
 	#[test]
-	fn an_end_record_block_needs_a_draft_that_carries_one() {
-		for version in [Draft::Draft22] {
-			let framing = from(version, None);
-			assert_eq!(
-				decode_end(&[0x20, 1], framing).is_ok(),
-				version == Draft::Draft14,
-				"{version}"
-			);
-			assert!(decode_end(&[], framing).is_ok(), "{version}");
-		}
+	fn an_end_record_has_no_block() {
+		let framing = from(Draft::Draft22, None);
+		assert!(decode_end(&[0x20, 1], framing).is_err());
+		assert!(decode_end(&[], framing).is_ok());
 	}
 
-	/// A datagram must be one its track's draft defines: from draft-17 on a non-zero Status
-	/// carries no properties, and only drafts 14 and 15 define DOES_NOT_EXIST.
+	/// A datagram must be one its track's draft defines: a non-zero Status carries no
+	/// properties.
 	#[test]
 	fn a_datagram_block_needs_a_draft_that_sends_its_shape() {
-		let drafts = [
-			Draft::Draft22,
-		];
-		for (status, carried) in [
-			(0, &drafts[..]),
-			(1, &drafts[..2]),
-			(3, &drafts[..3]),
-			(4, &drafts[..3]),
-		] {
-			for version in drafts {
+		for (status, carried) in [(0, true), (1, false), (3, false), (4, false)] {
+			for version in [Draft::Draft18, Draft::Draft22] {
 				// Object 3 at priority 9, which every draft can send beside a status.
 				let mut buf = Vec::new();
 				let w = &mut Encoder::new(&mut buf, V.into());
@@ -1002,7 +980,7 @@ mod tests {
 				w.varint(status).unwrap();
 				w.bytes(&[0x20, 1]).unwrap();
 				let decoded = decode_datagram(&mut Decoder::new(&buf, V.into()), from(version, None));
-				assert_eq!(decoded.is_ok(), carried.contains(&version), "{status}: {version}");
+				assert_eq!(decoded.is_ok(), carried, "{status}: {version}");
 			}
 		}
 	}

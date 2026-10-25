@@ -1,6 +1,5 @@
 //! IETF moq-transport-14 publish namespace messages
 
-
 use crate::{Epoch, Path, coding::*, ietf::RequestId};
 
 use super::Message;
@@ -267,101 +266,10 @@ mod tests {
 			authorization_token: None,
 		};
 
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: PublishNamespace = decode_message(&encoded, Version::Draft14).unwrap();
+		let encoded = encode_message(&msg, Version::Draft18);
+		let decoded: PublishNamespace = decode_message(&encoded, Version::Draft18).unwrap();
 
 		assert_eq!(decoded.track_namespace.as_str(), "test/broadcast");
-	}
-
-	#[test]
-	fn test_announce_error() {
-		let msg = PublishNamespaceError {
-			request_id: RequestId(1),
-			error_code: 404,
-			reason_phrase: "Unauthorized".into(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: PublishNamespaceError = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.error_code, 404);
-		assert_eq!(decoded.reason_phrase, "Unauthorized");
-	}
-
-	#[test]
-	fn test_unannounce_v14() {
-		let msg = PublishNamespaceDone {
-			track_namespace: Path::new("old/stream"),
-			request_id: RequestId(0),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: PublishNamespaceDone = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.track_namespace.as_str(), "old/stream");
-	}
-
-	#[test]
-	fn test_unannounce_v16() {
-		let msg = PublishNamespaceDone {
-			track_namespace: Path::default(),
-			request_id: RequestId(42),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft16);
-		let decoded: PublishNamespaceDone = decode_message(&encoded, Version::Draft16).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(42));
-	}
-
-	#[test]
-	fn test_announce_cancel_v14() {
-		let msg = PublishNamespaceCancel {
-			track_namespace: Path::new("canceled"),
-			request_id: RequestId(0),
-			error_code: 1,
-			reason_phrase: "Shutdown".into(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft14);
-		let decoded: PublishNamespaceCancel = decode_message(&encoded, Version::Draft14).unwrap();
-
-		assert_eq!(decoded.track_namespace.as_str(), "canceled");
-		assert_eq!(decoded.error_code, 1);
-		assert_eq!(decoded.reason_phrase, "Shutdown");
-	}
-
-	#[test]
-	fn test_announce_cancel_v16() {
-		let msg = PublishNamespaceCancel {
-			track_namespace: Path::default(),
-			request_id: RequestId(7),
-			error_code: 1,
-			reason_phrase: "Shutdown".into(),
-		};
-
-		let encoded = encode_message(&msg, Version::Draft16);
-		let decoded: PublishNamespaceCancel = decode_message(&encoded, Version::Draft16).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(7));
-		assert_eq!(decoded.error_code, 1);
-		assert_eq!(decoded.reason_phrase, "Shutdown");
-	}
-
-	#[test]
-	fn test_publish_namespace_v17_round_trip() {
-		let msg = PublishNamespace {
-			request_id: RequestId(5),
-			track_namespace: Path::new("v17/broadcast"),
-			params: Default::default(),
-			authorization_token: None,
-		};
-
-		let encoded = encode_message(&msg, Version::Draft17);
-		let decoded: PublishNamespace = decode_message(&encoded, Version::Draft17).unwrap();
-
-		assert_eq!(decoded.request_id, RequestId(5));
-		assert_eq!(decoded.track_namespace.as_str(), "v17/broadcast");
 	}
 
 	#[test]
@@ -378,50 +286,6 @@ mod tests {
 
 		assert_eq!(decoded.request_id, RequestId(5));
 		assert_eq!(decoded.track_namespace.as_str(), "v18/broadcast");
-	}
-
-	#[test]
-	fn test_publish_namespace_done_v18_rejected() {
-		let msg = PublishNamespaceDone {
-			track_namespace: Path::default(),
-			request_id: RequestId(42),
-		};
-
-		let mut buf = Vec::new();
-		assert!(
-			msg.encode_msg(&mut Encoder::new(&mut buf, Version::Draft18.into()), Version::Draft18)
-				.is_err()
-		);
-	}
-
-	#[test]
-	fn test_publish_namespace_done_v17_rejected() {
-		let msg = PublishNamespaceDone {
-			track_namespace: Path::default(),
-			request_id: RequestId(42),
-		};
-
-		let mut buf = Vec::new();
-		assert!(
-			msg.encode_msg(&mut Encoder::new(&mut buf, Version::Draft17.into()), Version::Draft17)
-				.is_err()
-		);
-	}
-
-	#[test]
-	fn test_publish_namespace_cancel_v17_rejected() {
-		let msg = PublishNamespaceCancel {
-			track_namespace: Path::default(),
-			request_id: RequestId(7),
-			error_code: 1,
-			reason_phrase: "Shutdown".into(),
-		};
-
-		let mut buf = Vec::new();
-		assert!(
-			msg.encode_msg(&mut Encoder::new(&mut buf, Version::Draft17.into()), Version::Draft17)
-				.is_err()
-		);
 	}
 
 	fn hop_path(ids: &[u64]) -> cluster::HopPath {
@@ -465,36 +329,6 @@ mod tests {
 		assert_eq!(decoded.apply(&held), rerouted);
 	}
 
-	/// Drafts 14-15 have no update for an advertisement, and draft-16's names the one it
-	/// updates.
-	#[test]
-	fn update_names_the_advertisement_on_draft_16() {
-		let mut msg = PublishNamespaceUpdate {
-			request_id: RequestId(2),
-			namespace_request_id: None,
-			hops: None,
-			cost: None,
-			authorization_token: Some(super::super::token::RequestToken(crate::setup::Token {
-				kind: 0,
-				value: b"jwt".to_vec(),
-			})),
-		};
-		for version in [Version::Draft15] {
-			let mut buf = Vec::new();
-			assert!(
-				msg.encode_msg(&mut Encoder::new(&mut buf, version.into()), version)
-					.is_err(),
-				"{version:?}"
-			);
-		}
-		assert!(decode_message::<PublishNamespaceUpdate>(&[0x02, 0x00], Version::Draft15).is_err());
-
-		msg.namespace_request_id = Some(RequestId(1));
-		let decoded: PublishNamespaceUpdate =
-			decode_message(&encode_message(&msg, Version::Draft16), Version::Draft16).unwrap();
-		assert_eq!(decoded, msg);
-	}
-
 	#[test]
 	fn test_announce_rejects_parameters() {
 		#[rustfmt::skip]
@@ -504,7 +338,7 @@ mod tests {
 			0x01, // INVALID: num_params = 1
 		];
 
-		let result: Result<PublishNamespace, _> = decode_message(&invalid_bytes, Version::Draft14);
+		let result: Result<PublishNamespace, _> = decode_message(&invalid_bytes, Version::Draft18);
 		assert!(result.is_err());
 	}
 }

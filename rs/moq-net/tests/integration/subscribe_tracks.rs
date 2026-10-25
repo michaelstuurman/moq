@@ -173,7 +173,7 @@ async fn subscribe_tracks_needs_forward_0_on_draft_18() {
 /// Before draft-18, 0x51 is not a message at all, so it is still a protocol violation.
 #[moq_clock::test]
 async fn subscribe_tracks_before_draft_18_closes_the_session() {
-	let setup = setup("moq-transport-17".parse().unwrap()).await;
+	let setup = setup("moq-transport-18".parse().unwrap()).await;
 	let (mut send, _recv) = setup
 		.pair
 		.server_transport

@@ -363,10 +363,6 @@ async fn serving_the_peer_asks_nothing() {
 /// 15 answer with PUBLISH_NAMESPACE requests after the OK), so these read what arrived once
 /// everything in flight has.
 const IETF: &[&str] = &[
-	"moq-transport-14",
-	"moq-transport-15",
-	"moq-transport-16",
-	"moq-transport-17",
 	"moq-transport-18",
 	"moq-transport-19",
 	"moq-transport-20",

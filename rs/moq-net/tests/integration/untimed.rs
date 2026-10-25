@@ -35,8 +35,6 @@ fn expected(version: &str) -> Arrives {
 	match version {
 		// Lite-05 and lite-06 stamp untimed tracks with send times, so their receivers drop them.
 		"moq-lite-03" | "moq-lite-04" | "moq-lite-05" | "moq-lite-06" => Arrives::Untimed,
-		// Drafts 14 to 16 can't carry TIMESCALE.
-		"moq-transport-14" | "moq-transport-16" => Arrives::Untimed,
 		_ => Arrives::Faithful,
 	}
 }
@@ -47,9 +45,7 @@ const VERSIONS: &[&str] = &[
 	"moq-lite-05",
 	"moq-lite-06",
 	"moq-lite-07-wip",
-	"moq-transport-14",
-	"moq-transport-16",
-	"moq-transport-17",
+	"moq-transport-18",
 	"moq-transport-20",
 ];
 
@@ -148,7 +144,7 @@ async fn frames_arrive_as_published() {
 #[moq_clock::test]
 async fn a_relay_forwards_an_untimed_track_untimed() {
 	for hops in [
-		&["moq-transport-17", "moq-transport-20"][..],
+		&["moq-transport-18", "moq-transport-20"][..],
 		&["moq-lite-07-wip", "moq-lite-07-wip"][..],
 	] {
 		let (frame, info) = frame_through(hops, untimed()).await;
@@ -157,8 +153,8 @@ async fn a_relay_forwards_an_untimed_track_untimed() {
 	}
 
 	for hops in [
-		&["moq-lite-03", "moq-transport-17"][..],
-		&["moq-transport-16", "moq-transport-20"][..],
+		&["moq-lite-03", "moq-transport-18"][..],
+		&[ "moq-transport-20"][..],
 	] {
 		let (frame, info) = frame_through(hops, timed()).await;
 		assert_eq!(frame, None, "{hops:?}: the first hop has no timestamps to forward");
@@ -210,7 +206,7 @@ async fn an_explicit_start_holds_on_an_untimed_track() {
 /// time that the receiver drops.
 #[moq_clock::test]
 async fn datagrams_arrive_as_published() {
-	for version in ["moq-lite-05", "moq-lite-07-wip", "moq-transport-16", "moq-transport-20"] {
+	for version in ["moq-lite-05", "moq-lite-07-wip", "moq-transport-20"] {
 		let chain = Chain::new(&[version]).await;
 		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
 		let mut producer = broadcast.create_track("data", untimed()).unwrap();

@@ -428,7 +428,7 @@ mod tests {
 	fn test_skip_empty_properties() {
 		let mut buf = bytes::Bytes::new();
 		assert_eq!(
-			crate::coding::decode_buf(&mut buf, Properties::decode).unwrap(),
+			crate::coding::decode_buf(&mut buf, Version::Draft18, Properties::decode).unwrap(),
 			Properties::default()
 		);
 	}
@@ -437,10 +437,10 @@ mod tests {
 	fn test_skip_varint_property() {
 		// Even type (0x02 = DELIVERY_TIMEOUT), varint value
 		let mut buf = Vec::new();
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x02u64).unwrap(); // delta type
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(5000u64).unwrap(); // value
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(0x02u64).unwrap(); // delta type
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(5000u64).unwrap(); // value
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Version::Draft18, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -448,11 +448,11 @@ mod tests {
 	fn test_skip_bytes_property() {
 		// Odd type (0x0B = IMMUTABLE_PROPERTIES), length-prefixed
 		let mut buf = Vec::new();
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x0Bu64).unwrap(); // delta type
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(3u64).unwrap(); // length
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(0x0Bu64).unwrap(); // delta type
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(3u64).unwrap(); // length
 		buf.extend_from_slice(&[0x03, 0x01, 0x2A]); // sealed type 0x03, one byte
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Version::Draft18, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -460,18 +460,18 @@ mod tests {
 	fn test_skip_multiple_properties() {
 		let mut buf = Vec::new();
 		// First: type 0x02 (even), varint value
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x02u64).unwrap();
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(1000u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(0x02u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(1000u64).unwrap();
 		// Second: delta = 0x02 → abs type 0x04 (even), varint value
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x02u64).unwrap();
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(2000u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(0x02u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(2000u64).unwrap();
 		// Third: delta = 0x07 → abs type 0x0B (odd), length-prefixed
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x07u64).unwrap();
-		Encoder::new(&mut buf, Version::Draft17.into()).varint(2u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(0x07u64).unwrap();
+		Encoder::new(&mut buf, Version::Draft18.into()).varint(2u64).unwrap();
 		buf.extend_from_slice(&[0x02, 0x2A]); // sealed type 0x02 = 42
 
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Version::Draft18, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -529,43 +529,6 @@ mod tests {
 
 		let mut bytes = bytes::Bytes::from(buf);
 		assert!(crate::coding::decode_buf(&mut bytes, Version::Draft18, Properties::decode).is_err());
-	}
-
-	/// Draft-16 carries the same block under the name Track Extensions. We don't write one
-	/// there, but a peer that does must be understood rather than faulted.
-	#[test]
-	fn test_decodes_draft16_track_extensions() {
-		let mut buf = Vec::new();
-		Encoder::new(&mut buf, Version::Draft16.into()).varint(0x22u64).unwrap();
-		Encoder::new(&mut buf, Version::Draft16.into()).varint(2u64).unwrap();
-
-		let mut bytes = bytes::Bytes::from(buf);
-		let properties = crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
-		assert_eq!(properties.group_order, Some(GroupOrder::Descending));
-		assert!(bytes.is_empty());
-	}
-
-	/// Drafts 14-16 cannot carry TIMESCALE, so the block (and any Timestamp that would
-	/// depend on it) stays off the wire. Draft-17 is the first version that writes it.
-	#[test]
-	fn drafts_14_through_16_write_no_timescale() {
-		let properties = Properties {
-			unknown: Default::default(),
-			dynamic_groups: false,
-			compress: false,
-			max_cache_duration: None,
-			timescale: Some(Timescale::MILLI),
-			priority: None,
-			group_order: None,
-		};
-
-		for version in [Version::Draft15] {
-			let mut buf = Vec::new();
-			properties
-				.encode(&mut Encoder::new(&mut buf, version.into()), version)
-				.unwrap();
-			assert_eq!(!buf.is_empty(), Properties::sends_timescale(version), "{version}");
-		}
 	}
 
 	/// The group order property is delta-encoded against the timescale that precedes it,
@@ -639,25 +602,6 @@ mod tests {
 		.encode(&mut Encoder::new(&mut buf, Version::Draft22.into()), Version::Draft22)
 		.unwrap();
 		assert_eq!(buf, [0x30, 0x01]);
-
-		// Draft 16 defines DYNAMIC_GROUPS but not TIMESCALE, and drafts 14 and 15 have no block
-		// (draft 15 carries DYNAMIC_GROUPS as a SUBSCRIBE_OK parameter instead).
-		let both = Properties {
-			dynamic_groups: true,
-			compress: false,
-			timescale: Some(Timescale::MILLI),
-			..Default::default()
-		};
-		for (version, expected) in [
-			(Version::Draft14, &[][..]),
-			(Version::Draft15, &[][..]),
-			(Version::Draft16, &[0x30, 0x01][..]),
-		] {
-			let mut buf = Vec::new();
-			both.encode(&mut Encoder::new(&mut buf, version.into()), version)
-				.unwrap();
-			assert_eq!(buf, expected, "{version}");
-		}
 
 		let mut buf = Vec::new();
 		Properties::default()

@@ -35,8 +35,7 @@ const VERSIONS: &[&str] = &[
 	"moq-lite-03",
 	"moq-lite-05",
 	"moq-lite-07-wip",
-	"moq-transport-14",
-	"moq-transport-17",
+	"moq-transport-18",
 	"moq-transport-20",
 	"moq-transport-22",
 ];
@@ -261,8 +260,7 @@ async fn lite07_empty_track_ends_without_the_grace() {
 /// IETF drafts over the control stream adapter (14), on their own streams (17), and with
 /// subscription fills (20+).
 const IETF: &[&str] = &[
-	"moq-transport-14",
-	"moq-transport-17",
+	"moq-transport-18",
 	"moq-transport-20",
 	"moq-transport-22",
 ];

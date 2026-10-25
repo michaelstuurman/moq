@@ -4,7 +4,7 @@ use crate::time::{Deadlines, Instant};
 use crate::transport::poll::Session as _;
 use crate::{
 	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06, ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, Version, Versions,
-	coding::{self, Decode, Encode, Stream},
+	coding::{self, Encode, Stream},
 	ietf, lite, setup, stats,
 };
 
@@ -740,9 +740,7 @@ mod tests {
 			parameters: Bytes::new(),
 		};
 		server
-			.encode(
-				&mut crate::coding::Encoder::new(&mut encoded, (Version::Ietf(ietf::Version::Draft14)).into()),
-			)
+			.encode(&mut crate::coding::Encoder::new(&mut encoded, negotiated.into()), negotiated)
 			.unwrap();
 
 		// Add a setup-stream SessionInfo frame using the negotiated Lite version.
@@ -769,10 +767,11 @@ mod tests {
 		let (_session, driver) = client.connect(moq_clock::now(), fake.clone()).await.unwrap();
 		moq_clock::sim::spawn(crate::time::run(driver));
 
-		// Verify the client setup was encoded using Draft14 framing (ALPN_LITE fallback path).
+		// Verify the client offered moq-lite 01/02 over the `moql` SETUP (ALPN_LITE fallback path).
 		let mut setup_bytes = Bytes::from(fake.control_writes());
 		let setup = crate::coding::decode_buf(
 			&mut setup_bytes,
+			Version::Lite(lite::Version::Lite02),
 			setup::Client::decode,
 		)
 		.unwrap();
@@ -825,44 +824,13 @@ mod tests {
 		.expect("connect failed");
 	}
 
-	/// The client SETUP on the bidi control stream (the pre-draft-17 framing) carries the
-	/// AUTHORITY next to the PATH.
 	#[moq_clock::test]
-	async fn draft14_setup_carries_the_authority() {
-		let fake = FakeSession::new(Some(ALPN_LITE), mock_server_setup(Version::Lite(lite::Version::Lite01)));
-		let client = Client::new()
-			.with_versions(
-				[
-					Version::Lite(lite::Version::Lite01),
-				]
-				.into(),
-			)
-			.with_path("/anon")
-			.with_authority("relay.example.com:4443");
-
-		let (_session, driver) = client.connect(moq_clock::now(), fake.clone()).await.unwrap();
-		moq_clock::sim::spawn(crate::time::run(driver));
-
-		let (setup, _) =
-			setup::Client::decode_slice(&fake.control_writes(), Version::Ietf(ietf::Version::Draft14)).unwrap();
-		let (parameters, _) = ietf::Parameters::decode_slice(&setup.parameters, ietf::Version::Draft14).unwrap();
-		assert_eq!(
-			parameters.get_bytes(ietf::ParameterBytes::Authority),
-			Some(b"relay.example.com:4443".as_ref())
-		);
-		assert_eq!(
-			parameters.get_bytes(ietf::ParameterBytes::Path),
-			Some(b"/anon".as_ref())
-		);
-	}
-
-	#[moq_clock::test]
-	async fn alpn_lite_falls_back_to_draft14_and_switches_version_post_setup() {
+	async fn alpn_lite_falls_back_to_moql_setup_and_switches_version_post_setup() {
 		run_alpn_lite_fallback_case(Some(ALPN_LITE)).await;
 	}
 
 	#[moq_clock::test]
-	async fn no_alpn_falls_back_to_draft14_and_switches_version_post_setup() {
+	async fn no_alpn_falls_back_to_moql_setup_and_switches_version_post_setup() {
 		run_alpn_lite_fallback_case(None).await;
 	}
 

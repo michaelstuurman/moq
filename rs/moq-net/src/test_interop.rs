@@ -36,7 +36,7 @@ fn varint_interop() {
 	values.push(varint::MAX_QUIC);
 
 	let quic = Form::Quic;
-	let leading_ones = Form::from(ietf::Version::Draft17);
+	let leading_ones = Form::from(ietf::Version::Draft18);
 	let encode = |v: u64, form: Form| {
 		let mut buf = Vec::new();
 		Encoder::new(&mut buf, form).varint(v).unwrap();
@@ -259,7 +259,7 @@ fn ietf_datagram_interop() {
 		ietf::Version::Draft21,
 		ietf::Version::Draft22,
 	];
-	for (draft, version) in (14..).zip(all) {
+	for (draft, version) in (18..).zip(all) {
 		let legacy = false;
 		let mut properties = Vec::new();
 		let mut w = Encoder::new(&mut properties, version.into());
@@ -442,8 +442,7 @@ fn ietf_track_status_interop() {
 		ietf::Version::Draft21,
 		ietf::Version::Draft22,
 	];
-	for (draft, version) in (14..).zip(all) {
-		let legacy = false;
+	for (draft, version) in (18..).zip(all) {
 		let request = |id: u64, namespace: &str, wanted: bool| {
 			let mut buf = Vec::new();
 			let mut w = Encoder::new(&mut buf, version.into());
@@ -469,12 +468,11 @@ fn ietf_track_status_interop() {
 
 		for (index, wanted) in [true, false].into_iter().enumerate() {
 			let mut r = Decoder::new(&responses[index], version.into());
-			assert_eq!(r.varint().unwrap(), ietf::TrackStatusOk::ID, "{version}");
+			assert_eq!(r.varint().unwrap(), <ietf::TrackStatusOk as ietf::Message>::ID, "{version}");
 			let ok = ietf::TrackStatusOk::decode(&mut r, version).unwrap();
 			assert!(r.is_empty(), "{version}: trailing bytes");
 
 			let expected = match version {
-				// GROUP_ORDER is a field on draft-14 and a parameter on draft-15.
 				// Only draft-20 can carry the opt-out.
 				_ if !wanted && ietf::Filter::is_draft20(version) => ietf::Properties::default(),
 				_ => ietf::Properties {
@@ -491,7 +489,6 @@ fn ietf_track_status_interop() {
 			assert_eq!(
 				ok,
 				ietf::TrackStatusOk {
-					request_id: legacy.then_some(ietf::RequestId(1 + 2 * index as u64)),
 					largest: Some(ietf::Location { group: 4, object: 1 }),
 					properties: expected,
 				},

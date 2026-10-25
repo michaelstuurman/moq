@@ -631,7 +631,6 @@ async fn hop_limit_bounds_receive_and_send() {
 		"moq-lite-05",
 		"moq-lite-06",
 		"moq-lite-07-wip",
-		"moq-transport-17",
 		"moq-transport-18",
 		"moq-transport-19",
 		"moq-transport-20",
@@ -703,7 +702,6 @@ async fn hop_limit_falls_back_to_a_forwardable_route() {
 	for name in [
 		"moq-lite-06",
 		"moq-lite-07-wip",
-		"moq-transport-17",
 		"moq-transport-18",
 		"moq-transport-19",
 		"moq-transport-20",
