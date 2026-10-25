@@ -969,6 +969,7 @@ impl<F: Container> std::ops::Deref for GroupBuffer<F> {
 
 #[cfg(test)]
 mod tests {
+	use moq_net::Path;
 	use super::Container as ContainerTrait;
 	use super::*;
 	use crate::catalog::hang::Container;
@@ -2384,14 +2385,14 @@ mod tests {
 		let hops = moq_net::Hops::try_from(vec![moq_net::Hop::new(10).unwrap()]).unwrap();
 		let first_route = origin
 			.dynamic_route(
-				"live",
+				Path::new("live").unwrap(),
 				moq_net::origin::Route::default()
 					.with_epoch(epoch.clone())
 					.with_hops(hops.clone())
 					.with_cost(5),
 			)
 			.unwrap();
-		let pending = origin.consume().request_broadcast("live", None);
+		let pending = origin.consume().request_broadcast(Path::new("live").unwrap(), None);
 		let first = moq_net::broadcast::Info::new().produce();
 		let info = hang::container::track_info(hang::catalog::PRIORITY.video);
 		let first_track = first.create_track("video", info.clone()).unwrap();
@@ -2428,7 +2429,7 @@ mod tests {
 		for sequence in 1..=4 {
 			let route = origin
 				.dynamic_route(
-					"live",
+					Path::new("live").unwrap(),
 					moq_net::origin::Route::default()
 						.with_epoch(epoch.clone())
 						.with_hops(hops.clone())

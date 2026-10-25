@@ -549,6 +549,7 @@ impl Ingest {
 	reason = "tests read the host clock directly"
 )]
 mod tests {
+	use moq_net::Path;
 	use std::time::Duration;
 
 	use super::*;
@@ -857,7 +858,7 @@ mod tests {
 				for _ in 0..2 {
 					let epoch = moq_net::Epoch::mint();
 					let route = moq_net::origin::Route::default().with_epoch(epoch.clone());
-					let mut broadcast = origin.publish("camera", route).unwrap();
+					let mut broadcast = origin.publish(Path::new("camera").unwrap(), route).unwrap();
 					let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 					published_tx.send((epoch, broadcast.clone(), catalog.clone())).unwrap();
 					// The first session to return ends the run; dropping the other's pull

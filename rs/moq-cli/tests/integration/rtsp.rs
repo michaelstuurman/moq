@@ -1,6 +1,7 @@
 //! `moq import rtsp` over a real relay: every RTSP session is its own broadcast under a fresh
 //! epoch, so a camera whose RTP time restarts never splices onto the broadcast before it.
 
+use hang::moq_net::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -67,7 +68,7 @@ async fn next_broadcast(
 			moq_net::announce::Event::End(_) | moq_net::announce::Event::Update(_) => {}
 		}
 	}
-	let broadcast = running(child, "the broadcast", consumer.request_broadcast("camera", None))
+	let broadcast = running(child, "the broadcast", consumer.request_broadcast(Path::new("camera").unwrap(), None))
 		.await
 		.expect("announced broadcast resolves");
 	let mut catalogs = running(

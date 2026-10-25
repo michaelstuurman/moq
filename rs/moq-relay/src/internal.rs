@@ -873,6 +873,7 @@ fn render_uring(_out: &mut String, _workers: &[UringWorker]) {}
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	#[tokio::test]
 	async fn stun_metrics_are_present_only_for_a_configured_listener() {
@@ -1210,7 +1211,7 @@ mod tests {
 	#[test]
 	fn request_metrics_never_open_a_session() {
 		let stats = moq_net::stats::Registry::new(Default::default());
-		let request = stats.tier(moq_net::stats::Tier::new("http")).request("root");
+		let request = stats.tier(moq_net::stats::Tier::new(Path::new("http").unwrap())).request(Path::new("root").unwrap());
 		drop(request);
 		let body = render_metrics(&stats.snapshot(), &[], &[]);
 		assert!(body.contains("# TYPE moq_relay_requests_total counter"), "{body}");
@@ -1229,7 +1230,7 @@ mod tests {
 	fn wire_metrics_include_internal_sessions_and_keep_final_totals() {
 		let registry = moq_net::stats::Registry::new(Default::default());
 		for tier in ["internal", "edge"] {
-			let session = registry.tier(moq_net::stats::Tier::new(tier)).session("");
+			let session = registry.tier(moq_net::stats::Tier::new(Path::new(tier).unwrap())).session(moq_net::Path::empty());
 			let source = moq_net::transport::Wire::new();
 			let guard = session.wire(source.clone());
 			source.set_sent_bytes(123);
@@ -1255,8 +1256,8 @@ mod tests {
 	async fn announce_metrics_keep_retired_totals() {
 		let stats = moq_net::stats::Registry::new(Default::default());
 		let producer =
-			moq_tokio::origin::spawn().with_stats(stats.tier(moq_net::stats::Tier::new("edge")).session("root"));
-		let broadcast = producer.create_broadcast("demo/retired").unwrap();
+			moq_tokio::origin::spawn().with_stats(stats.tier(moq_net::stats::Tier::new(Path::new("edge").unwrap())).session(Path::new("root").unwrap()));
+		let broadcast = producer.create_broadcast(Path::new("demo/retired").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 
 		let body = render_metrics(&stats.snapshot(), &[], &[]);
@@ -1298,19 +1299,19 @@ mod tests {
 
 		// Default-tier egress: an untagged local publisher writes, a tagged egress
 		// consumer reads it out, so publisher `bytes` advance on the default tier.
-		let default_ctx = stats.tier(Tier::default()).session("acme");
+		let default_ctx = stats.tier(Tier::default()).session(Path::new("acme").unwrap());
 		let pub_origin = moq_tokio::origin::spawn();
 		let egress = pub_origin.consume().with_stats(default_ctx.clone());
 		let mut announced = egress.announced();
-		let pub_source = pub_origin.create_broadcast("demo/x").unwrap();
+		let pub_source = pub_origin.create_broadcast(Path::new("demo/x").unwrap()).unwrap();
 		pub_source.announce(Default::default()).unwrap();
 		let pub_track = pub_source.create_track("video", timed()).unwrap();
 
 		// Named-tier ingress: a tagged ingress producer writes, so subscriber
 		// `bytes` advance on the regional tier.
-		let regional_ctx = stats.tier(Tier::new("region/sjc")).session("peer");
+		let regional_ctx = stats.tier(Tier::new(Path::new("region/sjc").unwrap())).session(Path::new("peer").unwrap());
 		let sub_origin = moq_tokio::origin::spawn().with_stats(regional_ctx.clone());
-		let sub_source = sub_origin.create_broadcast("demo/x").unwrap();
+		let sub_source = sub_origin.create_broadcast(Path::new("demo/x").unwrap()).unwrap();
 		sub_source.announce(Default::default()).unwrap();
 		let sub_track = sub_source.create_track("audio", timed()).unwrap();
 
@@ -1322,7 +1323,7 @@ mod tests {
 		let (update, active) = next_update(&mut announced).await.unwrap();
 		assert!(active);
 		let bc = egress
-			.request_broadcast(moq_net::Path::new(update.prefix.as_str()), None)
+			.request_broadcast(moq_net::Path::new(update.prefix.as_str()).unwrap(), None)
 			.await
 			.unwrap();
 		let mut egress_sub = bc.track("video").unwrap().subscribe(None).await.unwrap();

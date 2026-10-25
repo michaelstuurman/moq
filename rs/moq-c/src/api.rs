@@ -1759,7 +1759,7 @@ pub extern "C" fn moq_origin_create() -> i32 {
 pub unsafe extern "C" fn moq_origin_create_broadcast(origin: u32, path: *const c_char, path_len: usize) -> i32 {
 	ffi::enter(move || {
 		let origin = ffi::parse_id(origin)?;
-		let path = unsafe { ffi::parse_str(path, path_len)? };
+		let path = moq_net::Path::new(unsafe { ffi::parse_str(path, path_len)? })?;
 
 		let mut state = State::lock();
 		let broadcast = state.origin.create_broadcast(origin, path)?;
@@ -1794,7 +1794,7 @@ pub unsafe extern "C" fn moq_origin_dynamic(
 ) -> i32 {
 	ffi::enter(move || {
 		let origin = ffi::parse_id(origin)?;
-		let prefix = unsafe { ffi::parse_str(prefix, prefix_len)? };
+		let prefix = moq_net::Path::new(unsafe { ffi::parse_str(prefix, prefix_len)? })?;
 		let on_request = unsafe { ffi::OnStatus::new(user_data, on_request)? };
 		State::lock().origin.dynamic(origin, prefix, on_request)
 	})
@@ -2050,7 +2050,7 @@ pub unsafe extern "C" fn moq_origin_announced_broadcast(
 ) -> i32 {
 	ffi::enter(move || {
 		let origin = ffi::parse_id(origin)?;
-		let path = unsafe { ffi::parse_str(path, path_len)? }.to_string();
+		let path = moq_net::Path::new(unsafe { ffi::parse_str(path, path_len)? })?.to_owned();
 		let on_broadcast = unsafe { ffi::OnStatus::new(user_data, on_broadcast)? };
 		State::lock().origin.consume_announced(origin, path, on_broadcast)
 	})
@@ -2101,7 +2101,7 @@ pub unsafe extern "C" fn moq_origin_request(
 ) -> i32 {
 	ffi::enter(move || {
 		let origin = ffi::parse_id(origin)?;
-		let path = unsafe { ffi::parse_str(path, path_len)? }.to_string();
+		let path = moq_net::Path::new(unsafe { ffi::parse_str(path, path_len)? })?.to_owned();
 		let on_broadcast = unsafe { ffi::OnStatus::new(user_data, on_broadcast)? };
 		State::lock().origin.request(origin, path, on_broadcast)
 	})

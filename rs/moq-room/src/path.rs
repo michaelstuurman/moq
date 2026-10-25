@@ -49,19 +49,16 @@ pub fn kind_from_segment(segment: &str) -> Option<Kind> {
 /// Returns `None` when there is no identity, or the last segment is not a kind.
 pub fn parse(path: impl AsPath) -> Option<Parsed> {
 	let path = path.as_path();
-	let mut parts: Vec<&str> = path.parts().collect();
-	let last = parts.pop()?;
-	if parts.is_empty() {
-		return None;
-	}
+	let (identity, last) = path.as_str().rsplit_once('/')?;
 	let kind = kind_from_segment(last)?;
-	let identity = Path::new(&parts.join("/")).to_owned();
+	let identity = Path::new(identity).ok()?.to_owned();
 	Some(Parsed { identity, kind })
 }
 
 /// The broadcast path a participant publishes for `kind`.
 pub fn broadcast_path(identity: impl AsPath, kind: Kind) -> PathOwned {
-	identity.as_path().join(format!("{}.hang", kind.as_str()))
+	let segment = PathOwned::try_from(format!("{}.hang", kind.as_str())).expect("a kind is one segment");
+	identity.as_path().join(segment)
 }
 
 #[cfg(test)]
@@ -69,20 +66,20 @@ mod tests {
 	use super::*;
 
 	fn p(s: &str) -> PathOwned {
-		Path::new(s).to_owned()
+		Path::new(s).unwrap().to_owned()
 	}
 
 	#[test]
 	fn parse_splits_identity_and_kind() {
 		assert_eq!(
-			parse(Path::new("alice/camera")),
+			parse(Path::new("alice/camera").unwrap()),
 			Some(Parsed {
 				identity: p("alice"),
 				kind: Kind::Camera
 			})
 		);
 		assert_eq!(
-			parse(Path::new("alice/screen")),
+			parse(Path::new("alice/screen").unwrap()),
 			Some(Parsed {
 				identity: p("alice"),
 				kind: Kind::Screen
@@ -93,11 +90,11 @@ mod tests {
 	#[test]
 	fn parse_accepts_hang_suffix() {
 		assert_eq!(
-			parse(Path::new("alice/camera.hang")).map(|p| p.kind),
+			parse(Path::new("alice/camera.hang").unwrap()).map(|p| p.kind),
 			Some(Kind::Camera)
 		);
 		assert_eq!(
-			parse(Path::new("alice/screen.hang")).map(|p| p.kind),
+			parse(Path::new("alice/screen.hang").unwrap()).map(|p| p.kind),
 			Some(Kind::Screen)
 		);
 	}
@@ -105,7 +102,7 @@ mod tests {
 	#[test]
 	fn parse_keeps_multi_segment_identity() {
 		assert_eq!(
-			parse(Path::new("guest/uuid/camera")),
+			parse(Path::new("guest/uuid/camera").unwrap()),
 			Some(Parsed {
 				identity: p("guest/uuid"),
 				kind: Kind::Camera
@@ -115,9 +112,9 @@ mod tests {
 
 	#[test]
 	fn parse_rejects_unknown() {
-		assert_eq!(parse(Path::new("alice")), None);
-		assert_eq!(parse(Path::new("alice/chat")), None);
-		assert_eq!(parse(Path::new("camera")), None);
+		assert_eq!(parse(Path::new("alice").unwrap()), None);
+		assert_eq!(parse(Path::new("alice/chat").unwrap()), None);
+		assert_eq!(parse(Path::new("camera").unwrap()), None);
 		assert_eq!(parse(Path::empty()), None);
 	}
 

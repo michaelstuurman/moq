@@ -39,13 +39,17 @@ impl Refusals {
 		}
 	}
 	pub(crate) fn record(&self, reason: RefusalKind) {
-		self.0.tier(Tier::default()).refuse("", reason);
+		self.0.tier(Tier::default()).refuse(moq_net::Path::empty(), reason);
 	}
 	pub(crate) fn record_auth(&self, err: &auth::Error) {
 		if let auth::Error::Refused(refusal) = err {
+			// The refusal is recorded either way, under the default tier or root if the
+			// server named one with an empty segment.
+			let tier = refusal.tier.clone().and_then(|tier| moq_net::PathOwned::try_from(tier).ok());
+			let root = refusal.root.as_deref().and_then(|root| moq_net::Path::new(root).ok());
 			self.0
-				.tier(refusal.tier.clone().map(Tier::new).unwrap_or_default())
-				.refuse(refusal.root.as_deref().unwrap_or(""), err.into());
+				.tier(tier.map(Tier::new).unwrap_or_default())
+				.refuse(root.unwrap_or_default(), err.into());
 		} else {
 			self.record(err.into());
 		}

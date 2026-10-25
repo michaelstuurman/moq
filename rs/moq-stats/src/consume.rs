@@ -174,6 +174,7 @@ impl PrefixConsumer {
 
 #[cfg(test)]
 mod tests {
+	use moq_net::Path;
 	/// A millisecond track: the frames written here carry timestamps.
 	fn timed() -> moq_net::track::Info {
 		moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI)
@@ -204,7 +205,7 @@ mod tests {
 
 	use std::time::Duration;
 
-	use moq_net::{Consume, PathOwned, Timestamp, announce, broadcast, origin, track};
+	use moq_net::{Consume, Timestamp, announce, broadcast, origin, track};
 
 	use crate::{Encoding, Producer, Tier, produce};
 
@@ -215,7 +216,7 @@ mod tests {
 		let producer = Producer::new(
 			produce::Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from("sjc")),
+				.with_node(Path::new("sjc").unwrap()),
 		);
 		(producer, origin)
 	}
@@ -243,18 +244,18 @@ mod tests {
 	}
 
 	async fn feed(producer: &Producer, tier: Tier, label: &str, path: &str) -> Feed {
-		let ctx = producer.registry().tier(tier).session(label);
+		let ctx = producer.registry().tier(tier).session(Path::new(label).unwrap());
 		let feed_origin = produce_origin();
 		let egress = feed_origin.consume().with_stats(ctx.clone());
 
 		let mut announced = egress.announced();
-		let source = feed_origin.create_broadcast(path).unwrap();
+		let source = feed_origin.create_broadcast(Path::new(path).unwrap()).unwrap();
 		source.announce(origin::Route::default()).unwrap();
 		let track = source.clone().create_track("video", timed()).unwrap();
 
 		let (_, active) = next_update(&mut announced).await.expect("announce");
 		assert!(active);
-		let consumer = egress.request_broadcast(path, None).await.expect("resolve");
+		let consumer = egress.request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
 		let sub = consumer.track("video").unwrap().subscribe(None).await.unwrap();
 
 		Feed {
@@ -273,7 +274,7 @@ mod tests {
 		assert!(active);
 		origin
 			.consume()
-			.request_broadcast(moq_net::Path::new(update.prefix.as_str()), None)
+			.request_broadcast(moq_net::Path::new(update.prefix.as_str()).unwrap(), None)
 			.await
 			.expect("resolve")
 	}
@@ -331,7 +332,7 @@ mod tests {
 		assert_eq!(totals.sessions.active(), 1);
 
 		// A presence track is produced once requested, so drive a drain.
-		let mut presence = std::pin::pin!(compressed.presence("acme"));
+		let mut presence = std::pin::pin!(compressed.presence(Path::new("acme").unwrap()));
 		assert!(futures::poll!(presence.as_mut()).is_pending());
 		drive_tick().await;
 		let mut presence = presence.await.expect("subscribe presence");
@@ -339,7 +340,7 @@ mod tests {
 		assert_eq!(frame.get("").expect("default tier").active(), 1);
 
 		// So is a prefix track.
-		let mut prefix = std::pin::pin!(compressed.prefix("foo"));
+		let mut prefix = std::pin::pin!(compressed.prefix(Path::new("foo").unwrap()));
 		assert!(futures::poll!(prefix.as_mut()).is_pending());
 		drive_tick().await;
 		let mut prefix = prefix.await.expect("subscribe prefix");

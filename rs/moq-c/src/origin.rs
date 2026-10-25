@@ -151,7 +151,7 @@ impl Origin {
 		let consumer = origin
 			.producer
 			.consume()
-			.scope("", &moq_net::Patterns::from(scope))?
+			.scope(moq_net::Path::empty(), &moq_net::Patterns::from(scope))?
 			.with_hidden(hidden)
 			.announced();
 		self.announced_task.spawn(
@@ -217,7 +217,7 @@ impl Origin {
 	/// The callback fires a broadcast handle (> 0) for each instance serving the path, until a
 	/// single terminal code (`0` on close, negative on error). Returns a task handle for
 	/// cancellation via [`Self::consume_announced_close`].
-	pub fn consume_announced(&mut self, origin: Id, path: String, on_broadcast: OnStatus) -> Result<Id, Error> {
+	pub fn consume_announced(&mut self, origin: Id, path: moq_net::PathOwned, on_broadcast: OnStatus) -> Result<Id, Error> {
 		let origin = self.active.get(origin).ok_or(Error::OriginNotFound)?;
 		origin.driver.check()?;
 		let driver = origin.driver.clone();
@@ -236,11 +236,11 @@ impl Origin {
 	async fn run_consume_announced(
 		callback: OnStatus,
 		consumer: Consumer,
-		path: String,
+		path: moq_net::PathOwned,
 		mut close: oneshot::Receiver<()>,
 	) -> Result<(), Error> {
 		// An unreachable path and a closed origin both mean no broadcast can ever arrive here.
-		let mut announced = match consumer.announced_broadcast(path.as_str(), None) {
+		let mut announced = match consumer.announced_broadcast(&path, None) {
 			Ok(announced) => announced,
 			Err(moq_net::Error::Unauthorized) => return Err(Error::BroadcastNotFound),
 			Err(err) => return Err(err.into()),
@@ -276,7 +276,7 @@ impl Origin {
 	/// announced now: the callback fires the broadcast
 	/// handle (> 0) once served, then a terminal `0`; or a single terminal code (`0` on close,
 	/// negative on error) if it can't be served. Returns a task handle for cancellation.
-	pub fn request(&mut self, origin: Id, path: String, on_broadcast: OnStatus) -> Result<Id, Error> {
+	pub fn request(&mut self, origin: Id, path: moq_net::PathOwned, on_broadcast: OnStatus) -> Result<Id, Error> {
 		let origin = self.active.get(origin).ok_or(Error::OriginNotFound)?;
 		origin.driver.check()?;
 		let driver = origin.driver.clone();
@@ -295,11 +295,11 @@ impl Origin {
 	async fn run_request(
 		callback: OnStatus,
 		consumer: Consumer,
-		path: String,
+		path: moq_net::PathOwned,
 		mut close: oneshot::Receiver<()>,
 	) -> Result<(), Error> {
 		// Resolves to an error when no announced route can serve the path.
-		let pending = consumer.request_broadcast(path.as_str(), None);
+		let pending = consumer.request_broadcast(&path, None);
 
 		// `biased` so a pending close always wins over a ready broadcast.
 		let broadcast = tokio::select! {
@@ -334,7 +334,7 @@ impl Origin {
 
 	/// Advertise `prefix` and serve requests beneath it, delivering each as a
 	/// broadcast-request handle via `on_request`.
-	pub fn dynamic(&mut self, origin: Id, prefix: &str, on_request: OnStatus) -> Result<Id, Error> {
+	pub fn dynamic(&mut self, origin: Id, prefix: moq_net::Path<'_>, on_request: OnStatus) -> Result<Id, Error> {
 		let origin = self.active.get(origin).ok_or(Error::OriginNotFound)?;
 		origin.driver.check()?;
 		let driver = origin.driver.clone();
@@ -442,6 +442,7 @@ impl Origin {
 #[cfg(test)]
 mod supervision_tests {
 	use super::*;
+	use moq_net::Path;
 
 	#[tokio::test]
 	async fn a_broadcast_keeps_the_origin_failure_after_its_origin_handle_is_released() {
@@ -456,7 +457,7 @@ mod supervision_tests {
 			.unwrap();
 		let mut publish = crate::publish::Publish::default();
 		let broadcast = publish
-			.create(origins.create_broadcast(origin, "retained").unwrap())
+			.create(origins.create_broadcast(origin, Path::new("retained").unwrap()).unwrap())
 			.unwrap();
 		origins.close(origin).unwrap();
 		*trigger
@@ -470,7 +471,7 @@ mod supervision_tests {
 		));
 		let healthy = origins.create().unwrap();
 		let broadcast = publish
-			.create(origins.create_broadcast(healthy, "healthy").unwrap())
+			.create(origins.create_broadcast(healthy, Path::new("healthy").unwrap()).unwrap())
 			.unwrap();
 		publish.announce(broadcast, Default::default()).unwrap();
 	}

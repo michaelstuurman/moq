@@ -79,7 +79,7 @@ impl Config {
 	pub fn new() -> Self {
 		Self {
 			origin: None,
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::new(".stats").expect("a literal path"),
 			node: None,
 			interval: Duration::from_secs(1),
 			depth: 0,
@@ -268,8 +268,8 @@ impl Task {
 			drain.publish(moq_clock::now());
 		}
 	}
-	fn node(&self) -> Option<&str> {
-		self.node.as_ref().map(moq_net::Path::as_str)
+	fn node(&self) -> Option<&Path<'static>> {
+		self.node.as_ref()
 	}
 }
 
@@ -350,7 +350,7 @@ impl Drain {
 			if refused.iter().any(|name| name == key) {
 				return None;
 			}
-			match GroupPublisher::create(task, &Path::new(key)) {
+			match GroupPublisher::create(task, &Path::new(key).expect("a group key is a run of a path's segments")) {
 				Some(group) => {
 					groups.insert(key.to_string(), group);
 				}
@@ -1581,21 +1581,15 @@ fn group_key(path: &str, depth: usize) -> &str {
 	}
 }
 
-fn advertised_path(prefix: &Path, group: &Path, node: Option<&str>) -> PathOwned {
+fn advertised_path(prefix: &Path, group: &Path, node: Option<&Path>) -> PathOwned {
 	// `<prefix>/<group>/node/<node>`. The group segment is empty at depth 0.
 	// The fixed `node` category leaves room for sibling categories (e.g.
 	// `<top-prefix>/<group>/cluster` for relay-mesh stats) under the same prefix.
-	let mut out = prefix.as_str().to_string();
-	if !group.is_empty() {
-		out.push('/');
-		out.push_str(group.as_str());
+	let path = prefix.join(group).join(Path::new("node").expect("a literal path"));
+	match node {
+		Some(node) => path.join(node),
+		None => path,
 	}
-	out.push_str("/node");
-	if let Some(node) = node {
-		out.push('/');
-		out.push_str(node);
-	}
-	PathOwned::from(out)
 }
 
 #[cfg(test)]
@@ -1617,7 +1611,7 @@ mod tests {
 			Arc::new(AtomicU64::new(0)),
 		);
 		let frame = |n| Frame {
-			entries: vec![(PathOwned::from("a"), n)],
+			entries: vec![(Path::new("a").unwrap(), n)],
 		};
 		let wanted = |track: &track::Producer| track.demand().wanted();
 
@@ -1740,7 +1734,7 @@ mod tests {
 				let mut drain = Drain::new(Task {
 					registry: registry.clone(),
 					origin: origin.clone(),
-					prefix: ".stats".into(),
+					prefix: Path::new(".stats").unwrap(),
 					node: None,
 					depth: 0,
 					linger: DEFAULT_LINGER,
@@ -1753,7 +1747,7 @@ mod tests {
 					link(&origin, &middle, version).await,
 					link(&middle, &edge, version).await,
 				];
-				let session = registry.tier(Tier::default()).session("room");
+				let session = registry.tier(Tier::default()).session(Path::new("room").unwrap());
 				let counters = moq_net::transport::Wire::new();
 				let _wire = session.wire(counters.clone());
 				let store = |n: u64| {
@@ -1768,8 +1762,8 @@ mod tests {
 				let (route, active) = next_update(&mut events).await.unwrap();
 				assert!(active);
 				assert_eq!(route.prefix.as_str(), ".stats/node");
-				let broadcast = consumer.request_broadcast(".stats/node", None).await.unwrap();
-				let name = presence_track("room", encoding);
+				let broadcast = consumer.request_broadcast(Path::new(".stats/node").unwrap(), None).await.unwrap();
+				let name = presence_track(Path::new("room").unwrap(), encoding);
 				let mut config = moq_json::snapshot::consumer::Config::default();
 				config.compression = encoding.compression();
 				let mut previous = None;
@@ -1869,7 +1863,7 @@ mod tests {
 		let consumer = broadcast.consume();
 		let mut pair = TrackPair::<u64>::create(&broadcast, "t.json", Arc::new(AtomicU64::new(0))).unwrap();
 		let mut publish = |key: &str, value: u64| {
-			pair.frame.entries.push((PathOwned::from(key.to_string()), value));
+			pair.frame.entries.push((Path::try_from(key.to_string()).unwrap(), value));
 			pair.publish("t.json");
 		};
 		publish("small", 1);
@@ -1945,7 +1939,7 @@ mod tests {
 		let producer = Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(node.map(|s| PathOwned::from(s.to_string()))),
+				.with_node(node.map(|s| Path::try_from(s.to_string()).unwrap())),
 		);
 		(producer, origin)
 	}
@@ -1974,19 +1968,19 @@ mod tests {
 		frames: usize,
 		frame_size: usize,
 	) -> Feed {
-		let ctx = registry.tier(tier).session("feed");
+		let ctx = registry.tier(tier).session(Path::new("feed").unwrap());
 		let origin = produce_origin();
 		// Egress (publisher side) is tagged; the local publisher stays untagged.
 		let egress = origin.consume().with_stats(ctx);
 
 		let mut announced = egress.announced();
-		let source = origin.create_broadcast(path).expect("create_broadcast");
+		let source = origin.create_broadcast(Path::new(path).unwrap()).expect("create_broadcast");
 		source.announce(origin::Route::default()).expect("announce");
 		let producer = source.create_track("video", timed()).expect("create_track");
 
 		let (_, active) = next_update(&mut announced).await.expect("announce");
 		assert!(active);
-		let consumer = egress.request_broadcast(path, None).await.expect("resolve");
+		let consumer = egress.request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
 
 		let sub = if subscribe {
 			let mut sub = consumer
@@ -2029,7 +2023,7 @@ mod tests {
 		assert!(active);
 		let broadcast = origin
 			.consume()
-			.request_broadcast(moq_net::Path::new(update.prefix.as_str()), None)
+			.request_broadcast(moq_net::Path::new(update.prefix.as_str()).unwrap(), None)
 			.await
 			.expect("resolve");
 		(update.prefix.as_str().to_string(), broadcast)
@@ -2145,7 +2139,7 @@ mod tests {
 		Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from("sjc")),
+				.with_node(Path::new("sjc").unwrap()),
 		)
 	}
 
@@ -2193,7 +2187,7 @@ mod tests {
 		};
 		let stats = origin
 			.consume()
-			.request_broadcast(path.as_str(), None)
+			.request_broadcast(Path::new(path.as_str()).unwrap(), None)
 			.await
 			.expect("resolve");
 		let mut old = subscribe(&stats, "publisher.json").await;
@@ -2211,7 +2205,7 @@ mod tests {
 
 		let stats = origin
 			.consume()
-			.request_broadcast(path.as_str(), None)
+			.request_broadcast(Path::new(path.as_str()).unwrap(), None)
 			.await
 			.expect("resolve");
 		assert_eq!(read_last_frame(&stats, "publisher.json").await["foo/bar"].bytes, 30);
@@ -2312,16 +2306,16 @@ mod tests {
 		let data = produce_origin();
 		let source = data
 			.clone()
-			.with_stats(registry.tier(Tier::default()).session("publisher"))
-			.publish("foo/bar", origin::Route::default())
+			.with_stats(registry.tier(Tier::default()).session(Path::new("publisher").unwrap()))
+			.publish(Path::new("foo/bar").unwrap(), origin::Route::default())
 			.expect("publish");
 		let mut video = source.create_track("video", timed()).expect("create_track");
 		let egress = data
 			.consume()
-			.with_stats(registry.tier(Tier::default()).session("viewer"));
+			.with_stats(registry.tier(Tier::default()).session(Path::new("viewer").unwrap()));
 
 		async fn view(egress: &origin::Consumer, video: &mut track::Producer, size: usize) {
-			let broadcast = egress.request_broadcast("foo/bar", None).await.expect("resolve");
+			let broadcast = egress.request_broadcast(Path::new("foo/bar").unwrap(), None).await.expect("resolve");
 			let mut sub = broadcast
 				.track("video")
 				.expect("track")
@@ -2380,7 +2374,7 @@ mod tests {
 		let producer = Producer::new(
 			Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from("sjc"))
+				.with_node(Path::new("sjc").unwrap())
 				.with_depth(1)
 				.with_linger(linger),
 		);
@@ -2414,7 +2408,7 @@ mod tests {
 	async fn wire_totals_restart_after_a_group_epoch_ends() {
 		let (producer, origin, mut events) = grouped_producer(Duration::ZERO);
 		let registry = producer.registry();
-		let session = registry.tier(Tier::default()).session("acme/live");
+		let session = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
 		let counters = moq_net::transport::Wire::new();
 		counters.set_sent_bytes(71);
 		counters.set_received_bytes(29);
@@ -2423,7 +2417,7 @@ mod tests {
 		let [(path, true, old_epoch)] = &take_epochs(&mut events)[..] else {
 			panic!("expected the wire root's group");
 		};
-		let broadcast = origin.consume().request_broadcast(path, None).await.expect("resolve");
+		let broadcast = origin.consume().request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
 		let totals = default_totals(&broadcast).await.sessions;
 		assert_eq!((totals.wire_tx, totals.wire_rx), (71, 29));
 		drop(wire);
@@ -2433,7 +2427,7 @@ mod tests {
 		}
 		assert_eq!(take_epochs(&mut events), [(path.clone(), false, old_epoch.clone())]);
 
-		let session = registry.tier(Tier::default()).session("acme/live");
+		let session = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
 		let _wire = session.wire(moq_net::transport::Wire::new());
 		drive_tick().await;
 		let [(new_path, true, new_epoch)] = &take_epochs(&mut events)[..] else {
@@ -2443,7 +2437,7 @@ mod tests {
 		assert!(new_epoch > old_epoch);
 		let broadcast = origin
 			.consume()
-			.request_broadcast(new_path, None)
+			.request_broadcast(Path::new(new_path).unwrap(), None)
 			.await
 			.expect("resolve");
 		let totals = default_totals(&broadcast).await.sessions;
@@ -2465,8 +2459,8 @@ mod tests {
 			panic!("expected both groups to announce, got {started:?}");
 		};
 		assert_eq!((acme_path.as_str(), feed_path.as_str()), (ACME, FEED));
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
-		let sessions = origin.consume().request_broadcast(FEED, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
+		let sessions = origin.consume().request_broadcast(Path::new(FEED).unwrap(), None).await.expect("resolve");
 		assert_eq!(read_last_frame(&acme, "publisher.json").await["acme/live"].bytes, 100);
 
 		// The viewer leaves: both groups empty but stay announced. The path map
@@ -2536,7 +2530,7 @@ mod tests {
 			new_acme > acme_epoch && new_feed > feed_epoch,
 			"a returning group mints a new epoch"
 		);
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 		assert_eq!(read_last_frame(&acme, "publisher.json").await["acme/live"].bytes, 25);
 		assert_eq!(
 			default_totals(&acme).await.publisher.bytes,
@@ -2597,13 +2591,13 @@ mod tests {
 
 		let (producer, origin, mut events) = grouped_producer(Duration::from_secs(10));
 		let registry = producer.registry();
-		let session = registry.tier(Tier::default()).session("acme/live");
+		let session = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
 		drive_tick().await;
 		let [(path, true, epoch)] = &take_epochs(&mut events)[..] else {
 			panic!("expected the session's group to announce");
 		};
 		assert_eq!(path, ACME);
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 		let mut held = hold(&acme).await;
 
 		// The session leaves: the group lingers with every hold still live.
@@ -2622,14 +2616,14 @@ mod tests {
 		assert!(held.iter_mut().all(ended), "every held track ends with the group");
 
 		// A reader follows the next announcement and holds the same tracks anew.
-		let _again = registry.tier(Tier::default()).session("acme/live");
+		let _again = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
 		drive_tick().await;
 		let [(path, true, newer)] = &take_epochs(&mut events)[..] else {
 			panic!("expected the group to announce again");
 		};
 		assert_eq!(path, ACME);
 		assert!(newer > epoch, "a returning group mints a new epoch");
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 		let [_tier, mut presence, _prefix] = hold(&acme).await;
 		let frame = try_presence(&mut presence).expect("answered at once");
 		assert_eq!(frame[""].active(), 1, "served from the new epoch");
@@ -2638,9 +2632,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn session_track_surfaces_by_root() {
 		let (producer, origin) = test_producer(Some("sjc"));
-		let _a = producer.registry().tier(Tier::default()).session("acme");
-		let _b = producer.registry().tier(Tier::default()).session("acme");
-		let _c = producer.registry().tier(Tier::new("region/sjc")).session("peer");
+		let _a = producer.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let _b = producer.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let _c = producer.registry().tier(Tier::new(Path::new("region/sjc").unwrap())).session(Path::new("peer").unwrap());
 
 		drive_tick().await;
 
@@ -2667,7 +2661,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn request_root_stays_in_the_frame_while_held() {
 		let (producer, origin) = test_producer(Some("sjc"));
-		let first = producer.registry().tier(Tier::default()).request("acme");
+		let first = producer.registry().tier(Tier::default()).request(Path::new("acme").unwrap());
 		drive_tick().await;
 		let (_, broadcast) = announced(&origin).await;
 		let mut track = subscribe(&broadcast, "sessions.json").await;
@@ -2685,7 +2679,7 @@ mod tests {
 		drive_tick().await;
 		assert!(!drain(&mut track).contains(&None), "an idle request stays");
 
-		let second = producer.registry().tier(Tier::default()).request("acme");
+		let second = producer.registry().tier(Tier::default()).request(Path::new("acme").unwrap());
 		drive_tick().await;
 		assert_eq!(drain(&mut track), [Some(2)]);
 
@@ -2699,9 +2693,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn totals_split_sessions_by_tier() {
 		let (producer, origin) = test_producer(Some("sjc"));
-		let _a = producer.registry().tier(Tier::default()).session("acme");
-		let b = producer.registry().tier(Tier::default()).session("beta");
-		let _c = producer.registry().tier(Tier::new("region/sjc")).session("peer");
+		let _a = producer.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let b = producer.registry().tier(Tier::default()).session(Path::new("beta").unwrap());
+		let _c = producer.registry().tier(Tier::new(Path::new("region/sjc").unwrap())).session(Path::new("peer").unwrap());
 
 		drive_tick().await;
 		let (_, broadcast) = announced(&origin).await;
@@ -2730,10 +2724,10 @@ mod tests {
 		let _beta = feed(registry, Tier::default(), "beta/live", true, 1, 7).await;
 		drive_tick().await;
 
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 		let beta = origin
 			.consume()
-			.request_broadcast(".stats/beta/node/sjc", None)
+			.request_broadcast(Path::new(".stats/beta/node/sjc").unwrap(), None)
 			.await
 			.expect("resolve");
 		assert_eq!(default_totals(&acme).await.publisher.bytes, 100);
@@ -2744,7 +2738,7 @@ mod tests {
 	/// the producer adopts the request.
 	async fn hold_presence(broadcast: &moq_net::broadcast::Consumer, label: &str) -> track::Ordered {
 		let subscribing = broadcast
-			.track(&presence_track(label, Encoding::Plain))
+			.track(&presence_track(Path::new(label).unwrap(), Encoding::Plain))
 			.expect("track")
 			.subscribe(None);
 		drive_tick().await;
@@ -2758,9 +2752,9 @@ mod tests {
 	async fn presence_track_is_cumulative_while_held() {
 		let (producer, origin) = test_producer(Some("sjc"));
 		let registry = producer.registry();
-		let first = registry.tier(Tier::default()).session("acme/live");
-		let _other = registry.tier(Tier::new("rtmp")).session("acme/live");
-		let _unrelated = registry.tier(Tier::default()).session("beta");
+		let first = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
+		let _other = registry.tier(Tier::new(Path::new("rtmp").unwrap())).session(Path::new("acme/live").unwrap());
+		let _unrelated = registry.tier(Tier::default()).session(Path::new("beta").unwrap());
 		drive_tick().await;
 		let (_, broadcast) = announced(&origin).await;
 
@@ -2784,7 +2778,7 @@ mod tests {
 		assert_eq!(frame[""].active(), 0);
 
 		// A new session under the label continues the count.
-		let _again = registry.tier(Tier::default()).session("acme/live");
+		let _again = registry.tier(Tier::default()).session(Path::new("acme/live").unwrap());
 		drive_tick().await;
 		let mut last = None;
 		while let Some(frame) = try_presence(&mut track) {
@@ -2804,7 +2798,7 @@ mod tests {
 		let mut drain = Drain::new(Task {
 			registry: registry.clone(),
 			origin: origin.clone(),
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::new(".stats").unwrap(),
 			node: None,
 			depth: 0,
 			linger: DEFAULT_LINGER,
@@ -2818,13 +2812,13 @@ mod tests {
 		};
 		let broadcast = origin
 			.consume()
-			.request_broadcast(".stats/node", None)
+			.request_broadcast(Path::new(".stats/node").unwrap(), None)
 			.await
 			.expect("resolve");
 
 		// Let the request reach the stats broadcast's queue before the drain.
 		let subscribing = broadcast
-			.track(&presence_track("", Encoding::Plain))
+			.track(&presence_track(Path::new("").unwrap(), Encoding::Plain))
 			.expect("track")
 			.subscribe(None);
 		for _ in 0..8 {
@@ -2835,7 +2829,7 @@ mod tests {
 		assert_eq!(try_presence(&mut track), Some(PresenceFrame::new()), "held at zero");
 
 		// The label records while held: the same subscription carries it.
-		let _session = registry.tier(Tier::default()).session("");
+		let _session = registry.tier(Tier::default()).session(Path::new("").unwrap());
 		tick();
 		assert_eq!(try_presence(&mut track).expect("recorded")[""].active(), 1);
 
@@ -2858,10 +2852,10 @@ mod tests {
 		let (producer, origin, _events) = grouped_producer(DEFAULT_LINGER);
 		let _f = feed(producer.registry(), Tier::default(), "acme/live", true, 1, 42).await;
 		drive_tick().await;
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 
 		let subscribing = acme
-			.track(&presence_track("beta", Encoding::Plain))
+			.track(&presence_track(Path::new("beta").unwrap(), Encoding::Plain))
 			.expect("track")
 			.subscribe(None);
 		drive_tick().await;
@@ -2872,7 +2866,7 @@ mod tests {
 
 		let pending: Vec<_> = (0..3)
 			.map(|i| {
-				acme.track(&presence_track(format!("acme/{i}").as_str(), Encoding::Plain))
+				acme.track(&presence_track(Path::new(format!("acme/{i}").as_str()).unwrap(), Encoding::Plain))
 					.expect("track")
 					.subscribe(None)
 			})
@@ -2885,7 +2879,7 @@ mod tests {
 
 		// A held label's compressed flavor shares the live pair.
 		let subscribing = acme
-			.track(&presence_track("acme/0", Encoding::Compressed))
+			.track(&presence_track(Path::new("acme/0").unwrap(), Encoding::Compressed))
 			.expect("track")
 			.subscribe(None);
 		drive_tick().await;
@@ -2896,7 +2890,7 @@ mod tests {
 	/// producer adopts the request.
 	async fn hold_prefix(broadcast: &moq_net::broadcast::Consumer, path: &str) -> track::Ordered {
 		let subscribing = broadcast
-			.track(&prefix_track(path, Encoding::Plain))
+			.track(&prefix_track(Path::new(path).unwrap(), Encoding::Plain))
 			.expect("track")
 			.subscribe(None);
 		drive_tick().await;
@@ -2937,10 +2931,10 @@ mod tests {
 		let _own = feed(registry, Tier::default(), "acme", true, 1, 1).await;
 		let _live = feed(registry, Tier::default(), "acme/live", true, 1, 10).await;
 		let _cam = feed(registry, Tier::default(), "acme/live/cam", true, 1, 100).await;
-		let _rtmp = feed(registry, Tier::new("rtmp"), "acme/vod", true, 1, 1000).await;
+		let _rtmp = feed(registry, Tier::new(Path::new("rtmp").unwrap()), "acme/vod", true, 1, 1000).await;
 		let _other = feed(registry, Tier::default(), "beta/live", true, 1, 5).await;
 		drive_tick().await;
-		let acme = origin.consume().request_broadcast(ACME, None).await.expect("resolve");
+		let acme = origin.consume().request_broadcast(Path::new(ACME).unwrap(), None).await.expect("resolve");
 
 		let mut track = hold_prefix(&acme, "acme").await;
 		let frame = last_prefix(&mut track).expect("answered at once");
@@ -2968,7 +2962,7 @@ mod tests {
 			["acme"; Path::MAX_PARTS + 1].join("/"),
 		] {
 			let subscribing = acme
-				.track(&prefix_track(path.as_str(), Encoding::Plain))
+				.track(&prefix_track(Path::new(path.as_str()).unwrap(), Encoding::Plain))
 				.expect("track")
 				.subscribe(None);
 			drive_tick().await;
@@ -2990,14 +2984,14 @@ mod tests {
 		let data = produce_origin();
 		let source = data
 			.clone()
-			.with_stats(registry.tier(Tier::default()).session("publisher"))
-			.publish("acme/live", origin::Route::default())
+			.with_stats(registry.tier(Tier::default()).session(Path::new("publisher").unwrap()))
+			.publish(Path::new("acme/live").unwrap(), origin::Route::default())
 			.expect("publish");
 		let video = source.create_track("video", timed()).expect("create_track");
 		let egress = data
 			.consume()
-			.with_stats(registry.tier(Tier::default()).session("viewer"));
-		let broadcast = egress.request_broadcast("acme/live", None).await.expect("resolve");
+			.with_stats(registry.tier(Tier::default()).session(Path::new("viewer").unwrap()));
+		let broadcast = egress.request_broadcast(Path::new("acme/live").unwrap(), None).await.expect("resolve");
 		let mut subs = Vec::new();
 		for _ in 0..300 {
 			let track = broadcast.track("video").expect("track");
@@ -3074,7 +3068,7 @@ mod tests {
 		let mut drain = Drain::new(Task {
 			registry: registry.clone(),
 			origin: origin.clone(),
-			prefix: PathOwned::from(".stats"),
+			prefix: Path::new(".stats").unwrap(),
 			node: None,
 			depth: 0,
 			linger: DEFAULT_LINGER,
@@ -3088,12 +3082,12 @@ mod tests {
 		};
 		let broadcast = origin
 			.consume()
-			.request_broadcast(".stats/node", None)
+			.request_broadcast(Path::new(".stats/node").unwrap(), None)
 			.await
 			.expect("resolve");
 
 		let subscribing = broadcast
-			.track(&prefix_track("acme", Encoding::Plain))
+			.track(&prefix_track(Path::new("acme").unwrap(), Encoding::Plain))
 			.expect("track")
 			.subscribe(None);
 		for _ in 0..8 {
@@ -3174,25 +3168,25 @@ mod tests {
 
 	#[test]
 	fn advertised_path_with_and_without_node() {
-		let prefix = Path::new(".stats");
+		let prefix = Path::new(".stats").unwrap();
 		let empty = Path::empty();
 		assert_eq!(
-			advertised_path(&prefix, &empty, Some("sjc")).as_str(),
+			advertised_path(&prefix, &empty, Some(&Path::new("sjc").unwrap())).as_str(),
 			".stats/node/sjc"
 		);
 		assert_eq!(
-			advertised_path(&prefix, &empty, Some("sjc/1")).as_str(),
+			advertised_path(&prefix, &empty, Some(&Path::new("sjc/1").unwrap())).as_str(),
 			".stats/node/sjc/1"
 		);
 		assert_eq!(advertised_path(&prefix, &empty, None).as_str(), ".stats/node");
 		assert_eq!(
-			advertised_path(&prefix, &Path::new("acme"), Some("sjc")).as_str(),
+			advertised_path(&prefix, &Path::new("acme").unwrap(), Some(&Path::new("sjc").unwrap())).as_str(),
 			".stats/acme/node/sjc"
 		);
 
-		let prefix = Path::new("metrics");
+		let prefix = Path::new("metrics").unwrap();
 		assert_eq!(
-			advertised_path(&prefix, &Path::new("demo/room"), Some("lon")).as_str(),
+			advertised_path(&prefix, &Path::new("demo/room").unwrap(), Some(&Path::new("lon").unwrap())).as_str(),
 			"metrics/demo/room/node/lon"
 		);
 	}
@@ -3250,7 +3244,7 @@ mod tests {
 		assert!(parsed.is_empty(), "an idle tier serves zeros");
 
 		// The tier records: the same subscription carries the data.
-		let _rtmp = feed(producer.registry(), Tier::new("rtmp"), "foo/live", true, 1, 7).await;
+		let _rtmp = feed(producer.registry(), Tier::new(Path::new("rtmp").unwrap()), "foo/live", true, 1, 7).await;
 		drive_tick().await;
 		let frame = next_frame(&mut sub).await;
 		let parsed: BTreeMap<String, Traffic> = serde_json::from_slice(&frame.payload).expect("json");
@@ -3323,7 +3317,7 @@ mod tests {
 		}
 
 		// ...then the tier records its first traffic before the next tick.
-		let _rtmp = feed(producer.registry(), Tier::new("rtmp"), "foo/live", true, 1, 7).await;
+		let _rtmp = feed(producer.registry(), Tier::new(Path::new("rtmp").unwrap()), "foo/live", true, 1, 7).await;
 		drive_tick().await;
 
 		// The queued subscription resolves and carries the tier's first data.
@@ -3411,7 +3405,7 @@ mod tests {
 		);
 
 		// The tier records while the request is parked: the flush adopts it.
-		let _rt = feed(producer.registry(), Tier::new("rt"), "foo/live", true, 1, 9).await;
+		let _rt = feed(producer.registry(), Tier::new(Path::new("rt").unwrap()), "foo/live", true, 1, 9).await;
 		drive_tick().await;
 		let mut sub = subscribing.await.expect("adopted by the flush").ordered();
 		let frame = next_frame(&mut sub).await;
@@ -3431,7 +3425,7 @@ mod tests {
 		let mut frame = Frame::default();
 		let mut map = BTreeMap::new();
 		for (path, bytes) in [("room/b", 2), ("room/a", 1), ("other", 3), ("room/a/cam", 4)] {
-			frame.entries.push((PathOwned::from(path), traffic(bytes)));
+			frame.entries.push((Path::new(path).unwrap(), traffic(bytes)));
 			map.insert(path.to_string(), traffic(bytes));
 		}
 		frame.entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -3488,7 +3482,7 @@ mod tests {
 				for t in 0..tiers {
 					let tier = match t {
 						0 => Tier::default(),
-						t => Tier::new(format!("tier{t}")),
+						t => Tier::new(Path::try_from(format!("tier{t}")).unwrap()),
 					};
 					for b in 0..broadcasts {
 						feeds.push(feed(&registry, tier.clone(), &format!("room{b}/cam"), true, 1, 8).await);
@@ -3498,7 +3492,7 @@ mod tests {
 				let mut drain = Drain::new(Task {
 					registry,
 					origin: produce_origin(),
-					prefix: PathOwned::from(".stats"),
+					prefix: Path::new(".stats").unwrap(),
 					node: None,
 					depth,
 					linger: DEFAULT_LINGER,
@@ -3515,7 +3509,7 @@ mod tests {
 				let _held = hold.then(|| {
 					let tick = drain.tick;
 					let group = drain.groups.get_mut(group_key("room0/cam", depth)).expect("group");
-					group.adopt_prefix(&drain.report, PathOwned::from("room0"), PendingPair::default(), tick);
+					group.adopt_prefix(&drain.report, Path::new("room0").unwrap(), PendingPair::default(), tick);
 					group.prefixes["room0"].pair.plain.track.subscribe(None)
 				});
 				drain.collect();

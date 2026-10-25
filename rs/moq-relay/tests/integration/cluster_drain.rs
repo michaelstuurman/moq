@@ -6,6 +6,7 @@
 //! only when the test advances them, while the sockets carry traffic in real time.
 //! Each peer dials B through its own forwarder, which counts the sessions opened.
 
+use moq_net::Path;
 use std::{
 	net::SocketAddr,
 	sync::{Arc, Mutex},
@@ -112,7 +113,7 @@ async fn relay(name: &str) -> (Relay, SocketAddr, moq_net::broadcast::Producer) 
 	config.drain_timeout = Some(DRAIN.into());
 	let relay = Relay::load(config).await.expect("load relay").with_signals(false);
 	let addr = relay.tcp_addr().expect("tcp listener");
-	let broadcast = relay.cluster().origin.create_broadcast(name).expect("create broadcast");
+	let broadcast = relay.cluster().origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	(relay, addr, broadcast)
 }
@@ -124,7 +125,7 @@ async fn peer(name: &str, forwarder: &Forwarder) -> (cluster::Cluster, moq_net::
 	let cluster = cluster::Cluster::new(cluster::Options::new(config))
 		.expect("cluster init")
 		.with_connect(Default::default(), Default::default());
-	let broadcast = cluster.origin.create_broadcast(name).expect("create broadcast");
+	let broadcast = cluster.origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let started = cluster.clone().start().await.expect("cluster start");
 	tokio::spawn(started.run());
@@ -162,10 +163,10 @@ async fn draining_relay_keeps_its_peers_until_it_restarts_inner() {
 	let (c, _c_broadcast) = peer("c", &forward_c).await;
 
 	// The mesh converges: each side learns the other's broadcasts.
-	within("A learns b", a.origin.consume().routed("b")).await;
-	within("C learns b", c.origin.consume().routed("b")).await;
-	within("B learns a", b_origin.consume().routed("a")).await;
-	within("B learns c", b_origin.consume().routed("c")).await;
+	within("A learns b", a.origin.consume().routed(Path::new("b").unwrap())).await;
+	within("C learns b", c.origin.consume().routed(Path::new("b").unwrap())).await;
+	within("B learns a", b_origin.consume().routed(Path::new("a").unwrap())).await;
+	within("B learns c", b_origin.consume().routed(Path::new("c").unwrap())).await;
 	assert_eq!(forward_a.sessions(b_addr), 1);
 	assert_eq!(forward_c.sessions(b_addr), 1);
 
@@ -199,8 +200,8 @@ async fn draining_relay_keeps_its_peers_until_it_restarts_inner() {
 		pass(&clock, STEP).await;
 		waited += STEP;
 	}
-	within("B' learns a", b2_origin.consume().routed("a")).await;
-	within("B' learns c", b2_origin.consume().routed("c")).await;
+	within("B' learns a", b2_origin.consume().routed(Path::new("a").unwrap())).await;
+	within("B' learns c", b2_origin.consume().routed(Path::new("c").unwrap())).await;
 
 	// And reconnects exactly once.
 	pass(&clock, Duration::from_secs(30)).await;

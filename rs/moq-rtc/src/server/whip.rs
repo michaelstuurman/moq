@@ -81,7 +81,7 @@ async fn accept_offer(
 		return Err(Error::InvalidSdp("expected Content-Type: application/sdp".into()));
 	}
 	let offer = std::str::from_utf8(&body).map_err(|err| Error::InvalidSdp(err.to_string()))?;
-	accept(server, publisher, path, offer).await
+	accept(server, publisher, moq_net::Path::new(path)?, offer).await
 }
 
 #[cfg(feature = "server")]
@@ -187,7 +187,7 @@ fn is_sdp(headers: &HeaderMap) -> bool {
 #[cfg(feature = "server")]
 fn status_for(err: &Error) -> StatusCode {
 	match err {
-		Error::InvalidSdp(_) => StatusCode::BAD_REQUEST,
+		Error::InvalidSdp(_) | Error::Moq(moq_net::Error::EmptySegment) => StatusCode::BAD_REQUEST,
 		Error::UnsupportedCodec(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
 		Error::SessionNotFound => StatusCode::NOT_FOUND,
 		Error::Moq(moq_net::Error::Unauthorized) => StatusCode::UNAUTHORIZED,
@@ -222,8 +222,8 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
-		let broadcast = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
+		let broadcast = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
 		let mut catalog = broadcast
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -251,8 +251,8 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let _stale_session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
-		let stale = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let _stale_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
+		let stale = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -260,7 +260,7 @@ mod tests {
 			.await
 			.unwrap();
 
-		let _fresh_session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
+		let _fresh_session = accept(&server, &origin, moq_net::Path::new("live/cam0").unwrap(), &offer()).await.unwrap();
 		// The session binds a real UDP socket, so this runs on the wall clock.
 		let stale_viewer = tokio::time::timeout(std::time::Duration::from_millis(200), async {
 			loop {
@@ -272,7 +272,7 @@ mod tests {
 		})
 		.await;
 		assert!(stale_viewer.is_err(), "the stale viewer ended: {stale_viewer:?}");
-		let fresh = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let fresh = consumer.request_broadcast(moq_net::Path::new("live/cam0").unwrap(), None).await.unwrap();
 		assert!(!fresh.is_clone(&stale), "viewers reach the reconnected session");
 	}
 }

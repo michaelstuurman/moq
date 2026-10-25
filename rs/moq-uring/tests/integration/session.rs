@@ -10,6 +10,7 @@
 
 #![cfg(all(target_os = "linux", feature = "quic"))]
 
+use moq_net::Path;
 use crate::support;
 
 use std::net::UdpSocket;
@@ -56,7 +57,7 @@ fn lite_session_over_the_worker() {
 
 	// Content ready before anyone connects: one broadcast, one track, one
 	// finished group.
-	let broadcast = pub_origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("data", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -135,9 +136,9 @@ fn lite_session_over_the_worker() {
 
 			let bc = {
 				let consumer = sub.consume();
-				consumer.routed("test").await.expect("broadcast announced");
+				consumer.routed(Path::new("test").unwrap()).await.expect("broadcast announced");
 				consumer
-					.request_broadcast("test", None)
+					.request_broadcast(Path::new("test").unwrap(), None)
 					.await
 					.expect("broadcast resolves")
 			};
@@ -195,7 +196,7 @@ fn two_lite_sessions_share_the_server_socket() {
 		});
 	});
 
-	let broadcast = pub_origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("data", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -276,9 +277,9 @@ fn two_lite_sessions_share_the_server_socket() {
 
 				let bc = {
 					let consumer = sub.consume();
-					consumer.routed("test").await.expect("broadcast announced");
+					consumer.routed(Path::new("test").unwrap()).await.expect("broadcast announced");
 					consumer
-						.request_broadcast("test", None)
+						.request_broadcast(Path::new("test").unwrap(), None)
 						.await
 						.expect("broadcast resolves")
 				};

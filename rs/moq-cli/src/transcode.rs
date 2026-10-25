@@ -106,19 +106,18 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 	};
 	config.resize.output = args.frames.0;
 
-	let source_path = moq_net::PathOwned::from(
+	let source_path = moq_net::PathOwned::try_from(
 		moq.broadcast
 			.clone()
 			.context("`transcode` requires the source broadcast: pass --broadcast <name>")?,
-	);
+	)?;
 	if source_path.is_empty() {
 		anyhow::bail!("`transcode` requires the source broadcast: pass --broadcast <name>");
 	}
-	let output_path = moq_net::PathOwned::from(
-		args.output
-			.clone()
-			.unwrap_or_else(|| format!("{source_path}/transcode.hang")),
-	);
+	let output_path = match args.output.clone() {
+		Some(output) => moq_net::PathOwned::try_from(output)?,
+		None => source_path.join(moq_net::Path::new("transcode.hang").expect("a literal path")),
+	};
 
 	// Publish the derivative through one origin and consume the source through
 	// another, over a single auto-reconnecting session.
@@ -226,14 +225,14 @@ mod tests {
 				route
 			}
 		};
-		let old = origin.publish("source", route()).unwrap();
+		let old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let _old_dynamic = old.dynamic();
-		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), "derived", None).unwrap();
+		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),
-			source_path: "source".into(),
-			output_path: "derived".into(),
+			source_path: moq_net::Path::new("source").unwrap().to_owned(),
+			output_path: moq_net::Path::new("derived").unwrap().to_owned(),
 			config: Default::default(),
 		};
 		let task = tokio::spawn(following.run());
@@ -244,7 +243,7 @@ mod tests {
 			.subscribe(None)
 			.await
 			.unwrap();
-		let new = origin.publish("source", route()).unwrap();
+		let new = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let _new_dynamic = new.dynamic();
 		let second = next(&mut derivatives).await;
 		assert!(!first.is_clone(&second));
@@ -273,14 +272,14 @@ mod tests {
 		let origin = moq_tokio::origin::spawn();
 		let publish = moq_tokio::origin::spawn();
 		let route = || moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint());
-		let mut old = origin.publish("source", route()).unwrap();
+		let mut old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let mut catalog = moq_mux::catalog::Producer::new(&mut old, Default::default()).unwrap();
-		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), "derived", None).unwrap();
+		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),
-			source_path: "source".into(),
-			output_path: "derived".into(),
+			source_path: moq_net::Path::new("source").unwrap().to_owned(),
+			output_path: moq_net::Path::new("derived").unwrap().to_owned(),
 			config: Default::default(),
 		};
 		let task = tokio::spawn(following.run());
@@ -292,7 +291,7 @@ mod tests {
 			.expect("the ladder outlived its source's end");
 		assert!(!task.is_finished(), "a clean end stopped following");
 
-		let new = origin.publish("source", route()).unwrap();
+		let new = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
 		let _new_dynamic = new.dynamic();
 		let second = next(&mut derivatives).await;
 		assert!(!first.is_clone(&second));

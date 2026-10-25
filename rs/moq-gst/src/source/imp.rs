@@ -585,7 +585,7 @@ async fn follow_path(
 ) -> Result<()> {
 	use moq_mux::follow::{Event, Instances};
 
-	let mut follow = Instances::new(origin, path, None)?;
+	let mut follow = Instances::new(origin, moq_net::Path::new(path)?, None)?;
 	let pads = Pads::default();
 	let mut runs = tokio::task::JoinSet::new();
 	// Cancels the latest run.
@@ -2010,6 +2010,7 @@ mod tests {
 	reason = "tests read the host clock directly"
 )]
 mod session_tests {
+	use moq_net::Path;
 	use std::collections::{BTreeMap, HashSet};
 	use std::sync::atomic::Ordering;
 	use std::sync::{Arc, Mutex};
@@ -2255,11 +2256,11 @@ mod session_tests {
 		let _pad_ids = pad_ids();
 		let element = element();
 		let origin = origin();
-		let mut catalog_broadcast = origin.create_broadcast("room/catalog").unwrap();
+		let mut catalog_broadcast = origin.create_broadcast(Path::new("room/catalog").unwrap()).unwrap();
 		let mut local = catalog_broadcast.dynamic();
-		let left = origin.create_broadcast("room/left").unwrap();
+		let left = origin.create_broadcast(Path::new("room/left").unwrap()).unwrap();
 		let mut remote = left.dynamic();
-		let right = origin.create_broadcast("room/right").unwrap();
+		let right = origin.create_broadcast(Path::new("room/right").unwrap()).unwrap();
 		let mut replacement = right.dynamic();
 		let mut catalog = moq_mux::catalog::Producer::new(&mut catalog_broadcast, Default::default()).unwrap();
 		let mut config = video_rendition();
@@ -3065,14 +3066,14 @@ mod session_tests {
 	impl Publisher {
 		/// Publish at `room` on `origin` under `route`.
 		fn new(origin: &moq_net::origin::Producer, route: moq_net::origin::Route, config: VideoConfig) -> Self {
-			let publisher = Self::build(origin.create_broadcast("room").unwrap(), config);
+			let publisher = Self::build(origin.create_broadcast(Path::new("room").unwrap()).unwrap(), config);
 			publisher.broadcast.announce(route).unwrap();
 			publisher
 		}
 
 		/// The `cam` broadcast a rendition of `room` references as `./cam`, under `route`.
 		fn sibling(origin: &moq_net::origin::Producer, route: moq_net::origin::Route) -> Self {
-			let publisher = Self::build(origin.create_broadcast("cam").unwrap(), video_rendition());
+			let publisher = Self::build(origin.create_broadcast(Path::new("cam").unwrap()).unwrap(), video_rendition());
 			publisher.broadcast.announce(route).unwrap();
 			publisher
 		}
@@ -3427,7 +3428,7 @@ mod session_tests {
 	/// Follow `room` on `origin` past its start. A follower folds everything on hand while nothing
 	/// serves the path, so one first polled after the next change would never report it.
 	fn announced(origin: &moq_net::origin::Producer) -> moq_net::announce::Follow {
-		let mut follow = origin.consume().follow("room").unwrap();
+		let mut follow = origin.consume().follow(Path::new("room").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		follow
 	}
@@ -3490,7 +3491,7 @@ mod session_tests {
 
 		let mut old = Publisher::standalone(video_rendition());
 		let serving = std::sync::Arc::new(Mutex::new(old.broadcast.consume()));
-		let pool = std::sync::Arc::new(origin.dynamic_route("", epoch()).unwrap());
+		let pool = std::sync::Arc::new(origin.dynamic_route(moq_net::Path::empty(), epoch()).unwrap());
 		let (handler, answer) = (pool.clone(), serving.clone());
 		let handler = super::RUNTIME.spawn(async move {
 			while let Ok(request) = handler.requested_broadcast().await {
@@ -3519,7 +3520,7 @@ mod session_tests {
 		let element = element();
 		let recorder = Recorder::attach(&element);
 		let origin = origin();
-		let pool = origin.dynamic_route("", epoch()).unwrap();
+		let pool = origin.dynamic_route(moq_net::Path::empty(), epoch()).unwrap();
 		let session = follow(&element, &origin);
 		let pending = super::RUNTIME.block_on(async {
 			tokio::time::timeout(Duration::from_secs(10), pool.requested_broadcast())
@@ -3559,7 +3560,7 @@ mod session_tests {
 
 		let mut first = Publisher::sibling(&origin, Default::default());
 		let pad = recorder.written(&mut first, 1);
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		drop(first);
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::End(_)));
@@ -3645,7 +3646,7 @@ mod session_tests {
 		let origin = origin();
 		let _room = referencing(&origin, None);
 		let session = follow(&element, &origin);
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 
 		let route = epoch();
 		let mut first = Publisher::sibling(&origin, route.clone());
@@ -3727,7 +3728,7 @@ mod session_tests {
 		let mut first = Publisher::sibling(&origin, Default::default());
 		let pad = recorder.written(&mut first, 1);
 		room.catalog.finish().unwrap();
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		drop(first);
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::End(_)));
@@ -4009,7 +4010,7 @@ mod session_tests {
 		let mut second = Publisher::sibling(&origin, moq_net::origin::Route::default().with_epoch(other));
 		let unpinned = recorder.written(&mut second, 2);
 		let pad = reached(1).into_iter().find(|pad| *pad != unpinned).unwrap();
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		drop(second);
 		await_event(&mut follow, |event| {
@@ -4063,7 +4064,7 @@ mod session_tests {
 
 		let mut first = Publisher::sibling(&origin, Default::default());
 		let pad = recorder.written(&mut first, 1);
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		drop(first);
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::End(_)));
@@ -4105,7 +4106,7 @@ mod session_tests {
 
 		let mut first = Publisher::sibling(&origin, Default::default());
 		let pad = recorder.written(&mut first, 1);
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		drop(first);
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::End(_)));
@@ -4183,7 +4184,7 @@ mod session_tests {
 		let session = follow(&element, &origin);
 		let pad = recorder.written(&mut old, 1);
 
-		let mut follow = origin.consume().follow("cam").unwrap();
+		let mut follow = origin.consume().follow(Path::new("cam").unwrap()).unwrap();
 		await_event(&mut follow, |event| matches!(event, moq_net::announce::Event::Start(_)));
 		let mut new = Publisher::sibling(&origin, epoch());
 		await_event(&mut follow, |event| {
@@ -4452,7 +4453,7 @@ mod session_tests {
 	fn a_refused_catalog_fails_the_session() {
 		let element = element();
 		let origin = origin();
-		let broadcast = origin.create_broadcast("room").unwrap();
+		let broadcast = origin.create_broadcast(Path::new("room").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 
 		let (_shutdown, session) = follow(&element, &origin);

@@ -163,7 +163,7 @@ mod tests {
 	}
 
 	fn publish(origin: &origin::Producer, path: &str) -> broadcast::Producer {
-		let broadcast = origin.create_broadcast(path).expect(path);
+		let broadcast = origin.create_broadcast(Path::new(path).unwrap()).expect(path);
 		broadcast.announce(Route::default()).expect("announce");
 		broadcast
 	}
@@ -171,7 +171,7 @@ mod tests {
 	#[tokio::test]
 	async fn yields_camera_and_skips_local_and_unknown() {
 		let origin = origin();
-		let local = Path::new("alice").to_owned();
+		let local = Path::new("alice").unwrap().to_owned();
 		let mut room = Room::new(&origin.consume(), Some(local));
 
 		let _alice = publish(&origin, "alice/camera");

@@ -12,6 +12,7 @@
 
 #![cfg(all(target_os = "linux", feature = "quic"))]
 
+use moq_net::Path;
 use crate::support;
 
 use std::net::UdpSocket;
@@ -89,7 +90,7 @@ fn partial_frame_gives_way() {
 		});
 	});
 
-	let broadcast = pub_origin.create_broadcast("room").expect("create broadcast");
+	let broadcast = pub_origin.create_broadcast(Path::new("room").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let low = broadcast.create_track("low", timed()).expect("low track");
 	let high = broadcast.create_track("high", timed()).expect("high track");
@@ -154,10 +155,10 @@ fn partial_frame_gives_way() {
 			});
 
 			let consumer = sub.consume();
-			within(&handle, "the route", consumer.routed("room"))
+			within(&handle, "the route", consumer.routed(Path::new("room").unwrap()))
 				.await
 				.expect("routed");
-			let remote = within(&handle, "the broadcast", consumer.request_broadcast("room", None))
+			let remote = within(&handle, "the broadcast", consumer.request_broadcast(Path::new("room").unwrap(), None))
 				.await
 				.expect("broadcast resolves");
 			let subscribe = |name: &str, priority: i8| {
@@ -310,10 +311,10 @@ fn javascript_partial_frame_gives_way() {
 			});
 
 			let consumer = sub.consume();
-			within(&handle, "the route", consumer.routed("room"))
+			within(&handle, "the route", consumer.routed(Path::new("room").unwrap()))
 				.await
 				.expect("routed");
-			let remote = within(&handle, "the broadcast", consumer.request_broadcast("room", None))
+			let remote = within(&handle, "the broadcast", consumer.request_broadcast(Path::new("room").unwrap(), None))
 				.await
 				.expect("broadcast resolves");
 			let subscribe = |name: &str, priority: i8| {

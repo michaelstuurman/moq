@@ -35,6 +35,7 @@
 
 #![cfg(unix)]
 
+use moq_net::Path;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -419,7 +420,7 @@ async fn a_reconnecting_client_rides_out_a_restart_inner() {
 	let url: url::Url = format!("tcp://{addr}/").parse().expect("parse url");
 
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast("cam").expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new("cam").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let mut publisher = moq_tokio::connect::Config::default();
 	// Redials paced well inside the drain, under a window that ends long before it.
@@ -464,7 +465,7 @@ async fn a_reconnecting_client_rides_out_a_restart_inner() {
 		.await
 		.expect("connect");
 	tokio::select! {
-		res = consumer.routed_broadcast("cam") => {
+		res = consumer.routed_broadcast(Path::new("cam").unwrap()) => {
 			res.expect("the publisher's broadcast never resolved");
 		}
 		res = publisher.closed() => panic!("the publisher gave up during the restart: {res:?}"),

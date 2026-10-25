@@ -1,4 +1,5 @@
 use super::*;
+use moq_net::Path;
 
 use crate::ffi::ReturnCode;
 use std::ffi::{c_char, c_void};
@@ -3707,7 +3708,7 @@ fn consume_announced_close_cancels() {
 fn publish(origin: u32, path: &str, route: moq_net::origin::Route) -> moq_net::broadcast::Producer {
 	let _runtime = crate::ffi::RUNTIME.enter();
 	let origin = crate::Id::try_from(origin).unwrap();
-	State::lock().origin.get(origin).unwrap().publish(path, route).unwrap()
+	State::lock().origin.get(origin).unwrap().publish(Path::new(path).unwrap(), route).unwrap()
 }
 
 /// Publish `path` on `origin` under a fresh epoch, as each run of a publisher does.
@@ -3763,7 +3764,7 @@ fn consume_announced_delivers_a_takeover_once(dynamic_at: &str) {
 			.origin
 			.get(origin)
 			.unwrap()
-			.dynamic_route(dynamic_at, route)
+			.dynamic_route(Path::new(dynamic_at).unwrap(), route)
 			.unwrap()
 	};
 	let cb = Callback::new();
@@ -3814,7 +3815,7 @@ fn serve_dynamic(origin: u32, prefix: &str, route: moq_net::origin::Route) -> mo
 		.origin
 		.get(origin)
 		.unwrap()
-		.dynamic_route(prefix, route)
+		.dynamic_route(Path::new(prefix).unwrap(), route)
 		.unwrap()
 }
 

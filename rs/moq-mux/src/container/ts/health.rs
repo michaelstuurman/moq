@@ -545,6 +545,7 @@ impl Snapshot {
 
 #[cfg(test)]
 mod test {
+	use moq_net::Path;
 	use std::collections::HashMap;
 
 	use super::super::{Import, Programs, psi, stats::Snapshot};
@@ -1000,7 +1001,7 @@ mod test {
 	#[test]
 	fn a_multiplex_counts_each_fault_once() {
 		let origin = crate::source::produce_origin();
-		let mut programs = Programs::new(origin, "event.hang", crate::catalog::Config::default());
+		let mut programs = Programs::new(origin, Path::new("event.hang").unwrap(), crate::catalog::Config::default());
 		let mut data = super::super::import::test::two_programs();
 		let mut corrupt = vec![0x47, 0x9f, 0xff, 0x10];
 		corrupt.resize(188, 0xff);

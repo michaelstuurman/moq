@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
 	match config.role {
 		Command::Publish => {
 			let broadcast = origin
-				.create_broadcast(&config.broadcast)
+				.create_broadcast(Path::new(&config.broadcast).unwrap())
 				.context("failed to create broadcast")?;
 			let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI);
 			let track = broadcast.create_track(track, info)?;
@@ -97,11 +97,11 @@ async fn main() -> anyhow::Result<()> {
 			// instead. This also makes the subscriber reconnect-aware.
 			tracing::info!(broadcast = %config.broadcast, "waiting for broadcast to be online");
 
-			let path: moq_net::Path<'_> = config.broadcast.into();
+			let path = moq_net::PathOwned::try_from(config.broadcast).context("invalid broadcast name")?;
 			let scope =
 				moq_net::Patterns::from(moq_net::Pattern::subtree(path.as_str()).context("invalid broadcast name")?);
 			let consumer = origin
-				.scope("", &scope)
+				.scope(moq_net::Path::empty(), &scope)
 				.context("not allowed to consume broadcast")?
 				.consume();
 			let mut announced = consumer.announced();

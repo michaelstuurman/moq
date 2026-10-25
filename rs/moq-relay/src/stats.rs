@@ -122,13 +122,18 @@ impl Config {
 		if !self.enabled {
 			return Ok(moq_stats::Producer::new(moq_stats::produce::Config::new()));
 		}
-		let prefix = self.prefix.clone();
+		let prefix = PathOwned::try_from(self.prefix.clone()).map_err(|err| anyhow::anyhow!("invalid stats.prefix: {err}"))?;
 		let interval = self.interval();
 		anyhow::ensure!(interval != Some(Duration::ZERO), "stats.interval must be non-zero");
-		let node = self.node.clone().map(PathOwned::from);
+		let node = self
+			.node
+			.clone()
+			.map(PathOwned::try_from)
+			.transpose()
+			.map_err(|err| anyhow::anyhow!("invalid stats.node: {err}"))?;
 		let depth = self.depth;
 		let linger = self.linger();
-		tracing::info!(prefix, ?interval, node = ?node, depth, ?linger, "stats publishing enabled");
+		tracing::info!(prefix = %prefix, ?interval, node = ?node, depth, ?linger, "stats publishing enabled");
 		let mut config = moq_stats::produce::Config::new()
 			.with_origin(origin)
 			.with_prefix(prefix)

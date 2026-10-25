@@ -97,7 +97,7 @@ async fn accept_offer(
 		return Err(Error::InvalidSdp("expected Content-Type: application/sdp".into()));
 	}
 	let offer = std::str::from_utf8(&body).map_err(|err| Error::InvalidSdp(err.to_string()))?;
-	accept(server, subscriber, path, offer).await
+	accept(server, subscriber, moq_net::Path::new(path)?, offer).await
 }
 
 #[cfg(feature = "server")]
@@ -215,7 +215,7 @@ async fn resolve(subscriber: &moq_net::origin::Consumer, path: moq_net::Path<'_>
 #[cfg(feature = "server")]
 fn status_for(err: &Error) -> StatusCode {
 	match err {
-		Error::InvalidSdp(_) => StatusCode::BAD_REQUEST,
+		Error::InvalidSdp(_) | Error::Moq(moq_net::Error::EmptySegment) => StatusCode::BAD_REQUEST,
 		Error::UnsupportedCodec(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
 		Error::SessionNotFound => StatusCode::NOT_FOUND,
 		Error::Moq(moq_net::Error::Unauthorized) => StatusCode::UNAUTHORIZED,
@@ -226,6 +226,7 @@ fn status_for(err: &Error) -> StatusCode {
 
 #[cfg(test)]
 mod tests {
+	use moq_net::Path;
 	use std::time::Duration;
 
 	use bytes::Bytes;
@@ -283,7 +284,7 @@ mod tests {
 	async fn a_broadcast_resolves_through_a_lazy_client_session() {
 		let pub_origin = moq_tokio::origin::spawn();
 
-		let mut source = pub_origin.create_broadcast("cam").expect("create broadcast");
+		let mut source = pub_origin.create_broadcast(Path::new("cam").unwrap()).expect("create broadcast");
 		source
 			.announce(moq_net::origin::Route::default())
 			.expect("announce broadcast");
@@ -298,7 +299,7 @@ mod tests {
 
 		let (sub_origin, _connection, accept) = lazy_client(pub_origin).await;
 
-		let resolved = super::resolve(&sub_origin.consume(), moq_net::Path::new("cam"))
+		let resolved = super::resolve(&sub_origin.consume(), moq_net::Path::new("cam").unwrap())
 			.await
 			.expect("the broadcast resolves");
 		assert!(!resolved.catalog_codecs().is_empty());
@@ -312,14 +313,14 @@ mod tests {
 	#[tokio::test]
 	async fn offers_ride_the_routers_scope_watch() {
 		let pub_origin = moq_tokio::origin::spawn();
-		let other = pub_origin.create_broadcast("other").expect("create broadcast");
+		let other = pub_origin.create_broadcast(Path::new("other").unwrap()).expect("create broadcast");
 		other
 			.announce(moq_net::origin::Route::default())
 			.expect("announce broadcast");
 		let (sub_origin, _connection, accept) = lazy_client(pub_origin).await;
 
 		let _router = super::router(crate::server::Server::new(Default::default()), sub_origin.consume());
-		let missing = sub_origin.consume().follow("missing").expect("follow");
+		let missing = sub_origin.consume().follow(Path::new("missing").unwrap()).expect("follow");
 		moq_clock::timeout(TIMEOUT, missing.synced())
 			.await
 			.expect("sync timed out");
@@ -327,7 +328,7 @@ mod tests {
 		// Nothing watches `other` on its own, yet the synced lookup already discovered it.
 		sub_origin
 			.consume()
-			.request_broadcast("other", None)
+			.request_broadcast(Path::new("other").unwrap(), None)
 			.await
 			.expect("discovered through the scope watch");
 

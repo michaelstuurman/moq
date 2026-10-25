@@ -334,7 +334,9 @@ impl Echo {
 			if prefix.is_none() {
 				tracing::warn!(path = %echo.path.as_str(), "the catalog solicits feedback above the connection root");
 			}
-			Some(prefix?.join(format!("{}{}", self.target.name.0, hang::echo::SUFFIX).as_str()))
+			let name = moq_net::PathOwned::try_from(format!("{}{}", self.target.name.0, hang::echo::SUFFIX))
+				.expect("an echo name is one segment");
+			Some(prefix?.join(name))
 		});
 		if self.feedback.as_ref().map(|feedback| &feedback.path) == target.as_ref() {
 			return;
@@ -418,13 +420,14 @@ async fn snapshot(
 /// `export report`: write the broadcast's media reports to stdout as JSON lines, following the
 /// track its catalog's `stats` section names, until the catalog and that track have both ended.
 pub async fn print_report(origin: moq_net::origin::Consumer, path: String) -> anyhow::Result<()> {
+	let path = moq_net::PathOwned::try_from(path)?;
 	let mut stdout = tokio::io::stdout();
 	origin
 		.routed(&path)
 		.await
 		.ok_or_else(|| anyhow::anyhow!("origin closed before broadcast `{path}` was announced"))?;
 	let broadcast = origin
-		.request_broadcast(path.as_str(), None)
+		.request_broadcast(&path, None)
 		.await
 		.with_context(|| format!("failed to resolve broadcast `{path}`"))?;
 	let source = moq_mux::Source::new(origin, broadcast.clone());
@@ -488,7 +491,7 @@ async fn write_echo(
 ) -> anyhow::Result<()> {
 	// Announcements leave hidden routes out unless asked, and a prefix naming one asks.
 	let hidden = prefix.split('/').any(|segment| segment.starts_with('.'));
-	let prefix = moq_net::Path::new(&prefix).to_owned();
+	let prefix = moq_net::Path::new(&prefix)?.to_owned();
 	let mut announced = origin.clone().with_hidden(hidden).announced();
 	let (lines, mut written) = tokio::sync::mpsc::channel::<String>(LINES);
 	let mut readers = Readers::default();
@@ -645,7 +648,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn an_ended_feedback_reader_stops_after_draining() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast("viewer.echo").unwrap();
+		let broadcast = origin.create_broadcast(moq_net::Path::new("viewer.echo").unwrap()).unwrap();
 		let track = broadcast.create_track(hang::echo::TRACK, None).unwrap();
 		let mut feedback = moq_json::snapshot::Producer::<serde_json::Value>::new(track, Default::default());
 		broadcast.announce(Default::default()).unwrap();
@@ -669,7 +672,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_drained_reader_is_forgotten() {
 		let mut readers = Readers::default();
-		let path = moq_net::Path::new("viewer.echo").to_owned();
+		let path = moq_net::Path::new("viewer.echo").unwrap().to_owned();
 
 		readers.start(path.clone(), tokio::spawn(std::future::pending()));
 		readers.end(path.clone());
@@ -689,7 +692,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_hidden_prefix_finds_its_feedback() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(".viewers/alice.echo").unwrap();
+		let broadcast = origin.create_broadcast(moq_net::Path::new(".viewers/alice.echo").unwrap()).unwrap();
 		let track = broadcast.create_track(hang::echo::TRACK, None).unwrap();
 		let mut feedback = moq_json::snapshot::Producer::<serde_json::Value>::new(track, Default::default());
 		broadcast.announce(Default::default()).unwrap();

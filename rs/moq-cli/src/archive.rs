@@ -69,7 +69,7 @@ pub async fn export(origin: moq_net::origin::Consumer, prefix: String, args: Exp
 
 	// Announcements leave hidden routes out unless asked, and a prefix naming one asks.
 	let hidden = prefix.split('/').any(|segment| segment.starts_with('.'));
-	let prefix = moq_net::Path::new(&prefix).to_owned();
+	let prefix = moq_net::Path::new(&prefix)?.to_owned();
 	let mut announced = origin.clone().with_hidden(hidden).announced();
 	let mut recordings = tokio::task::JoinSet::new();
 	let mut running = Running::default();
@@ -250,7 +250,7 @@ pub async fn import(
 	let store = open(&args.store)?;
 	// A second handle lists the recording's timelines while the reader owns the first.
 	let listing = open(&args.store)?;
-	let broadcast = origin.create_broadcast(&name).context("failed to create broadcast")?;
+	let broadcast = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
 	let mut timelines = store
 		.timelines()
 		.await
@@ -355,7 +355,7 @@ mod tests {
 		let mut epochs = Vec::new();
 		let mut broadcasts = Vec::new();
 		for path in ["live/a", "live/b", "other"] {
-			let broadcast = origin.create_broadcast(path).unwrap();
+			let broadcast = origin.create_broadcast(moq_net::Path::new(path).unwrap()).unwrap();
 			let track = broadcast.create_track("video", info.clone()).unwrap();
 			let mut group = track.create_group(group::Info { sequence: 0 }).unwrap();
 			group.write_frame(Timestamp::from_millis(0).unwrap(), path).unwrap();
@@ -410,12 +410,12 @@ mod tests {
 	#[test]
 	fn a_re_announced_instance_is_recorded() {
 		let mut running = Running::default();
-		let epochless = (moq_net::Path::new("live/a").to_owned(), None);
+		let epochless = (moq_net::Path::new("live/a").unwrap().to_owned(), None);
 		assert!(running.start(&epochless));
 		assert!(running.start(&epochless));
 		assert!(!running.done(&epochless));
 
-		let pinned = (moq_net::Path::new("live/b").to_owned(), Some(moq_net::Epoch::mint()));
+		let pinned = (moq_net::Path::new("live/b").unwrap().to_owned(), Some(moq_net::Epoch::mint()));
 		assert!(running.start(&pinned));
 		assert!(!running.start(&pinned));
 		assert!(running.done(&pinned));
@@ -428,7 +428,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_resolved_broadcast_is_recorded_once() {
 		let origin = moq_tokio::origin::spawn();
-		let path = moq_net::Path::new("live/a").to_owned();
+		let path = moq_net::Path::new("live/a").unwrap().to_owned();
 		let newest = origin.create_broadcast(&path).unwrap();
 		let older = origin.create_broadcast(&path).unwrap();
 
@@ -447,14 +447,14 @@ mod tests {
 	/// share a key prefix.
 	#[test]
 	fn an_epochless_instance_gets_a_fresh_key() {
-		let instance = (moq_net::Path::new("live/a").to_owned(), None);
+		let instance = (moq_net::Path::new("live/a").unwrap().to_owned(), None);
 		let first = key(&Path::from("rec"), &instance).unwrap();
 		let second = key(&Path::from("rec"), &instance).unwrap();
 		assert_ne!(first, second);
 		assert!(first.as_ref().starts_with("rec/live/a/"), "{first}");
 
 		let epoch = moq_net::Epoch::mint();
-		let pinned = (moq_net::Path::new("live/a").to_owned(), Some(epoch.clone()));
+		let pinned = (moq_net::Path::new("live/a").unwrap().to_owned(), Some(epoch.clone()));
 		assert_eq!(
 			key(&Path::from("rec"), &pinned).unwrap().as_ref(),
 			format!("rec/live/a/@{epoch}")
@@ -468,13 +468,13 @@ mod tests {
 		let epoch = moq_net::Epoch::mint();
 		let victim = key(
 			&Path::from("rec"),
-			&(moq_net::Path::new("live/a").to_owned(), Some(epoch.clone())),
+			&(moq_net::Path::new("live/a").unwrap().to_owned(), Some(epoch.clone())),
 		)
 		.unwrap();
 		let hostile = format!("live/a/@{epoch}");
 		let nested = key(
 			&Path::from("rec"),
-			&(moq_net::Path::new(&hostile).to_owned(), Some(moq_net::Epoch::mint())),
+			&(moq_net::Path::new(&hostile).unwrap().to_owned(), Some(moq_net::Epoch::mint())),
 		)
 		.unwrap();
 		assert!(nested.prefix_match(&victim).is_none(), "{nested} is under {victim}");
@@ -487,7 +487,7 @@ mod tests {
 		let literal = key(
 			&Path::from("rec"),
 			&(
-				moq_net::Path::new(&format!("live/a/%40{epoch}")).to_owned(),
+				moq_net::Path::new(&format!("live/a/%40{epoch}")).unwrap().to_owned(),
 				Some(epoch),
 			),
 		)

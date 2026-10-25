@@ -1336,6 +1336,7 @@ fn net_errors(err: &moq_mux::Error) -> impl Iterator<Item = &moq_net::Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	/// Decode the code `local` would send on a moq-lite stream reset.
 	fn over_lite(local: &moq_net::Error) -> moq_net::Error {
@@ -1358,14 +1359,14 @@ mod tests {
 	#[tokio::test]
 	async fn pending_reads_preserve_a_later_authorization_refusal() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast("room/live").unwrap();
-		let dynamic = origin.dynamic_route("room/secret", Default::default()).unwrap();
+		let broadcast = origin.create_broadcast(Path::new("room/live").unwrap()).unwrap();
+		let dynamic = origin.dynamic_route(Path::new("room/secret").unwrap(), Default::default()).unwrap();
 		let source = moq_mux::Source::new(origin.consume(), broadcast.consume());
 		let mut config = VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		config.broadcast = Some(moq_net::path::Relative::new("./secret").to_owned());
 		let rendition = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
 		let request = dynamic.requested_broadcast().await.unwrap();
-		let other = origin.dynamic_route("room/hidden", Default::default()).unwrap();
+		let other = origin.dynamic_route(Path::new("room/hidden").unwrap(), Default::default()).unwrap();
 		config.broadcast = Some(moq_net::path::Relative::new("./hidden").to_owned());
 		let resolving = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
 		let other_request = other.requested_broadcast().await.unwrap();
@@ -1523,7 +1524,7 @@ mod tests {
 	#[test]
 	fn a_gone_publisher_is_unservable_and_an_ietf_miss_is_not() {
 		let origin = produce_origin();
-		let producer = origin.create_broadcast("live").expect("publish allowed");
+		let producer = origin.create_broadcast(Path::new("live").unwrap()).expect("publish allowed");
 		let live = producer.consume();
 		let ietf_miss = over_ietf_miss();
 		assert!(

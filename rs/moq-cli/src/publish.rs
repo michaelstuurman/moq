@@ -432,7 +432,7 @@ impl Publish {
 	/// The programs aren't known until the PAT arrives, so each broadcast is created then and
 	/// announced once its catalog has named a servable track, and [`announce`](Self::announce) has
 	/// nothing to do.
-	pub fn ts_programs(origin: moq_net::origin::Producer, name: String, config: moq_mux::catalog::Config) -> Self {
+	pub fn ts_programs(origin: moq_net::origin::Producer, name: moq_net::PathOwned, config: moq_mux::catalog::Config) -> Self {
 		Self {
 			source: Source::Stream {
 				decoder: PublishDecoder::TsPrograms(Box::new(ts::Programs::new(origin, name, config))),
@@ -960,7 +960,7 @@ pub(crate) mod tests {
 	async fn manufacture_input() -> Vec<u8> {
 		// Create the broadcast on a throwaway origin so the exporter can resolve it by path.
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("cli").unwrap();
+		let mut broadcast = origin.create_broadcast(moq_net::Path::new("cli").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		settle().await;
 		let config = moq_mux::catalog::Config::default().with_catalog(Catalog::<tscat::Ext>::default());
@@ -1041,7 +1041,7 @@ pub(crate) mod tests {
 	/// A source for the broadcast at `path`, resolved through `origin`.
 	async fn resolved(origin: &moq_net::origin::Producer, path: &str) -> moq_mux::Source {
 		let consumer = origin.consume();
-		let broadcast = consumer.request_broadcast(path, None).await.unwrap();
+		let broadcast = consumer.request_broadcast(moq_net::Path::new(path).unwrap(), None).await.unwrap();
 		moq_mux::Source::new(consumer, broadcast)
 	}
 
@@ -1073,7 +1073,7 @@ pub(crate) mod tests {
 		// streams land in the broadcast instead of being dropped by the media-only path.
 		// The broadcast is created on a throwaway origin so the exporter can resolve it by path.
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast("cli").unwrap();
+		let broadcast = origin.create_broadcast(moq_net::Path::new("cli").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		settle().await;
 		let mut publish = Publish::new(broadcast, &PublishFormat::Ts { program: None }, Default::default()).unwrap();
@@ -1268,7 +1268,7 @@ pub(crate) mod tests {
 			};
 
 			let origin = moq_tokio::origin::spawn();
-			let broadcast = origin.create_broadcast("pt.hang").unwrap();
+			let broadcast = origin.create_broadcast(moq_net::Path::new("pt.hang").unwrap()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 			let mut publish = Publish::new(
 				broadcast,
@@ -1304,7 +1304,7 @@ pub(crate) mod tests {
 			// the lead holds; the jump is in the copy after it.
 			const WAIT: Duration = Duration::from_secs(10);
 			decoder.decode_chunk(&lead).unwrap();
-			let consumer = tokio::time::timeout(WAIT, remote.consume().routed_broadcast("pt.hang"))
+			let consumer = tokio::time::timeout(WAIT, remote.consume().routed_broadcast(moq_net::Path::new("pt.hang").unwrap()))
 				.await
 				.unwrap()
 				.unwrap();
@@ -1670,7 +1670,7 @@ pub(crate) mod tests {
 			let origin = moq_tokio::origin::spawn();
 			let consumer = origin.consume();
 			let mut announced = consumer.announced();
-			let broadcast = origin.create_broadcast("demo").unwrap();
+			let broadcast = origin.create_broadcast(moq_net::Path::new("demo").unwrap()).unwrap();
 			let publish = Publish::new(broadcast.clone(), &format, Default::default()).unwrap();
 			#[cfg_attr(
 				not(feature = "capture"),
@@ -1705,7 +1705,7 @@ pub(crate) mod tests {
 				resolved = async {
 					let event = announced.next().await.expect("origin closed");
 					assert!(matches!(event, moq_net::announce::Event::Start(_)), "{event:?}");
-					let broadcast = consumer.request_broadcast("demo", None).await.unwrap();
+					let broadcast = consumer.request_broadcast(moq_net::Path::new("demo").unwrap(), None).await.unwrap();
 					let mut catalogs = hang::catalog::Catalog::<()>::subscribe(&broadcast).await.unwrap();
 					let catalog = catalogs.next().await.unwrap().expect("a catalog");
 					// A passthrough carries the multiplex on one track, named by its m2ts section.
@@ -1784,7 +1784,7 @@ pub(crate) mod tests {
 		] {
 			let origin = moq_tokio::origin::spawn();
 			let mut announced = origin.consume().announced();
-			let broadcast = origin.create_broadcast("demo").unwrap();
+			let broadcast = origin.create_broadcast(moq_net::Path::new("demo").unwrap()).unwrap();
 			let publish = Publish::new(broadcast.clone(), &format, Default::default()).unwrap();
 			#[cfg_attr(
 				not(feature = "capture"),

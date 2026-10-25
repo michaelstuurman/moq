@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use moq_relay::{Config, Relay};
-use moq_tokio::moq_net;
+use moq_tokio::moq_net::{self, Path};
 
 use crate::logs::Logs;
 
@@ -134,7 +134,7 @@ async fn uring_workers_serve_webtransport_and_raw_quic() {
 	let raw_url: url::Url = format!("moql://127.0.0.1:{port}/uring").parse().expect("parse url");
 
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -162,7 +162,7 @@ async fn uring_workers_serve_webtransport_and_raw_quic() {
 			.expect("origin closed");
 		assert_eq!(update.prefix.as_str(), "test");
 		assert!(active, "expected announce, got retraction");
-		let broadcast = tokio::time::timeout(TIMEOUT, consumer.request_broadcast("test", None))
+		let broadcast = tokio::time::timeout(TIMEOUT, consumer.request_broadcast(Path::new("test").unwrap(), None))
 			.await
 			.unwrap_or_else(|_| panic!("subscriber {index} request timeout"))
 			.expect("announced broadcast resolves");
@@ -234,7 +234,7 @@ async fn uring_workers_serve_every_configured_version() {
 	let running = tokio::spawn(relay.run());
 
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -272,7 +272,7 @@ async fn uring_workers_serve_every_configured_version() {
 			// moq-lite-02 has no in-band path, so a raw QUIC session sits at the root.
 			let path = update.prefix.as_str().to_owned();
 			assert!(active && path.ends_with("test"), "{scheme} {name}: announced {path}");
-			let broadcast = tokio::time::timeout(TIMEOUT, consumer.request_broadcast(&path, None))
+			let broadcast = tokio::time::timeout(TIMEOUT, consumer.request_broadcast(Path::new(&path).unwrap(), None))
 				.await
 				.unwrap_or_else(|_| panic!("{scheme} {name}: request timeout"))
 				.expect("announced broadcast resolves");
@@ -604,7 +604,7 @@ async fn an_mtls_client_authenticates_without_a_token() {
 	// connecting proves nothing.
 	let url: url::Url = format!("moql://127.0.0.1:{port}/mtls").parse().expect("parse url");
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");
@@ -625,7 +625,7 @@ async fn an_mtls_client_authenticates_without_a_token() {
 		.expect("origin closed");
 	assert_eq!(update.prefix.as_str(), "test");
 	assert!(active, "expected announce, got retraction");
-	let announced = tokio::time::timeout(TIMEOUT, consumer.request_broadcast("test", None))
+	let announced = tokio::time::timeout(TIMEOUT, consumer.request_broadcast(Path::new("test").unwrap(), None))
 		.await
 		.expect("request timeout")
 		.expect("announced broadcast resolves");
@@ -683,7 +683,7 @@ async fn uring_workers_write_qlog_traces() {
 	// rather than a connection that only ever exchanged Initials.
 	let url: url::Url = format!("moql://127.0.0.1:{port}/qlog").parse().expect("parse url");
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast("test").expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("create broadcast");
 	let track = broadcast.create_track("video", timed()).expect("create track");
 	let mut group = track.append_group().expect("append group");

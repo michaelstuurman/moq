@@ -3,6 +3,7 @@
 //! shows as a falling rate with program count. A PAT that also names programs no PMT
 //! describes shows what a program costs before it starts.
 
+use moq_net::Path;
 use std::time::Duration;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
@@ -183,7 +184,7 @@ fn multiplex(programs: u16, undescribed: u16, bitrate: u64) -> Vec<u8> {
 /// A fresh importer, with the origin driver it needs kept alive but unpolled.
 fn setup() -> (moq_mux::container::ts::Programs, impl Sized) {
 	let (origin, driver) = moq_net::origin::Producer::new(Default::default());
-	let programs = moq_mux::container::ts::Programs::new(origin, "bench.hang", moq_mux::catalog::Config::default());
+	let programs = moq_mux::container::ts::Programs::new(origin, Path::new("bench.hang").unwrap(), moq_mux::catalog::Config::default());
 	(programs, driver)
 }
 

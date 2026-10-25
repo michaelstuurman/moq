@@ -1,5 +1,6 @@
 //! Admission and lease behavior for a gateway embedding the relay.
 
+use moq_net::Path;
 use crate::{auth, cluster};
 use moq_auth::{Grant, Pattern, Patterns, Role, Transport, lease};
 
@@ -111,7 +112,7 @@ async fn a_moved_gateway_tier_retags_its_stats() {
 			.snapshot()
 			.sessions()
 			.into_iter()
-			.find(|(t, _)| *t == stats::Tier::new(tier))
+			.find(|(t, _)| *t == stats::Tier::new(Path::new(tier).unwrap()))
 			.map_or(0, |(_, presence)| presence.active())
 	};
 

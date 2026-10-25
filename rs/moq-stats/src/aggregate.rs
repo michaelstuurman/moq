@@ -86,7 +86,7 @@ impl Config {
 impl Default for Config {
 	fn default() -> Self {
 		Self {
-			prefix: PathOwned::from(".stats"),
+			prefix: moq_net::Path::new(".stats").expect("a literal path"),
 			depth: 0,
 			encoding: Encoding::Plain,
 			// Well above reconnect times; a longer grace only costs memory.
@@ -967,6 +967,7 @@ fn resolve<V: Mergeable>(origin: &origin::Consumer, path: &PathOwned, epoch: Opt
 
 #[cfg(test)]
 mod tests {
+	use moq_net::Path;
 	/// A millisecond track: the frames written here carry timestamps.
 	fn timed() -> moq_net::track::Info {
 		moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI)
@@ -1010,7 +1011,7 @@ mod tests {
 		Producer::new(
 			produce::Config::new()
 				.with_origin(origin.clone())
-				.with_node(PathOwned::from(node.to_string()))
+				.with_node(Path::try_from(node.to_string()).unwrap())
 				.with_depth(1),
 		)
 	}
@@ -1030,18 +1031,18 @@ mod tests {
 	/// `tier`/`label`, by driving a throwaway tagged broadcast. The broadcast lives
 	/// on its own origin so it never lands on the stats origin.
 	async fn feed(producer: &Producer, tier: Tier, label: &str, path: &str, bytes: usize) -> Feed {
-		let ctx = producer.registry().tier(tier).session(label);
+		let ctx = producer.registry().tier(tier).session(Path::new(label).unwrap());
 		let feed_origin = produce_origin();
 		let egress = feed_origin.consume().with_stats(ctx.clone());
 
 		let mut announced = egress.announced();
-		let source = feed_origin.create_broadcast(path).expect("create_broadcast");
+		let source = feed_origin.create_broadcast(Path::new(path).unwrap()).expect("create_broadcast");
 		source.announce(origin::Route::default()).expect("announce");
 		let track = source.create_track("video", timed()).expect("create_track");
 
 		let (_, active) = next_update(&mut announced).await.expect("announce");
 		assert!(active);
-		let consumer = egress.request_broadcast(path, None).await.expect("resolve");
+		let consumer = egress.request_broadcast(Path::new(path).unwrap(), None).await.expect("resolve");
 		let mut sub = consumer.track("video").unwrap().subscribe(None).await.unwrap();
 
 		let mut group = track.append_group().unwrap();
@@ -1108,7 +1109,7 @@ mod tests {
 	impl NodeBroadcast {
 		fn new(origin: &origin::Producer, group: &str, node: &str) -> Self {
 			let path = format!(".stats/{group}/node/{node}");
-			let source = origin.create_broadcast(path.as_str()).expect("create broadcast");
+			let source = origin.create_broadcast(Path::new(path.as_str()).unwrap()).expect("create broadcast");
 			source.announce(origin::Route::default()).expect("announce");
 			let name = traffic_track(&Tier::default(), Role::Publisher, Encoding::Plain);
 			let track = source.create_track(name, timed()).expect("create track");
@@ -1295,7 +1296,7 @@ mod tests {
 	#[test]
 	fn outgoing_epoch_metadata_migrates_without_choosing_a_grace_entry() {
 		let origin = produce_origin();
-		let path = PathOwned::from(".stats/acme/node/a");
+		let path = Path::new(".stats/acme/node/a").unwrap();
 		let a: Epoch = "01900000-0000-7000-8000-000000000001".parse().unwrap();
 		let b: Epoch = "01900000-0000-7000-8000-000000000002".parse().unwrap();
 		let c: Epoch = "01900000-0000-7000-8000-000000000003".parse().unwrap();
@@ -1426,7 +1427,7 @@ mod tests {
 			.unwrap();
 			assert_eq!(unversioned["acme/room"].bytes, 100);
 			assert!(matches!(
-				merged.nodes[&(PathOwned::from(".stats/acme/node/a"), None)].reader,
+				merged.nodes[&(Path::new(".stats/acme/node/a").unwrap(), None)].reader,
 				Reader::Active(_)
 			));
 		}
@@ -1441,7 +1442,7 @@ mod tests {
 					.announce(origin::Route::default().with_epoch(epoch_b.clone()))
 					.unwrap();
 				new.publish("acme/room", 30);
-				let pending = origin.consume().request_broadcast(".stats/acme/node/a", None);
+				let pending = origin.consume().request_broadcast(Path::new(".stats/acme/node/a").unwrap(), None);
 				let front = futures::executor::block_on(kio::wait(|waiter| {
 					driver.poll(now, waiter).unwrap();
 					pending.poll_ok(waiter)
@@ -1466,7 +1467,7 @@ mod tests {
 				(new, front, warm, driver)
 			});
 			ready.wait();
-			let key = (PathOwned::from(".stats/acme/node/a"), (!drop_epoch).then_some(epoch_a));
+			let key = (Path::new(".stats/acme/node/a").unwrap(), (!drop_epoch).then_some(epoch_a));
 			let node = merged.nodes.get_mut(&key).unwrap();
 			advance(node, &merged.origin, &merged.config, &name, &Waiter::noop());
 			let old_bytes = node.last.as_ref().unwrap()["acme/room"].bytes;
@@ -1761,8 +1762,8 @@ mod tests {
 		// group.
 		let _fa = feed(&node_a, Tier::default(), "acme", "acme/room", 8).await;
 		let _fb = feed(&node_b, Tier::default(), "acme", "acme/room", 8).await;
-		let _sa = node_a.registry().tier(Tier::default()).session("acme");
-		let _sb = node_b.registry().tier(Tier::default()).session("acme");
+		let _sa = node_a.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let _sb = node_b.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));
@@ -1788,8 +1789,8 @@ mod tests {
 
 		let _fa = feed(&node_a, Tier::default(), "acme", "acme/room", 8).await;
 		let fb = feed(&node_b, Tier::default(), "acme", "acme/room", 8).await;
-		let _sa = node_a.registry().tier(Tier::default()).session("acme");
-		let sb = node_b.registry().tier(Tier::default()).session("acme");
+		let _sa = node_a.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
+		let sb = node_b.registry().tier(Tier::default()).session(Path::new("acme").unwrap());
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));
@@ -1884,7 +1885,7 @@ mod tests {
 	impl TotalsNode {
 		fn new(origin: &origin::Producer, node: &str) -> Self {
 			let source = origin
-				.create_broadcast(format!(".stats/acme/node/{node}").as_str())
+				.create_broadcast(Path::new(format!(".stats/acme/node/{node}").as_str()).unwrap())
 				.expect("create broadcast");
 			source.announce(origin::Route::default()).expect("announce");
 			let track = source
@@ -1938,7 +1939,7 @@ mod tests {
 	/// frames by hand.
 	fn hand_merged<V: Mergeable>() -> (Merged<V>, (PathOwned, Option<Epoch>)) {
 		let origin = produce_origin();
-		let path = PathOwned::from(".stats/acme/node/a");
+		let path = Path::new(".stats/acme/node/a").unwrap();
 		let mut merged = Merged::<V>::new(origin.consume(), &Config::new().with_depth(1), "p".into());
 		merged.apply_announce(
 			moq_net::announce::Announce {
@@ -1960,7 +1961,7 @@ mod tests {
 			value.sessions_failed.transport = failed;
 			value
 		};
-		let path = PathOwned::from(".stats/acme/node/b");
+		let path = Path::new(".stats/acme/node/b").unwrap();
 		merged.apply_announce(
 			moq_net::announce::Announce {
 				prefix: path.clone(),
@@ -2286,7 +2287,7 @@ mod tests {
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));
-		let mut presence = agg.presence("acme");
+		let mut presence = agg.presence(Path::new("acme").unwrap());
 		let grew = |before: &Presence, after: &Presence| !after.regressed(before);
 		read_until(&mut presence.inner, grew, |frame| {
 			frame.get("").is_some_and(|p| p.active() == 1)
@@ -2323,7 +2324,7 @@ mod tests {
 		drive_tick().await;
 
 		let agg = Consumer::new(origin.consume(), Config::new().with_depth(1));
-		let mut prefix = agg.prefix("acme");
+		let mut prefix = agg.prefix(Path::new("acme").unwrap());
 		let grew = |before: &Prefix, after: &Prefix| !after.regressed(before);
 		let live = |count| {
 			move |frame: &PrefixFrame| {

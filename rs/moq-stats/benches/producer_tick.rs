@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use futures::FutureExt;
-use moq_net::{announce, broadcast, origin, stats};
+use moq_net::{Path, announce, broadcast, origin, stats};
 use moq_stats::produce::bench::{Driver, FrameBytes};
 
 struct Counter;
@@ -108,7 +108,7 @@ impl Relay {
 			.iter()
 			.map(|path| {
 				origin
-					.publish(path.as_str(), origin::Route::default())
+					.publish(Path::new(path.as_str()).unwrap(), origin::Route::default())
 					.expect("publish path")
 			})
 			.collect();
@@ -116,8 +116,8 @@ impl Relay {
 		let mut sessions = Vec::with_capacity(tiers);
 		let tier_labels: Vec<_> = (0..tiers)
 			.map(|tier| {
-				let tier = stats::Tier::new(format!("t{tier}"));
-				let session = registry.tier(tier.clone()).session("root");
+				let tier = stats::Tier::new(Path::try_from(format!("t{tier}")).unwrap());
+				let session = registry.tier(tier.clone()).session(Path::new("root").unwrap());
 				let mut cursor = origin.consume().with_stats(session.clone()).announced();
 				while cursor.next().now_or_never().flatten().is_some() {}
 				cursors.push(cursor);
@@ -161,7 +161,7 @@ impl Relay {
 		}
 		for path in self.paths.iter().step_by(self.step) {
 			for tier in &self.tiers {
-				moq_net::fuzz::bump_publisher_bytes(&self.registry, path.as_str(), tier, 1);
+				moq_net::fuzz::bump_publisher_bytes(&self.registry, Path::new(path.as_str()).unwrap(), tier, 1);
 			}
 		}
 	}
@@ -289,7 +289,7 @@ impl Presence {
 		let names: Vec<String> = (0..labels).map(|index| format!("room/{index:05}")).collect();
 		let sessions: Vec<_> = names
 			.iter()
-			.map(|label| registry.tier(stats::Tier::default()).session(label.as_str()))
+			.map(|label| registry.tier(stats::Tier::default()).session(Path::new(label.as_str()).unwrap()))
 			.collect();
 		// One set of wire counters per connection, independently of held presence tracks.
 		let wire = sessions

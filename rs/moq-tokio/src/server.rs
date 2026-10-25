@@ -1899,6 +1899,7 @@ impl Request {
 )]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	/// A dead loop's channel closes before its handle resolves; that close must not
 	/// read as a clean stop, or `accept` would disable the stream arm and hang.
@@ -2470,7 +2471,7 @@ mod tests {
 			quic: None,
 			deadline,
 		}
-		.with_stats(registry.tier(Default::default()).session("room"));
+		.with_stats(registry.tier(Default::default()).session(Path::new("room").unwrap()));
 		let Err(err) = request.ok().await else {
 			panic!("a reply the peer never took completed");
 		};
@@ -2664,7 +2665,7 @@ mod tests {
 		let _ = std::fs::remove_file(&path);
 
 		let origin = crate::origin::spawn();
-		let broadcast = origin.create_broadcast("test").expect("create broadcast");
+		let broadcast = origin.create_broadcast(Path::new("test").unwrap()).expect("create broadcast");
 		broadcast.announce(Default::default()).expect("announce broadcast");
 		let track = broadcast.create_track("video", timed()).expect("create track");
 		let mut group = track.append_group().expect("append group");
@@ -2720,7 +2721,7 @@ mod tests {
 			.expect("origin closed");
 		assert_eq!(update.prefix.as_str(), "test");
 		assert!(active);
-		let broadcast = consumer.request_broadcast("test", None).await.expect("resolve");
+		let broadcast = consumer.request_broadcast(Path::new("test").unwrap(), None).await.expect("resolve");
 
 		let mut track = broadcast
 			.track("video")

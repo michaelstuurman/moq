@@ -1143,13 +1143,14 @@ impl Publish {
 #[cfg(test)]
 mod supervision_tests {
 	use super::*;
+	use moq_net::Path;
 
 	#[tokio::test]
 	async fn a_container_importer_keeps_the_origin_failure_after_other_owners_are_released() {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create((origin.create_broadcast("retained").unwrap(), completion.clone()))
+			.create((origin.create_broadcast(Path::new("retained").unwrap()).unwrap(), completion.clone()))
 			.unwrap();
 		let container = publish
 			.container(
@@ -1173,7 +1174,7 @@ mod supervision_tests {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create((origin.create_broadcast("retained").unwrap(), completion.clone()))
+			.create((origin.create_broadcast(Path::new("retained").unwrap()).unwrap(), completion.clone()))
 			.unwrap();
 		let producer = &publish.broadcast(broadcast).unwrap().producer;
 		// A dynamic handle outlives the consumed broadcast, so only an explicit close ends it.

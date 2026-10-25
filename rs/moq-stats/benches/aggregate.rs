@@ -14,6 +14,7 @@
 	reason = "custom timings measure the real time the work took, not the ambient clock"
 )]
 
+use moq_net::Path;
 use std::time::{Duration, Instant};
 
 use moq_net::{Epoch, origin};
@@ -40,7 +41,7 @@ struct Node {
 impl Node {
 	fn new(origin: &origin::Producer, name: &str) -> Self {
 		let source = origin
-			.create_broadcast(format!(".stats/acme/node/{name}").as_str())
+			.create_broadcast(Path::new(format!(".stats/acme/node/{name}").as_str()).unwrap())
 			.unwrap();
 		let epoch = Epoch::mint();
 		source

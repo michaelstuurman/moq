@@ -694,6 +694,7 @@ fn parse_stream_id(stream_id: Option<&StreamId>) -> Option<(String, ConnectionMo
 	reason = "tests read the host clock directly"
 )]
 mod tests {
+	use moq_net::Path;
 	use std::time::Instant as StdInstant;
 
 	use super::*;
@@ -913,7 +914,7 @@ mod tests {
 
 		let (origin, driver) = moq_net::origin::Producer::new(moq_net::origin::Config::default());
 		tokio::spawn(moq_net::time::run(driver));
-		let mut broadcast = origin.create_broadcast("marker").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("marker").unwrap()).unwrap();
 		broadcast.announce(moq_net::origin::Route::default()).unwrap();
 		let mut catalog = moq_mux::catalog::Producer::new(
 			&mut broadcast,
@@ -964,7 +965,7 @@ mod tests {
 			panic!("m=request must create a subscribe request");
 		};
 		let consumer = origin.consume();
-		let egress = tokio::spawn(async move { subscribe.accept(&consumer, "marker").await });
+		let egress = tokio::spawn(async move { subscribe.accept(&consumer, Path::new("marker").unwrap()).await });
 		let mut receiver = caller.await.unwrap();
 
 		// Three seconds of program, then wait until the receiver is actually playing it
@@ -1023,7 +1024,7 @@ mod tests {
 	impl Instance {
 		fn publish(origin: &moq_net::origin::Producer, track: &str) -> Self {
 			let route = moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint());
-			let mut broadcast = origin.publish("live", route).unwrap();
+			let mut broadcast = origin.publish(Path::new("live").unwrap(), route).unwrap();
 			let mut catalog = moq_mux::catalog::Producer::new(
 				&mut broadcast,
 				moq_mux::catalog::Config::default()
@@ -1102,7 +1103,7 @@ mod tests {
 			subscribe
 				.with_follow(follow)
 				.with_stitch(stitch)
-				.accept(&consumer, "live")
+				.accept(&consumer, Path::new("live").unwrap())
 				.await
 		});
 		(caller.await.unwrap(), task)

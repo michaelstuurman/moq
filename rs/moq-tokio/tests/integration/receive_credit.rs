@@ -12,6 +12,7 @@
 
 #![cfg(feature = "quic")]
 
+use moq_net::Path;
 use std::{process::Stdio, sync::Arc, time::Duration};
 
 use bytes::Bytes;
@@ -78,7 +79,7 @@ async fn setup_through(
 	let version: moq_net::Version = version.parse().expect("version");
 
 	let publisher = moq_tokio::origin::spawn();
-	let broadcast = publisher.create_broadcast("room").expect("broadcast");
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).expect("broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 
 	let mut config = moq_tokio::listen::Config::default();
@@ -166,11 +167,11 @@ fn rand_seed() -> u64 {
 /// Broadcast `room`, once the peer announces it into `origin`.
 async fn room(origin: &moq_net::origin::Producer) -> moq_net::broadcast::Consumer {
 	let consumer = origin.consume();
-	tokio::time::timeout(TIMEOUT, consumer.routed("room"))
+	tokio::time::timeout(TIMEOUT, consumer.routed(Path::new("room").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	tokio::time::timeout(TIMEOUT, consumer.request_broadcast("room", None))
+	tokio::time::timeout(TIMEOUT, consumer.request_broadcast(Path::new("room").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves")
@@ -428,7 +429,7 @@ async fn reversed(version: &str) -> Reversed {
 	);
 
 	let publisher = moq_tokio::origin::spawn();
-	let broadcast = publisher.create_broadcast("room").expect("broadcast");
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).expect("broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let subscriber = moq_tokio::origin::spawn();
 	let session = |conn: driver::Connection| {

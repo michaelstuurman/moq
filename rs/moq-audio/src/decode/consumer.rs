@@ -687,6 +687,7 @@ fn rewind(timestamp: moq_net::Timestamp, frames: usize, sample_rate: u32) -> Res
 
 #[cfg(test)]
 mod tests {
+	use moq_net::Path;
 	async fn next_frame(consumer: &mut Consumer) -> Result<Option<Frame>, Error> {
 		loop {
 			match consumer.read().await? {
@@ -803,7 +804,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn latest_skips_a_warm_copys_backlog() {
 		let publisher = origin(1);
-		let broadcast = publisher.create_broadcast("bcast").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		let track = broadcast
 			.create_track("audio", hang::container::track_info(hang::catalog::PRIORITY.audio))
 			.unwrap();
@@ -831,8 +832,8 @@ mod tests {
 		let relay = origin(2);
 		let _link = link(&publisher, &relay).await;
 		let consumer = relay.consume();
-		consumer.routed("bcast").await.unwrap();
-		let remote = consumer.request_broadcast("bcast", None).await.unwrap();
+		consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
+		let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
 
 		// A first reader warms the relay's copy with every group.
 		{

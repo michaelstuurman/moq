@@ -106,11 +106,12 @@ fn check_resolvable<E>(base: &PathOwned, catalog: &Catalog<E>) -> Result<()> {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use moq_net::Path;
 	use std::str::FromStr;
 
 	#[test]
 	fn echo_prefix_cannot_escape_the_catalog_root() {
-		let base = moq_net::PathOwned::from("room/live");
+		let base = Path::new("room/live").unwrap();
 		let mut catalog = Catalog::<()>::from_str(include_str!("../../fixtures/catalog-stats-echo.json")).unwrap();
 		assert!(check_resolvable(&base, &catalog).is_ok());
 		let echo = catalog.echo.as_mut().unwrap();
@@ -127,7 +128,7 @@ mod test {
 	async fn subscribe_validates_echo_prefix_before_yielding() {
 		for (reference, accepted) in [("viewers", true), ("../../viewers", false)] {
 			let mut info = moq_net::broadcast::Info::new();
-			info.path = "room/live".into();
+			info.path = moq_net::Path::new("room/live").unwrap().to_owned();
 			let broadcast = info.produce();
 			let track = broadcast
 				.create_track(Catalog::DEFAULT_NAME, Catalog::default_track_info())

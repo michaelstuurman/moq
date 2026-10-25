@@ -1101,7 +1101,7 @@ async fn serve_fetch(
 		// NOTE: The auth token is already scoped to the broadcast.
 		// Block until a route covers the broadcast (within the fetch deadline) so
 		// freshly-connected subscribers don't get a spurious 404 before the announce arrives.
-		let broadcast = origin.routed_broadcast("").await.map_err(|_| StatusCode::NOT_FOUND)?;
+		let broadcast = origin.routed_broadcast(moq_net::Path::empty()).await.map_err(|_| StatusCode::NOT_FOUND)?;
 		let sequence = match params.group {
 			FetchGroup::Num(sequence) => Some(sequence),
 			FetchGroup::Latest => None,
@@ -1373,7 +1373,7 @@ mod tests {
 		});
 		let mut cluster = cluster::Cluster::new(crate::cluster::Options::default()).unwrap();
 		cluster.stats = Registry::new(Default::default());
-		let broadcast = cluster.origin.create_broadcast("room").unwrap();
+		let broadcast = cluster.origin.create_broadcast(moq_net::Path::new("room").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let track = broadcast
 			.create_track(
@@ -1440,7 +1440,7 @@ mod tests {
 		assert_eq!(report.traffic.len(), 2);
 		assert_eq!(report.sessions.len(), 2);
 		for label in ["first", "second"] {
-			let tier = Tier::new(label);
+			let tier = Tier::new(moq_net::Path::new(label).unwrap());
 			let traffic = report.traffic.iter().find(|entry| entry.tier == tier).unwrap();
 			assert_eq!(traffic.path.as_str(), "room");
 			assert_eq!(
@@ -1475,7 +1475,7 @@ mod tests {
 		.init("test", &moq_tokio::tls::Connect::default(), false)
 		.unwrap();
 		let cluster = cluster::Cluster::new(crate::cluster::Options::default()).unwrap();
-		let broadcast = cluster.origin.create_broadcast("room").unwrap();
+		let broadcast = cluster.origin.create_broadcast(moq_net::Path::new("room").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let track = broadcast
 			.create_track(

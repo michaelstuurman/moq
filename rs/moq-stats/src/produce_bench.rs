@@ -36,7 +36,7 @@ impl Driver {
 		let task = Task {
 			registry,
 			origin,
-			prefix: PathOwned::from(".stats"),
+			prefix: PathOwned::try_from(".stats").expect("a literal path"),
 			node: None,
 			depth: 0,
 			linger: Duration::from_secs(300),
@@ -59,7 +59,7 @@ impl Driver {
 	/// track.
 	pub fn hold_presence(&mut self, label: &str) -> track::Subscriber {
 		let group = self.drain.groups.get_mut("").expect("the depth 0 broadcast");
-		let label = PathOwned::from(label.to_string());
+		let label = moq_net::Path::new(label).expect("a valid bench label").to_owned();
 		group.adopt_presence(&self.drain.report, label.clone(), PendingPair::default());
 		group.presence[&label].pair.plain.track.subscribe(None)
 	}
@@ -71,7 +71,7 @@ impl Driver {
 		let group = self.drain.groups.get_mut("").expect("the depth 0 broadcast");
 		group.adopt_prefix(
 			&self.drain.report,
-			PathOwned::from(path.to_string()),
+			moq_net::Path::new(path).expect("a valid bench path").to_owned(),
 			PendingPair::default(),
 			tick,
 		);

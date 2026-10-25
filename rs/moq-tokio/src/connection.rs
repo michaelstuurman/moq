@@ -1903,6 +1903,7 @@ fn terminal(state: &State) -> Error {
 )]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	/// A millisecond track: the frames written here carry timestamps.
 	fn timed() -> moq_net::track::Info {
@@ -3261,7 +3262,7 @@ mod tests {
 
 		// Two relays of one fleet, serving the same live broadcast.
 		let origin = crate::origin::spawn();
-		let broadcast = origin.create_broadcast("cam").unwrap();
+		let broadcast = origin.create_broadcast(Path::new("cam").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let track = broadcast.create_track("video", timed()).unwrap();
 		let (addr_a, mut accepted_a, _task_a) = serve(origin.clone()).await;
@@ -3288,7 +3289,7 @@ mod tests {
 		let session_a = tokio::time::timeout(WAIT, accepted_a.recv()).await.unwrap().unwrap();
 
 		let consumer = subscriber.consume();
-		let cam = tokio::time::timeout(WAIT, consumer.routed_broadcast("cam"))
+		let cam = tokio::time::timeout(WAIT, consumer.routed_broadcast(Path::new("cam").unwrap()))
 			.await
 			.unwrap()
 			.unwrap();
@@ -3369,9 +3370,9 @@ mod tests {
 		session.drain().send(moq_net::goaway::Goaway::new()).unwrap();
 
 		// A broadcast announced after the GOAWAY still arrives: the drained session serves.
-		let late = origin.create_broadcast("late").unwrap();
+		let late = origin.create_broadcast(Path::new("late").unwrap()).unwrap();
 		late.announce(Default::default()).unwrap();
-		tokio::time::timeout(WAIT, subscriber.consume().routed("late"))
+		tokio::time::timeout(WAIT, subscriber.consume().routed(Path::new("late").unwrap()))
 			.await
 			.expect("the drained session stopped serving")
 			.unwrap();

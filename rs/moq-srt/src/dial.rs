@@ -215,6 +215,7 @@ impl Mode {
 #[cfg(test)]
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
+	use moq_net::Path;
 	/// Build an origin producer, spawning its driver on the ambient runtime.
 	fn produce_origin() -> moq_net::origin::Producer {
 		let (producer, driver) = moq_net::origin::Producer::new(moq_net::origin::Config::default());
@@ -265,7 +266,7 @@ mod tests {
 				// Runs until the caller disconnects, then closes at once.
 				publish
 					.with_linger(Duration::ZERO)
-					.accept(&origin, "ingested/cam0")
+					.accept(&origin, Path::new("ingested/cam0").unwrap())
 					.await
 					.ok();
 			}
@@ -306,7 +307,7 @@ mod tests {
 			let resource = request.resource().to_string();
 			let is_subscribe = matches!(request, Request::Subscribe(_));
 			if let Request::Subscribe(subscribe) = request {
-				subscribe.accept(&consumer, "live/cam0").await.ok();
+				subscribe.accept(&consumer, Path::new("live/cam0").unwrap()).await.ok();
 			}
 			(resource, is_subscribe)
 		});

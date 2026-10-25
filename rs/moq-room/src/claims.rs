@@ -25,6 +25,7 @@ pub fn claims(room: impl moq_net::AsPath, identity: impl moq_net::AsPath) -> Res
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	fn patterns(texts: &[&str]) -> moq_auth::Patterns {
 		texts.iter().map(|text| text.parse().unwrap()).collect()
@@ -33,7 +34,7 @@ mod tests {
 	#[test]
 	fn rejects_empty_identity() {
 		for identity in ["", "/", "///"] {
-			assert!(matches!(claims("room", identity), Err(crate::Error::EmptyIdentity)));
+			assert!(matches!(claims(Path::new("room").unwrap(), Path::new(identity).unwrap()), Err(crate::Error::EmptyIdentity)));
 		}
 	}
 
@@ -41,7 +42,7 @@ mod tests {
 	fn rejects_wildcard_identity() {
 		for identity in ["*", "alice*", "a/*/b", "**"] {
 			assert!(matches!(
-				claims("room", identity),
+				claims(Path::new("room").unwrap(), Path::new(identity).unwrap()),
 				Err(crate::Error::InvalidIdentity(_))
 			));
 		}
@@ -49,7 +50,7 @@ mod tests {
 
 	#[test]
 	fn claims_root_the_token_and_scope_publish_to_identity() {
-		let c = claims("meet/demo", "alice").unwrap();
+		let c = claims(Path::new("meet/demo").unwrap(), Path::new("alice").unwrap()).unwrap();
 		assert_eq!(c.root, "meet/demo");
 		assert_eq!(c.subscribe, patterns(&["**"]));
 		assert_eq!(c.publish, patterns(&["alice/**"]));
@@ -57,12 +58,12 @@ mod tests {
 
 	#[test]
 	fn claims_does_not_double_a_trailing_slash() {
-		assert_eq!(claims("meet/demo", "alice/").unwrap().publish, patterns(&["alice/**"]));
+		assert_eq!(claims(Path::new("meet/demo").unwrap(), Path::new("alice/").unwrap()).unwrap().publish, patterns(&["alice/**"]));
 	}
 
 	#[test]
 	fn claims_accepts_a_multi_segment_identity() {
-		let c = claims("hang/room", "guest/uuid").unwrap();
+		let c = claims(Path::new("hang/room").unwrap(), Path::new("guest/uuid").unwrap()).unwrap();
 		assert_eq!(c.root, "hang/room");
 		assert_eq!(c.publish, patterns(&["guest/uuid/**"]));
 	}

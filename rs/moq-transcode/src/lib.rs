@@ -224,6 +224,7 @@ impl Drop for Transcoder {
 #[cfg(test)]
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
+	use moq_net::Path;
 
 	use super::*;
 
@@ -812,7 +813,7 @@ mod tests {
 		// the output must be minted through an origin: a standalone producer has no path, and
 		// `..` from it would escape, failing the catalog read below.
 		let origin = moq_tokio::origin::spawn();
-		let output = origin.create_broadcast("room/transcode").unwrap();
+		let output = origin.create_broadcast(Path::new("room/transcode").unwrap()).unwrap();
 		let consumer = output.consume();
 		let transcoder = tokio::spawn(run(source.broadcast.consume(), output, config));
 

@@ -281,7 +281,7 @@ impl Subscribe {
 		catalog: CatalogFormat,
 		args: SubscribeArgs,
 	) -> anyhow::Result<Self> {
-		let path = moq_net::Path::new(path).to_owned();
+		let path = moq_net::Path::new(path)?.to_owned();
 		let broadcast = origin
 			.request_broadcast(&path, None)
 			.await

@@ -19,6 +19,7 @@
 //!
 //! Run with `cargo bench -p moq-mux --bench catalog`.
 
+use moq_net::Path;
 use std::hint::black_box;
 use std::task::Poll;
 use std::time::Duration;
@@ -49,7 +50,7 @@ struct Fanout {
 impl Fanout {
 	async fn new(tracks: usize, subscribers: usize, references: bool) -> Self {
 		let mut info = moq_net::broadcast::Info::new();
-		info.path = "room/catalog".into();
+		info.path = Path::new("room/catalog").unwrap();
 		let mut broadcast = info.produce();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 		let tracks = (0..tracks)
@@ -111,7 +112,7 @@ impl Fanout {
 					black_box(rendition.jitter);
 					if let Some(reference) = &rendition.broadcast {
 						assert!(
-							moq_net::Path::new("room/catalog")
+							moq_net::Path::new("room/catalog").unwrap()
 								.try_resolve(reference)
 								.unwrap()
 								.as_str()

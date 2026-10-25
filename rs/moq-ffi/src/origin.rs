@@ -401,6 +401,7 @@ impl MoqOriginProducer {
 	pub fn dynamic(&self, prefix: String) -> Result<Arc<MoqOriginDynamic>, MoqError> {
 		let _guard = crate::ffi::enter();
 		self.inner.driver.check()?;
+		let prefix = moq_net::PathOwned::try_from(prefix)?;
 		let result = self.inner.dynamic(prefix);
 		self.inner.driver.check()?;
 		let dynamic = result?;
@@ -428,7 +429,8 @@ impl MoqOriginProducer {
 		let _guard = crate::ffi::enter();
 		self.inner.driver.check()?;
 		// Surfaces Error::Unauthorized (out of scope) via the MoqError::Protocol conversion.
-		let result = self.inner.create_broadcast(path.as_str());
+		let path = moq_net::Path::new(&path)?;
+		let result = self.inner.create_broadcast(path);
 		self.inner.driver.check()?;
 		let broadcast = result?;
 		Ok(Arc::new(MoqBroadcastProducer::from_inner(
@@ -451,7 +453,7 @@ impl MoqOriginConsumer {
 		let filter = filter.rooted(&config.prefix)?;
 		let origin = self
 			.inner
-			.scope("", &moq_net::Patterns::from(filter))?
+			.scope(moq_net::Path::empty(), &moq_net::Patterns::from(filter))?
 			.with_hidden(config.hidden);
 		Ok(Arc::new(MoqAnnounceConsumer {
 			task: Task::new(Announced {
@@ -472,7 +474,7 @@ impl MoqOriginConsumer {
 		self.driver.check()?;
 		// Following checks the permission eagerly, so an unreachable path fails here rather
 		// than surfacing later as a `Closed` the caller can't tell from the origin ending.
-		let inner = self.inner.announced_broadcast(path.as_str(), None)?;
+		let inner = self.inner.announced_broadcast(moq_net::Path::new(&path)?, None)?;
 
 		Ok(Arc::new(MoqAnnouncedBroadcast {
 			task: Task::new(AnnouncedBroadcast {
@@ -499,7 +501,7 @@ impl MoqOriginConsumer {
 	pub async fn request_broadcast(&self, path: String) -> Result<Arc<MoqBroadcastConsumer>, MoqError> {
 		let broadcast = self
 			.driver
-			.watch(async { Ok(self.inner.request_broadcast(path.as_str(), None).await?) })
+			.watch(async { Ok(self.inner.request_broadcast(moq_net::Path::new(&path)?, None).await?) })
 			.await?;
 		Ok(Arc::new(MoqBroadcastConsumer::routed(
 			broadcast,

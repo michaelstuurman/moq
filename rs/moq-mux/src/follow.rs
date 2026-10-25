@@ -112,6 +112,7 @@ impl Instances {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 	use crate::source::{produce_origin, resolved};
 	use moq_net::path::Relative;
 
@@ -153,13 +154,13 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_follow_starts_late_and_survives_an_end() {
 		let origin = produce_origin();
-		let _catalog = origin.publish("a/pub", Default::default()).unwrap();
+		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let mut follow = source.follow(Some(&Relative::new("./source")), None).unwrap();
 		quiet(&mut follow).await;
 
-		let first = origin.publish("a/source", Default::default()).unwrap();
+		let first = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
 		let started = followed(&mut follow).await.expect("a start");
 		assert_eq!(started.info().path.as_str(), "a/source");
 
@@ -167,7 +168,7 @@ mod tests {
 		assert!(followed(&mut follow).await.is_none(), "an end");
 		quiet(&mut follow).await;
 
-		let _second = origin.publish("a/source", Default::default()).unwrap();
+		let _second = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
 		let restarted = followed(&mut follow).await.expect("a start");
 		assert!(!restarted.is_clone(&started));
 	}
@@ -178,8 +179,8 @@ mod tests {
 	async fn a_follow_restarts_only_without_an_epoch() {
 		let origin = produce_origin();
 		let (old_epoch, new_epoch) = (moq_net::Epoch::mint(), moq_net::Epoch::mint());
-		let _catalog = origin.publish("a/pub", Default::default()).unwrap();
-		let _old = origin.publish("a/source", route(&old_epoch)).unwrap();
+		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
+		let _old = origin.publish(Path::new("a/source").unwrap(), route(&old_epoch)).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let rel = Relative::new("./source");
@@ -188,7 +189,7 @@ mod tests {
 		let old = followed(&mut any).await.unwrap();
 		assert!(followed(&mut named).await.unwrap().is_clone(&old));
 
-		let new = origin.publish("a/source", route(&new_epoch)).unwrap();
+		let new = origin.publish(Path::new("a/source").unwrap(), route(&new_epoch)).unwrap();
 		let replaced = followed(&mut any).await.unwrap();
 		assert_eq!(replaced.info().epoch.as_ref(), Some(&new_epoch));
 		assert!(followed(&mut named).await.is_none(), "another epoch ends it");
@@ -208,13 +209,13 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_follow_reads_an_epochless_route_with_an_epoch() {
 		let origin = produce_origin();
-		let _catalog = origin.publish("a/pub", Default::default()).unwrap();
+		let _catalog = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let mut named = source
 			.follow(Some(&Relative::new("./source")), Some(&moq_net::Epoch::mint()))
 			.unwrap();
-		let _sibling = origin.publish("a/source", Default::default()).unwrap();
+		let _sibling = origin.publish(Path::new("a/source").unwrap(), Default::default()).unwrap();
 		assert!(followed(&mut named).await.is_some());
 	}
 
@@ -222,13 +223,13 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_follow_of_the_catalog_keeps_its_instance() {
 		let origin = produce_origin();
-		let old = origin.publish("a/pub", Default::default()).unwrap();
+		let old = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
 		let mut follow = source.follow(Some(&Relative::new("./pub")), None).unwrap();
 		assert!(followed(&mut follow).await.unwrap().is_clone(&source.broadcast()));
 
-		let _new = origin.publish("a/pub", Default::default()).unwrap();
+		let _new = origin.publish(Path::new("a/pub").unwrap(), Default::default()).unwrap();
 		quiet(&mut follow).await;
 		// Its end is the catalog's, which the catalog's reader sees.
 		drop(old);

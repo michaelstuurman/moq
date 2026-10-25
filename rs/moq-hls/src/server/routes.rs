@@ -220,6 +220,7 @@ fn server_error(err: crate::Error) -> Response {
 )]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	/// A millisecond track: the frames written here carry timestamps.
 	fn timed() -> moq_net::track::Info {
@@ -401,7 +402,7 @@ mod tests {
 	#[tokio::test]
 	async fn respond_serves_a_route_rewritten_into_scope() {
 		let pair = lite_pair().await;
-		let mut broadcast = pair.pub_origin.create_broadcast("live").expect("publish");
+		let mut broadcast = pair.pub_origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (_catalog, _registration, _track, mut media) = publish_video(&mut broadcast, video_config(), timed());
 		write_three_gops(&mut media);
@@ -445,7 +446,7 @@ mod tests {
 			"moq-lite-05",
 		] {
 			let pair = lite_pair_on(version, moq_net::Hop::random()).await;
-			let mut broadcast = pair.pub_origin.create_broadcast("live").expect("publish");
+			let mut broadcast = pair.pub_origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 			broadcast.announce(Default::default()).expect("announce");
 			// A hinted timeline is declared before any media, so the rendition is listed early.
 			let hinted = moq_mux::timeline::Config::default().with_duration_hint(Duration::from_secs(2));
@@ -466,11 +467,11 @@ mod tests {
 			drop(reserved);
 
 			let origin = pair.sub_origin.consume();
-			tokio::time::timeout(TIMEOUT, origin.routed("live"))
+			tokio::time::timeout(TIMEOUT, origin.routed(Path::new("live").unwrap()))
 				.await
 				.expect("announce timed out")
 				.expect("routed");
-			let remote = tokio::time::timeout(TIMEOUT, origin.request_broadcast("live", None))
+			let remote = tokio::time::timeout(TIMEOUT, origin.request_broadcast(Path::new("live").unwrap(), None))
 				.await
 				.expect("request timed out")
 				.expect("remote broadcast");
@@ -521,7 +522,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn master_answers_404_until_a_rendition_can_start() {
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live").expect("publish");
+		let mut broadcast = origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let (_catalog, _registration, _track, mut media) = publish_video(&mut broadcast, video_config(), timed());
 
@@ -538,7 +539,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_restart_lists_the_replacement_under_its_own_urls() {
 		let origin = moq_tokio::origin::spawn();
-		let mut old = origin.create_broadcast("live").expect("publish");
+		let mut old = origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		old.announce(run()).expect("announce");
 		let (old_catalog, _, old_track, mut old_media) = publish_video(&mut old, video_config(), timed());
 		write_three_gops(&mut old_media);
@@ -550,7 +551,7 @@ mod tests {
 		wait_listed(&app, &old_playlist, "seg/656e3d1b.0.m4s").await;
 
 		let next = moq_net::Epoch::mint();
-		let mut new = origin.create_broadcast("live").expect("publish");
+		let mut new = origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		new.announce(moq_net::origin::Route::default().with_epoch(next.clone()))
 			.expect("announce");
 		let (_new_catalog, _, _new_track, mut new_media) = publish_video(&mut new, video_config(), timed());
@@ -584,7 +585,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_failed_timeline_answers_an_uncacheable_error() {
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live").expect("publish");
+		let mut broadcast = origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 		let name = hang::timeline::default_name("video0");
@@ -637,7 +638,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn serves_only_versioned_media_urls() {
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live").expect("publish");
+		let mut broadcast = origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let (_catalog, _registration, _track, mut media) = publish_video(&mut broadcast, video_config(), timed());
 		write_three_gops(&mut media);
@@ -712,7 +713,7 @@ mod tests {
 			config
 		})
 		.await;
-		let mut broadcast = pair.pub_origin.create_broadcast("live").expect("publish");
+		let mut broadcast = pair.pub_origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (_catalog, _registration, _track, mut media) = publish_video(&mut broadcast, video_config(), timed());
 		write_three_gops(&mut media);
@@ -737,7 +738,7 @@ mod tests {
 	#[tokio::test]
 	async fn a_disconnected_publisher_on_the_catalog_broadcast_answers_404() {
 		let pair = lite_pair().await;
-		let mut broadcast = pair.pub_origin.create_broadcast("live").expect("publish");
+		let mut broadcast = pair.pub_origin.create_broadcast(Path::new("live").unwrap()).expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (catalog, registration, track, mut media) = publish_video(&mut broadcast, video_config(), timed());
 		write_three_gops(&mut media);
@@ -752,7 +753,7 @@ mod tests {
 		)
 		.await;
 
-		let remote = tokio::time::timeout(TIMEOUT, pair.sub_origin.consume().request_broadcast("live", None))
+		let remote = tokio::time::timeout(TIMEOUT, pair.sub_origin.consume().request_broadcast(Path::new("live").unwrap(), None))
 			.await
 			.expect("remote resolve timed out")
 			.expect("remote broadcast");
@@ -773,7 +774,7 @@ mod tests {
 	#[tokio::test]
 	async fn lookups_ride_the_servers_scope_watch() {
 		let pair = lite_pair().await;
-		let other = pair.pub_origin.create_broadcast("room/other").expect("other");
+		let other = pair.pub_origin.create_broadcast(Path::new("room/other").unwrap()).expect("other");
 		other.announce(Default::default()).expect("announce other");
 
 		let server = Server::new(pair.sub_origin.consume(), crate::export::Config::default());
@@ -785,7 +786,7 @@ mod tests {
 		// Nothing watches `room/other` on its own, yet the synced lookup already discovered it.
 		pair.sub_origin
 			.consume()
-			.request_broadcast("room/other", None)
+			.request_broadcast(Path::new("room/other").unwrap(), None)
 			.await
 			.expect("discovered through the scope watch");
 
@@ -808,13 +809,13 @@ mod tests {
 			"moq-lite-07-wip",
 		] {
 			let pair = lite_pair_on(version, moq_net::origin::Config::default()).await;
-			let catalog = pair.pub_origin.create_broadcast("room/live").expect("catalog");
+			let catalog = pair.pub_origin.create_broadcast(Path::new("room/live").unwrap()).expect("catalog");
 			catalog.announce(Default::default()).expect("announce catalog");
-			let media = pair.pub_origin.create_broadcast("room/source").expect("media");
+			let media = pair.pub_origin.create_broadcast(Path::new("room/source").unwrap()).expect("media");
 			media.announce(Default::default()).expect("announce media");
 
 			let origin = pair.sub_origin.consume();
-			let broadcast = tokio::time::timeout(TIMEOUT, origin.routed_broadcast("room/live"))
+			let broadcast = tokio::time::timeout(TIMEOUT, origin.routed_broadcast(Path::new("room/live").unwrap()))
 				.await
 				.expect("catalog resolve timed out")
 				.expect("catalog broadcast");
@@ -836,11 +837,11 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn denied_sibling_media_answers_403_without_poisoning_allowed_siblings() {
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("room/live").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("room/live").unwrap()).unwrap();
 		broadcast.announce(run()).unwrap();
-		let source = origin.create_broadcast("room/source").unwrap();
+		let source = origin.create_broadcast(Path::new("room/source").unwrap()).unwrap();
 		source.announce(Default::default()).unwrap();
-		let secret = origin.create_broadcast("room/secret").unwrap();
+		let secret = origin.create_broadcast(Path::new("room/secret").unwrap()).unwrap();
 		secret.announce(Default::default()).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 		let reserved = catalog.reserve();
@@ -870,7 +871,7 @@ mod tests {
 			.into_iter()
 			.map(|path| path.parse::<moq_net::Pattern>().unwrap())
 			.collect();
-		let restricted = origin.consume().scope("", &patterns).unwrap();
+		let restricted = origin.consume().scope(moq_net::Path::empty(), &patterns).unwrap();
 		let server = Server::new(restricted, Default::default());
 		let broadcaster = server.broadcaster("room/live").await.unwrap();
 		broadcaster.ready().await;
@@ -931,7 +932,7 @@ mod tests {
 		let only_catalog = origin
 			.consume()
 			.scope(
-				"",
+				moq_net::Path::empty(),
 				&moq_net::Patterns::from("room/live".parse::<moq_net::Pattern>().unwrap()),
 			)
 			.unwrap();
@@ -954,11 +955,11 @@ mod tests {
 	#[tokio::test]
 	async fn a_disconnected_sibling_publisher_answers_404() {
 		let pair = lite_pair().await;
-		let mut catalog_broadcast = pair.pub_origin.create_broadcast("room/live").expect("catalog");
+		let mut catalog_broadcast = pair.pub_origin.create_broadcast(Path::new("room/live").unwrap()).expect("catalog");
 		catalog_broadcast
 			.announce(Default::default())
 			.expect("announce catalog");
-		let media_broadcast = pair.pub_origin.create_broadcast("room/source").expect("media");
+		let media_broadcast = pair.pub_origin.create_broadcast(Path::new("room/source").unwrap()).expect("media");
 		media_broadcast.announce(Default::default()).expect("announce media");
 
 		let catalog =
@@ -988,7 +989,7 @@ mod tests {
 		.await;
 
 		// Waited on rather than requested once: a client only asks about what it watches.
-		let remote_media = tokio::time::timeout(TIMEOUT, pair.sub_origin.consume().routed_broadcast("room/source"))
+		let remote_media = tokio::time::timeout(TIMEOUT, pair.sub_origin.consume().routed_broadcast(Path::new("room/source").unwrap()))
 			.await
 			.expect("sibling resolve timed out")
 			.expect("sibling broadcast");

@@ -2,6 +2,7 @@
 //! `export report` and `export echo` sinks: each report counts what its side carried.
 #![cfg(unix)]
 
+use hang::moq_net::Path;
 use std::collections::BTreeMap;
 use std::process::Stdio;
 use std::time::Duration;
@@ -388,7 +389,7 @@ async fn export_echo_reports_what_the_export_reads() {
 	let (expected, _) = written(CLIP);
 
 	// A publisher soliciting feedback under `viewers`, a sibling of its broadcast.
-	let mut broadcast = relay.origin.create_broadcast("demo").expect("create the broadcast");
+	let mut broadcast = relay.origin.create_broadcast(Path::new("demo").unwrap()).expect("create the broadcast");
 	let config = moq_mux::catalog::Config::default()
 		.with_max_age(Some(Duration::from_secs(1)))
 		.with_catalog(moq_mux::catalog::hang::Catalog::<ts::Ext>::default());

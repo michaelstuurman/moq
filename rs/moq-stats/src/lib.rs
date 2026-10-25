@@ -239,12 +239,8 @@ fn parse_keyed_track(name: &str, kind: &str) -> Option<(PathOwned, Encoding)> {
 		"" => "",
 		rest => rest.strip_suffix('/').filter(|key| !key.is_empty())?,
 	};
-	// Only a normalized key round-trips, so each key has exactly one name.
-	let path = Path::new(key);
-	if path.as_str() != key {
-		return None;
-	}
-	Some((path.to_owned(), encoding))
+	// Only a valid key round-trips, so each key has exactly one name.
+	Some((Path::new(key).ok()?.to_owned(), encoding))
 }
 
 /// A parsed stats broadcast path: `<prefix>[/<group>]/node[/<node>]`.
@@ -294,8 +290,8 @@ pub fn parse_node_path(prefix: impl AsPath, depth: usize, path: impl AsPath) -> 
 
 	let node = segments.collect::<Vec<_>>().join("/");
 	Some(NodePath {
-		group: Path::new(&group.join("/")).to_owned(),
-		node: Path::new(&node).to_owned(),
+		group: PathOwned::try_from(group.join("/")).ok()?,
+		node: PathOwned::try_from(node).ok()?,
 	})
 }
 
@@ -321,19 +317,19 @@ mod tests {
 
 	#[test]
 	fn parse_node_path_variants() {
-		let parse = |depth, path| parse_node_path(".stats", depth, path);
+		let parse = |depth, path| parse_node_path(Path::new(".stats").unwrap(), depth, Path::new(path).unwrap());
 
 		// Depth 0: no group segment.
 		assert_eq!(
 			parse(0, ".stats/node/sjc"),
 			Some(NodePath {
 				group: Path::empty().to_owned(),
-				node: Path::new("sjc").to_owned(),
+				node: Path::new("sjc").unwrap().to_owned(),
 			})
 		);
 		assert_eq!(
 			parse(0, ".stats/node/sjc/1").unwrap().node,
-			Path::new("sjc/1").to_owned(),
+			Path::new("sjc/1").unwrap().to_owned(),
 			"multi-segment node"
 		);
 		assert_eq!(
@@ -349,8 +345,8 @@ mod tests {
 		assert_eq!(
 			parse(1, ".stats/acme/node/sjc"),
 			Some(NodePath {
-				group: Path::new("acme").to_owned(),
-				node: Path::new("sjc").to_owned(),
+				group: Path::new("acme").unwrap().to_owned(),
+				node: Path::new("sjc").unwrap().to_owned(),
 			})
 		);
 		// A shorter broadcast path yields a shorter group; still parses.
@@ -365,7 +361,7 @@ mod tests {
 	#[test]
 	fn track_names() {
 		let default = Tier::default();
-		let regional = Tier::new("region/sjc");
+		let regional = Tier::new(Path::new("region/sjc").unwrap());
 		assert_eq!(
 			traffic_track(&default, Role::Publisher, Encoding::Plain),
 			"publisher.json"
@@ -385,20 +381,20 @@ mod tests {
 		);
 		assert_eq!(totals_track(Encoding::Plain), "totals.json");
 		assert_eq!(totals_track(Encoding::Compressed), "totals.json.z");
-		assert_eq!(presence_track("acme/live", Encoding::Plain), "acme/live/presence.json");
-		assert_eq!(presence_track("", Encoding::Compressed), "presence.json.z");
-		assert_eq!(prefix_track("acme/live", Encoding::Plain), "acme/live/prefix.json");
-		assert_eq!(prefix_track("", Encoding::Compressed), "prefix.json.z");
+		assert_eq!(presence_track(Path::new("acme/live").unwrap(), Encoding::Plain), "acme/live/presence.json");
+		assert_eq!(presence_track(Path::new("").unwrap(), Encoding::Compressed), "presence.json.z");
+		assert_eq!(prefix_track(Path::new("acme/live").unwrap(), Encoding::Plain), "acme/live/prefix.json");
+		assert_eq!(prefix_track(Path::new("").unwrap(), Encoding::Compressed), "prefix.json.z");
 	}
 
 	#[test]
 	fn presence_track_names_round_trip() {
 		for label in ["", "acme", "acme/live", "a.json", "x/presence.json", "publisher", "z"] {
 			for encoding in [Encoding::Plain, Encoding::Compressed] {
-				let name = presence_track(label, encoding);
+				let name = presence_track(Path::new(label).unwrap(), encoding);
 				assert_eq!(
 					parse_presence_track(&name),
-					Some((PathOwned::from(label), encoding)),
+					Some((Path::new(label).unwrap(), encoding)),
 					"{name}"
 				);
 			}
@@ -435,10 +431,10 @@ mod tests {
 			"publisher",
 		] {
 			for encoding in [Encoding::Plain, Encoding::Compressed] {
-				let name = prefix_track(path, encoding);
+				let name = prefix_track(Path::new(path).unwrap(), encoding);
 				assert_eq!(
 					parse_prefix_track(&name),
-					Some((PathOwned::from(path), encoding)),
+					Some((Path::new(path).unwrap(), encoding)),
 					"{name}"
 				);
 				assert_eq!(parse_presence_track(&name), None, "{name} is not a presence track");

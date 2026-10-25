@@ -602,6 +602,7 @@ pub fn dispatch(rtc: &mut str0m::Rtc, request: WriteRequest, wallclock: Instant)
 #[cfg(test)]
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
+	use moq_net::Path;
 	/// Build an origin producer, spawning its driver on the ambient runtime.
 	fn produce_origin() -> moq_net::origin::Producer {
 		let (producer, driver) = moq_net::origin::Producer::new(moq_net::origin::Config::default());
@@ -622,7 +623,7 @@ mod tests {
 	#[test]
 	fn catalog_codecs_ignores_codecs_available_only_via_escaping_references() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast("a/pub").unwrap().consume());
+		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
 		let mut catalog = Catalog::default();
 
 		let mut escaped_audio = AudioConfig::new(AudioCodec::Opus, 48_000, 2);
@@ -657,7 +658,7 @@ mod tests {
 	#[test]
 	fn picks_the_best_video_rendition_whatever_its_name() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast("a/pub").unwrap().consume());
+		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
 		let mut catalog = Catalog::default();
 
 		let rendition = |height: u32| {
@@ -697,7 +698,7 @@ mod tests {
 	#[test]
 	fn picks_the_preferred_codec_whatever_the_peer_offers_first() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast("a/pub").unwrap().consume());
+		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
 		let mut catalog = Catalog::default();
 
 		// An H.265 source beside its own H.264 compatibility transcode, which has the higher bitrate.
@@ -747,7 +748,7 @@ mod tests {
 	#[test]
 	fn picks_the_best_opus_rendition_whatever_its_name() {
 		let origin = produce_origin();
-		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast("a/pub").unwrap().consume());
+		let source = moq_mux::Source::new(origin.consume(), origin.create_broadcast(Path::new("a/pub").unwrap()).unwrap().consume());
 		let mut catalog = Catalog::default();
 
 		let opus = |bitrate: Option<u64>| {
@@ -900,8 +901,8 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_moved_rendition_follows_its_new_track() {
 		let origin = produce_origin();
-		let mut live = origin.publish("live", Default::default()).unwrap();
-		let mut other = origin.publish("other", Default::default()).unwrap();
+		let mut live = origin.publish(Path::new("live").unwrap(), Default::default()).unwrap();
+		let mut other = origin.publish(Path::new("other").unwrap(), Default::default()).unwrap();
 		let mut catalog = moq_mux::catalog::Producer::new(&mut live, moq_mux::catalog::Config::default()).unwrap();
 		let track = |broadcast: &mut moq_net::broadcast::Producer, name: &str| {
 			let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI);
@@ -927,7 +928,7 @@ mod tests {
 		};
 		point(&mut catalog, "a", None);
 
-		let broadcast = origin.consume().request_broadcast("live", None).await.unwrap();
+		let broadcast = origin.consume().request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
 		let mut egress = EgressSource::new(moq_mux::Source::new(origin.consume(), broadcast))
 			.await
 			.unwrap();
@@ -1242,7 +1243,7 @@ mod tests {
 		assert_eq!(written(&mut writes).await.as_ref(), b"low-0");
 
 		// The better rendition lives in a broadcast whose request is never answered.
-		let _handler = origin.dynamic("missing").unwrap();
+		let _handler = origin.dynamic(Path::new("missing").unwrap()).unwrap();
 		let mut config = VideoConfig::new(VideoCodec::VP8);
 		config.container = hang::catalog::Container::Legacy;
 		config.coded_width = Some(1920);

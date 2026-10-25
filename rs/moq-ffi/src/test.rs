@@ -1,3 +1,4 @@
+use moq_net::Path;
 use super::origin::*;
 use super::producer::*;
 use super::server::{MoqServer, MoqServerConfig, MoqServerTls};
@@ -4296,7 +4297,7 @@ async fn cancel_retracts_the_route_synchronously() {
 	let dynamic = serve(&origin, "");
 	let inner = origin.inner().consume();
 
-	let queued = inner.request_broadcast("x", None).into_inner();
+	let queued = inner.request_broadcast(Path::new("x").unwrap(), None).into_inner();
 	assert!(
 		queued.poll_ok(&kio::Waiter::noop()).is_pending(),
 		"the route must serve while the handler lives"
@@ -4304,7 +4305,7 @@ async fn cancel_retracts_the_route_synchronously() {
 	drop(queued);
 
 	dynamic.cancel();
-	let verdict = inner.request_broadcast("y", None).into_inner();
+	let verdict = inner.request_broadcast(Path::new("y").unwrap(), None).into_inner();
 	match verdict.poll_ok(&kio::Waiter::noop()) {
 		std::task::Poll::Ready(Err(moq_net::Error::Unroutable)) => {}
 		std::task::Poll::Ready(Err(err)) => panic!("unexpected error: {err}"),
@@ -5418,7 +5419,7 @@ async fn announced_broadcast_hands_out_the_instance_again_after_an_end() {
 	let dynamic = origin
 		.inner()
 		.inner
-		.dynamic_route("", route.clone().try_into().unwrap())
+		.dynamic_route(moq_net::Path::empty(), route.clone().try_into().unwrap())
 		.unwrap();
 	broadcast.unannounce().unwrap();
 	let again = tokio::spawn(async move { followed.available().await });

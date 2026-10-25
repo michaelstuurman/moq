@@ -243,7 +243,8 @@ async fn run(config: &Config) -> Result<()> {
 	let viewer_prefix = config.prefix_viewer.as_deref().unwrap_or(&default_viewer_prefix);
 
 	// Create the broadcast on the publish origin and announce its path.
-	let broadcast_path = format!("{game_prefix}/{name}");
+	let broadcast_path =
+		moq_net::PathOwned::try_from(format!("{game_prefix}/{name}")).context("invalid game broadcast path")?;
 	let mut broadcast = publish_origin
 		.create_broadcast(&broadcast_path)
 		.context("failed to create broadcast")?;
@@ -255,7 +256,8 @@ async fn run(config: &Config) -> Result<()> {
 
 	// Consume origin: viewer broadcasts under the viewer prefix.
 	// JS publishes viewer feedback at "{viewer_prefix}/{name}/{viewerId}"
-	let viewer_path = format!("{viewer_prefix}/{name}");
+	let viewer_path =
+		moq_net::PathOwned::try_from(format!("{viewer_prefix}/{name}")).context("invalid viewer prefix")?;
 	let consume_origin = moq_tokio::origin::spawn();
 	let viewer_consumer = consume_origin
 		.scope(&viewer_path, &moq_net::Patterns::from(moq_net::Pattern::all()))

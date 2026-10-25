@@ -433,28 +433,46 @@ impl Token {
 	/// The token keeps the patterns the grant yields: the origin scopes by any
 	/// pattern union, so `alice`, `*/chat`, and `alice/**` each mean exactly what
 	/// they say.
-	pub fn new(path: &str, grant: &Grant) -> Self {
-		let root = grant.root.as_deref().unwrap_or(path);
-		Self {
+	///
+	/// The dialed path is a URL path, whose one leading `/` is syntax rather than a
+	/// segment. An empty segment anywhere else is refused, not collapsed: a malformed
+	/// dialed path with [`Error::Request`], and a malformed grant with [`Error::Unavailable`].
+	pub fn new(path: &str, grant: &Grant) -> Result<Self, Error> {
+		let granted = |field: &str, value: &str| {
+			Path::new(value)
+				.map(|path| path.to_owned())
+				.map_err(|err| Error::Unavailable(format!("grant {field} {value:?}: {err}")))
+		};
+		let root = match &grant.root {
+			Some(root) => granted("root", root)?,
+			None => {
+				let dialed = path.strip_prefix('/').unwrap_or(path);
+				Path::new(dialed)
+					.map_err(|err| Error::Request(format!("path {path:?}: {err}")))?
+					.to_owned()
+			}
+		};
+		Ok(Self {
 			path: path.to_string(),
-			root: Path::new(root).to_owned(),
+			root,
 			mounts: grant
 				.mounts
 				.iter()
-				.map(|(at, target)| (Path::new(at).to_owned(), Path::new(target).to_owned()))
-				.collect(),
+				.map(|(at, target)| Ok((granted("mount", at)?, granted("mount", target)?)))
+				.collect::<Result<_, Error>>()?,
 			subscribe: grant.subscribe.clone(),
 			publish: grant.publish.clone(),
-			tier: crate::configured_tier(grant.tier.clone()),
-			label: Path::new(grant.label.as_deref().unwrap_or_default()).to_owned(),
+			tier: crate::configured_tier(grant.tier.clone())
+				.map_err(|err| Error::Unavailable(format!("grant tier: {err}")))?,
+			label: granted("label", grant.label.as_deref().unwrap_or_default())?,
 			peer: grant.peer,
 			upstream: grant.upstream,
-		}
+		})
 	}
 
 	/// Rebuild the token from a re-checked grant, relative to the same dialed path,
 	/// so a grant that drops its `root` alias resolves back to what was dialed.
-	pub(crate) fn recheck(&self, grant: &Grant) -> Self {
+	pub(crate) fn recheck(&self, grant: &Grant) -> Result<Self, Error> {
 		Self::new(&self.path, grant)
 	}
 
@@ -499,23 +517,23 @@ struct Source {
 impl Lease {
 	/// Hold `consumer` for a session that dialed `path`, reducing its grant to
 	/// what the origin scopes by.
-	pub fn new(path: &str, consumer: lease::Consumer) -> Self {
+	pub fn new(path: &str, consumer: lease::Consumer) -> Result<Self, Error> {
 		let grant = consumer.grant();
 		Self::granted(path, &grant, consumer)
 	}
 
 	/// Hold `consumer` with its token built from `grant`, a snapshot of it. A later
 	/// update still reaches [`Self::ended`] as a change, which re-checks it.
-	fn granted(path: &str, grant: &Grant, consumer: lease::Consumer) -> Self {
-		Self {
+	fn granted(path: &str, grant: &Grant, consumer: lease::Consumer) -> Result<Self, Error> {
+		Ok(Self {
 			refresh: None,
 			source: None,
-			token: Token::new(path, grant),
+			token: Token::new(path, grant)?,
 			expires: grant.deadline(),
 			consumer,
 			session: None,
 			stats: Default::default(),
-		}
+		})
 	}
 
 	/// Take AUTH decisions before the protocol driver chooses its default acceptor.
@@ -597,7 +615,9 @@ impl Lease {
 						if let Err(reason) = still_valid(&grant) {
 							return reason;
 						}
-						let fresh = self.token.recheck(&grant);
+						let Ok(fresh) = self.token.recheck(&grant) else {
+							return "grant names an invalid path".into();
+						};
 						if fresh.root != self.token.root {
 							return lease::Reason::Narrowed;
 						}
@@ -869,7 +889,7 @@ impl Auth {
 		// Build the token from the grant the admission checked: re-reading it could
 		// pick up an update that skipped the check.
 		let (consumer, grant) = self.decide(request.clone()).await?;
-		let mut lease = Lease::granted(&request.path, &grant, consumer);
+		let mut lease = Lease::granted(&request.path, &grant, consumer)?;
 		lease.source = Some(Source {
 			auth: self.clone(),
 			request,
@@ -897,7 +917,7 @@ impl Auth {
 
 	/// Admit a session on a grant decided locally, bypassing the server: the LAN
 	/// mesh credential, which the relay minted for itself.
-	pub(crate) fn admit_fixed(&self, path: &str, grant: Grant) -> Lease {
+	pub(crate) fn admit_fixed(&self, path: &str, grant: Grant) -> Result<Lease, Error> {
 		Lease::new(path, lease::Consumer::fixed(grant))
 	}
 }
@@ -1097,7 +1117,7 @@ mod tests {
 	async fn an_invalid_label_at_revalidation_ends_the_lease() {
 		let grant = Grant::new(moq_net::Pattern::all(), moq_net::Pattern::all());
 		let (producer, consumer) = lease::Producer::new(grant.clone());
-		let mut lease = Lease::new("/room", consumer);
+		let mut lease = Lease::new("/room", consumer).unwrap();
 		let mut wildcard = grant;
 		wildcard.label = Some("project/*".into());
 		producer.update(wildcard);
@@ -1197,7 +1217,7 @@ mod tests {
 			("/rooms", "rooms", &[], &["chat"]),
 		] {
 			let lease = auth.admit(auth.request(moq_auth::Transport::Quic, path)).await.unwrap();
-			assert_eq!(lease.token().root, Path::new(root).to_owned(), "{path}");
+			assert_eq!(lease.token().root, Path::new(root).unwrap().to_owned(), "{path}");
 			assert_eq!(lease.token().publish, patterns(publish), "{path}");
 			assert_eq!(lease.token().subscribe, patterns(subscribe), "{path}");
 		}
@@ -1257,7 +1277,7 @@ mod tests {
 		});
 		for request in [anonymous, certificate] {
 			let lease = auth.admit(request).await.unwrap();
-			assert_eq!(lease.token().root, Path::new("anon/room").to_owned());
+			assert_eq!(lease.token().root, Path::new("anon/room").unwrap().to_owned());
 			assert_eq!(lease.token().subscribe, patterns(&["**"]));
 			assert_eq!(lease.token().tier, Tier::default());
 		}
@@ -1322,7 +1342,7 @@ mod tests {
 		};
 		let admit = async {
 			let lease = auth.admit(request()).await.expect("granted");
-			assert_eq!(lease.token().root, Path::new("anon/room").to_owned());
+			assert_eq!(lease.token().root, Path::new("anon/room").unwrap().to_owned());
 			assert!(matches!(auth.admit(request()).await, Err(Error::Refused(_))));
 			assert!(matches!(auth.admit(request()).await, Err(Error::Refused(_))));
 			assert!(matches!(auth.admit(request()).await, Err(Error::Unavailable(_))));
@@ -1363,7 +1383,7 @@ mod tests {
 		let start = moq_clock::now();
 		let mut grant = Grant::new(patterns(&["**"]), patterns(&["**"]));
 		grant.expires = Some(moq_clock::wall() + Duration::from_secs(10));
-		let mut lease = Lease::new("/room", lease::Consumer::fixed(grant));
+		let mut lease = Lease::new("/room", lease::Consumer::fixed(grant)).unwrap();
 		for _ in 0..9 {
 			assert!(moq_clock::timeout(Duration::from_secs(1), lease.ended()).await.is_err());
 		}
@@ -1384,7 +1404,7 @@ mod tests {
 		assert!(matches!(grant.validate(), Err(moq_auth::Error::GrantExpired)));
 
 		let start = moq_clock::now();
-		let mut lease = Lease::new("/room", lease::Consumer::fixed(grant));
+		let mut lease = Lease::new("/room", lease::Consumer::fixed(grant)).unwrap();
 		assert_eq!(lease.ended().await, lease::Reason::Expired);
 		assert_eq!(moq_clock::now(), start, "no grace after expiry");
 	}
@@ -1395,15 +1415,15 @@ mod tests {
 		grant.root = Some("pid/room".into());
 		grant.tier = Some("gold".into());
 		grant.label = Some("project/key/123".into());
-		let token = Token::new("/vanity/room", &grant);
-		assert_eq!(token.root, Path::new("pid/room").to_owned());
+		let token = Token::new("/vanity/room", &grant).unwrap();
+		assert_eq!(token.root, Path::new("pid/room").unwrap().to_owned());
 		assert_eq!(token.publish, patterns(&["alice/**"]));
 		assert_eq!(token.subscribe, patterns(&["**"]));
-		assert_eq!(token.tier, Tier::new("gold"));
-		assert_eq!(token.label, Path::new("project/key/123").to_owned());
+		assert_eq!(token.tier, Tier::new(Path::new("gold").unwrap()));
+		assert_eq!(token.label, Path::new("project/key/123").unwrap().to_owned());
 
 		let patterns = patterns(&["*/chat", "alice", ""]);
-		let token = Token::new("/", &Grant::new(patterns.clone(), Patterns::new()));
+		let token = Token::new("/", &Grant::new(patterns.clone(), Patterns::new())).unwrap();
 		assert_eq!(token.publish, patterns);
 		assert!(
 			token.label.is_empty(),
@@ -1413,15 +1433,15 @@ mod tests {
 
 	#[test]
 	fn a_narrower_recheck_is_not_covered() {
-		let wide = Token::new("/room", &Grant::new(patterns(&["**"]), patterns(&["**"])));
-		let narrow = Token::new("/room", &Grant::new(patterns(&["alice/**"]), patterns(&["**"])));
-		let moved = Token::new("/other", &Grant::new(patterns(&["**"]), patterns(&["**"])));
+		let wide = Token::new("/room", &Grant::new(patterns(&["**"]), patterns(&["**"]))).unwrap();
+		let narrow = Token::new("/room", &Grant::new(patterns(&["alice/**"]), patterns(&["**"]))).unwrap();
+		let moved = Token::new("/other", &Grant::new(patterns(&["**"]), patterns(&["**"]))).unwrap();
 		let mut mounted = Grant::new(patterns(&["**"]), patterns(&["**"]));
 		mounted.mounts.insert(".svc".into(), ".svc/room".into());
-		let mounted = Token::new("/room", &mounted);
+		let mounted = Token::new("/room", &mounted).unwrap();
 		assert_eq!(
 			mounted.mounts,
-			[(Path::new(".svc").to_owned(), Path::new(".svc/room").to_owned())]
+			[(Path::new(".svc").unwrap().to_owned(), Path::new(".svc/room").unwrap().to_owned())]
 		);
 		assert!(wide.covered_by(&wide));
 		assert!(narrow.covered_by(&wide));
@@ -1438,7 +1458,7 @@ mod tests {
 	async fn a_recheck_that_flips_the_link_closes() {
 		let grant = Grant::new(patterns(&["**"]), patterns(&["**"]));
 		let (producer, consumer) = lease::Producer::new(grant.clone());
-		let mut lease = Lease::new("/", consumer);
+		let mut lease = Lease::new("/", consumer).unwrap();
 		assert!(!lease.token().peer);
 
 		let mut peer = grant;
@@ -1449,7 +1469,7 @@ mod tests {
 		// Routes already offered to (or withheld from) the session were filtered
 		// by whether it is upstream, so flipping that closes it too.
 		let (producer, consumer) = lease::Producer::new(peer.clone());
-		let mut lease = Lease::new("/", consumer);
+		let mut lease = Lease::new("/", consumer).unwrap();
 		let mut upstream = peer;
 		upstream.upstream = true;
 		producer.update(upstream);
@@ -1461,13 +1481,13 @@ mod tests {
 		let everything = || Grant::new(patterns(&["**"]), patterns(&["**"]));
 		let mut aliased = everything();
 		aliased.root = Some("pid/room".into());
-		let token = Token::new("/vanity/room", &aliased);
-		assert_eq!(token.root, Path::new("pid/room").to_owned());
+		let token = Token::new("/vanity/room", &aliased).unwrap();
+		assert_eq!(token.root, Path::new("pid/room").unwrap().to_owned());
 
 		// The same alias still names the same root.
-		assert_eq!(token.recheck(&aliased).root, token.root);
+		assert_eq!(token.recheck(&aliased).unwrap().root, token.root);
 		// A grant without the alias is relative to what was dialed, not to the old root.
-		assert_eq!(token.recheck(&everything()).root, Path::new("vanity/room").to_owned());
+		assert_eq!(token.recheck(&everything()).unwrap().root, Path::new("vanity/room").unwrap().to_owned());
 	}
 }
 

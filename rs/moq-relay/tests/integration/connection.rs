@@ -1,6 +1,7 @@
 //! A relay [`Connection`](moq_relay::Connection) over the in-memory transport: admission,
 //! the cluster origin, and stats, with no socket and on Tokio's paused clock.
 
+use moq_net::Path;
 use std::time::Duration;
 
 use moq_net::stats;
@@ -19,7 +20,7 @@ async fn largest_quic_sequence_reaches_the_subscriber() {
 		let auth = memory::public(&["**"], &[], &[]);
 		let cluster = memory::cluster();
 		let publisher = moq_tokio::origin::spawn();
-		let broadcast = publisher.create_broadcast("ladder").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("ladder").unwrap()).unwrap();
 		let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MICRO);
 		let track = broadcast.create_track("data", info).unwrap();
 		broadcast.announce(Default::default()).unwrap();
@@ -40,11 +41,11 @@ async fn largest_quic_sequence_reaches_the_subscriber() {
 		)
 		.await
 		.unwrap();
-		tokio::time::timeout(TIMEOUT, subscriber.consume().routed("ladder"))
+		tokio::time::timeout(TIMEOUT, subscriber.consume().routed(Path::new("ladder").unwrap()))
 			.await
 			.unwrap()
 			.unwrap();
-		let remote = subscriber.consume().request_broadcast("ladder", None).await.unwrap();
+		let remote = subscriber.consume().request_broadcast(Path::new("ladder").unwrap(), None).await.unwrap();
 		let mut sub = remote.track("data").unwrap().subscribe(None).await.unwrap();
 		for sequence in [5, 1 << 32, (1 << 53) - 1, (1 << 53) + 1, (1 << 62) - 1] {
 			// Timestamps stop at 2^61 - 1, the most lite-05/06 can zigzag as a first frame.
@@ -76,7 +77,7 @@ fn publish(
 	moq_net::track::Producer,
 ) {
 	let origin = moq_tokio::origin::spawn();
-	let broadcast = origin.create_broadcast(name).expect("create broadcast");
+	let broadcast = origin.create_broadcast(Path::new(name).unwrap()).expect("create broadcast");
 	broadcast.announce(Default::default()).expect("announce");
 	let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MILLI);
 	let track = broadcast.create_track("video", info).expect("create track");
@@ -233,7 +234,7 @@ async fn the_setup_path_reaches_the_decider_and_roots_the_grant() {
 	assert_eq!(next_active(&mut announced).await, "room/cam");
 
 	let broadcast = consumer
-		.request_broadcast("room/cam", None)
+		.request_broadcast(Path::new("room/cam").unwrap(), None)
 		.await
 		.expect("announced broadcast resolves");
 	let mut track = broadcast

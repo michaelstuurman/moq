@@ -1499,7 +1499,10 @@ impl Publisher {
 	/// the FLV file header, so subsequent tags decode against an initialized demuxer.
 	fn new(origin: &origin::Producer, path: &str, config: moq_mux::catalog::Config) -> anyhow::Result<Self> {
 		let epoch = moq_net::Epoch::mint();
-		let mut broadcast = origin.publish(path, moq_net::origin::Route::default().with_epoch(epoch.clone()))?;
+		let mut broadcast = origin.publish(
+			&moq_net::Path::new(path)?,
+			moq_net::origin::Route::default().with_epoch(epoch.clone()),
+		)?;
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, config)?;
 		let handle = broadcast.clone();
 		let mut importer = FlvImport::new(broadcast, catalog.reserve());
@@ -1565,6 +1568,7 @@ impl Publisher {
 )]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 	#[tokio::test(start_paused = true)]
 	#[tracing_test::traced_test]
 	async fn publish_metadata_drops_warn_once() {
@@ -1741,7 +1745,7 @@ mod tests {
 		let Some(Request::Publish(publish)) = accept_stream(stream, peer).await.unwrap() else {
 			panic!("expected a publish request");
 		};
-		publish.with_linger(linger).accept(&origin, "live/cam0").await.unwrap();
+		publish.with_linger(linger).accept(&origin, Path::new("live/cam0").unwrap()).await.unwrap();
 	}
 
 	/// An unpublish is a clean end: the finished broadcast stays up for the linger, then
@@ -1758,8 +1762,8 @@ mod tests {
 			let start = tokio::time::Instant::now();
 			let accept = tokio::spawn(accept_publish(server, origin.clone(), Duration::from_secs(10)));
 			let broadcast = async {
-				consumer.routed("live/cam0").await.unwrap();
-				consumer.request_broadcast("live/cam0", None).await.unwrap()
+				consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
+				consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap()
 			};
 			let (broadcast, ()) = tokio::join!(broadcast, publish_one_keyframe(client, leave));
 
@@ -1778,8 +1782,8 @@ mod tests {
 		let (mut client, server) = tokio::io::duplex(64 * 1024);
 		let accept = tokio::spawn(accept_publish(server, origin.clone(), Duration::ZERO));
 		let catalog = async {
-			consumer.routed("live/cam0").await.unwrap();
-			let broadcast = consumer.request_broadcast("live/cam0", None).await.unwrap();
+			consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
+			let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
 			let track = broadcast.track(hang::Catalog::DEFAULT_NAME).unwrap();
 			track.subscribe(None).await.unwrap()
 		};
@@ -1808,7 +1812,7 @@ mod tests {
 		publish_one_keyframe(client, Leave::Unpublish).await;
 
 		tokio::time::sleep(Duration::from_secs(5)).await;
-		let finished = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let finished = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
 		let mut video = finished.track("0.flv-v").unwrap().subscribe(None).await.unwrap();
 		assert!(
 			video.recv_group().await.unwrap().is_some(),
@@ -2089,8 +2093,8 @@ mod tests {
 		publisher.push(flv::TAG_VIDEO, 0, &vseq).unwrap();
 
 		let consumer = origin.consume();
-		consumer.routed("live/cam0").await.unwrap();
-		let broadcast = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		consumer.routed(Path::new("live/cam0").unwrap()).await.unwrap();
+		let broadcast = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
 		let info = broadcast.track("0.flv-v").unwrap().query().await.unwrap();
 		assert_eq!(info.max_age, Some(Duration::from_secs(3)));
 	}
@@ -2117,7 +2121,7 @@ mod tests {
 
 		// Publish the broadcast at `live/cam0` by feeding synthetic FLV to the importer.
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live/cam0").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("live/cam0").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default()).unwrap();
 		let mut importer = FlvImport::new(broadcast, catalog.reserve());
@@ -2136,7 +2140,7 @@ mod tests {
 			let Request::Play(play) = request else {
 				panic!("expected a play request");
 			};
-			play.accept(&consumer, "live/cam0").await.unwrap();
+			play.accept(&consumer, Path::new("live/cam0").unwrap()).await.unwrap();
 		});
 
 		let stream = TcpStream::connect(addr).await.unwrap();
@@ -2173,7 +2177,7 @@ mod tests {
 		let mut vframe = vec![0x17, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, idr.len() as u8];
 		vframe.extend_from_slice(idr);
 
-		let mut broadcast = origin.create_broadcast("live/cam0").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("live/cam0").unwrap()).unwrap();
 		broadcast.announce(origin::Route::default().with_epoch(epoch)).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default()).unwrap();
 		let mut importer = FlvImport::new(broadcast, catalog.reserve());
@@ -2200,7 +2204,7 @@ mod tests {
 			let Some(Request::Play(play)) = server.accept().await else {
 				panic!("expected a play request");
 			};
-			play.accept(&play_origin, "live/cam0").await
+			play.accept(&play_origin, Path::new("live/cam0").unwrap()).await
 		});
 		let (tx, mut media) = tokio::sync::mpsc::unbounded_channel();
 		let client = tokio::spawn(play_client(TcpStream::connect(addr).await.unwrap(), 0, &[], tx));
@@ -2215,7 +2219,7 @@ mod tests {
 		assert_eq!(next().await.1[..2], [0x17, 0x01]);
 
 		let epoch = moq_net::Epoch::mint();
-		let mut instances = moq_mux::follow::Instances::new(&consumer, "live/cam0", Some(&epoch)).unwrap();
+		let mut instances = moq_mux::follow::Instances::new(&consumer, Path::new("live/cam0").unwrap(), Some(&epoch)).unwrap();
 		let (_new, _new_catalog) = publish_avc(&origin, epoch, &[0x65, 0x99, 0x99, 0x99, 0x99]);
 		tokio::time::timeout(Duration::from_secs(5), instances.next())
 			.await
@@ -2244,7 +2248,7 @@ mod tests {
 		const VP9_KEYFRAME_320X240: &[u8] = &[0x82, 0x49, 0x83, 0x42, 0x20, 0x13, 0xf0, 0x0e, 0xf0, 0x00];
 
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live/cam0").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("live/cam0").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default()).unwrap();
 		let mut importer = FlvImport::new(broadcast, catalog.reserve());
@@ -2266,7 +2270,7 @@ mod tests {
 			let Request::Play(play) = request else {
 				panic!("expected a play request");
 			};
-			play.accept(&consumer, "live/cam0").await.unwrap();
+			play.accept(&consumer, Path::new("live/cam0").unwrap()).await.unwrap();
 		});
 
 		let stream = TcpStream::connect(addr).await.unwrap();
@@ -2521,7 +2525,7 @@ mod tests {
 		let frames = multitrack_body(CODED_FRAMES, &[(0, nalu(0x88)), (1, nalu(0x99))]);
 
 		let origin = moq_tokio::origin::spawn();
-		let mut broadcast = origin.create_broadcast("live/cam0").unwrap();
+		let mut broadcast = origin.create_broadcast(Path::new("live/cam0").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default()).unwrap();
 		let mut importer = FlvImport::new(broadcast, catalog.reserve());
@@ -2539,7 +2543,7 @@ mod tests {
 			let Request::Play(play) = request else {
 				panic!("expected a play request");
 			};
-			play.accept(&consumer, "live/cam0").await.unwrap();
+			play.accept(&consumer, Path::new("live/cam0").unwrap()).await.unwrap();
 		});
 
 		// The player advertises multitrack; collect the four video messages (two
@@ -2595,7 +2599,7 @@ mod tests {
 
 		tokio::time::pause();
 		let server_task = tokio::spawn(async move {
-			play.accept(&consumer, "live/missing").await.unwrap();
+			play.accept(&consumer, Path::new("live/missing").unwrap()).await.unwrap();
 		});
 
 		tokio::task::yield_now().await;
@@ -2657,18 +2661,18 @@ mod tests {
 					panic!("expected a publish request");
 				};
 				let origin = origin.clone();
-				tokio::spawn(async move { publish.accept(&origin, "live/cam0").await });
+				tokio::spawn(async move { publish.accept(&origin, Path::new("live/cam0").unwrap()).await });
 			}
 		});
 
 		let stale_client = tokio::spawn(async move {
 			run_client(TcpStream::connect(addr).await.unwrap(), ClientMode::Publish).await;
 		});
-		tokio::time::timeout(Duration::from_secs(5), consumer.routed("live/cam0"))
+		tokio::time::timeout(Duration::from_secs(5), consumer.routed(Path::new("live/cam0").unwrap()))
 			.await
 			.expect("stale publish timed out")
 			.unwrap();
-		let stale = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let stale = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
 			.unwrap()
@@ -2698,7 +2702,7 @@ mod tests {
 		assert!(stale_viewer.is_err(), "the stale viewer ended: {stale_viewer:?}");
 		assert!(!stale_client.is_finished(), "the stale connection is still open");
 
-		let fresh = consumer.request_broadcast("live/cam0", None).await.unwrap();
+		let fresh = consumer.request_broadcast(Path::new("live/cam0").unwrap(), None).await.unwrap();
 		assert!(!fresh.is_clone(&stale), "viewers reach the reconnected publish");
 
 		stale_client.abort();

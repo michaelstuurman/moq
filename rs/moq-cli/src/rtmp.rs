@@ -73,6 +73,7 @@ pub async fn listen_import(target: ImportTarget, addr: SocketAddr) -> anyhow::Re
 		linger,
 		bandwidth,
 	} = target;
+	let name = moq_net::PathOwned::try_from(name)?;
 	let mut server = Server::bind(addr).await?;
 	tracing::info!(%addr, %name, "RTMP listening (import)");
 	notify_ready();
@@ -114,6 +115,7 @@ pub async fn listen_export(
 	name: String,
 	max_delay: Duration,
 ) -> anyhow::Result<()> {
+	let name = moq_net::PathOwned::try_from(name)?;
 	let mut server = Server::bind(addr).await?;
 	tracing::info!(%addr, %name, "RTMP listening (export)");
 	notify_ready();
@@ -146,7 +148,7 @@ pub async fn listen_export(
 /// Dial a remote RTMP server and pull its play into the Origin under `target.name` (import).
 pub async fn connect_import(target: ImportTarget, url: Url) -> anyhow::Result<()> {
 	let (addr, app, key) = parse_url(&url).await?;
-	let name = &target.name;
+	let name = moq_net::Path::new(&target.name)?;
 	// The stream key is the ingest credential, so log the dial target and app instead.
 	tracing::info!(%addr, %app, %name, "RTMP client pulling");
 	notify_ready();
@@ -156,7 +158,7 @@ pub async fn connect_import(target: ImportTarget, url: Url) -> anyhow::Result<()
 		.with_max_age(target.max_age)
 		.with_bandwidth(target.bandwidth)
 		.with_linger(target.linger);
-	Ok(client.pull(&key, &target.origin, name).await?)
+	Ok(client.pull(&key, &target.origin, &name).await?)
 }
 
 /// Push a broadcast from the Origin to a remote RTMP server (export).
@@ -166,6 +168,7 @@ pub async fn connect_export(
 	name: String,
 	max_delay: Duration,
 ) -> anyhow::Result<()> {
+	let name = moq_net::PathOwned::try_from(name)?;
 	let (addr, app, key) = parse_url(&url).await?;
 	// Confirm the broadcast is reachable (and wait for it to be announced) before dialing;
 	// the FLV export re-resolves it (and any referenced sibling broadcast) through the origin.

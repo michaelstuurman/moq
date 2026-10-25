@@ -1,5 +1,6 @@
 //! Shared scaffolding for exporter tests.
 
+use moq_net::Path;
 use bytes::{Bytes, BytesMut};
 use hang::catalog::{AudioConfig, Container, H264, VideoConfig};
 use moq_net::Timestamp;
@@ -119,8 +120,8 @@ impl Moving {
 
 	pub(crate) fn new() -> Self {
 		let origin = crate::source::produce_origin();
-		let mut live = origin.publish("live", Default::default()).unwrap();
-		let mut other = origin.publish("other", Default::default()).unwrap();
+		let mut live = origin.publish(Path::new("live").unwrap(), Default::default()).unwrap();
+		let mut other = origin.publish(Path::new("other").unwrap(), Default::default()).unwrap();
 		let catalog = crate::catalog::Producer::new(&mut live, crate::catalog::Config::default()).unwrap();
 		let track = |broadcast: &mut moq_net::broadcast::Producer, name: &str| {
 			let info = hang::container::track_info(hang::catalog::PRIORITY.video);

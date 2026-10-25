@@ -812,6 +812,7 @@ async fn connect_session<S: moq_net::transport::poll::Boxable>(
 #[expect(clippy::disallowed_methods, reason = "tests read the host clock directly")]
 mod tests {
 	use super::*;
+	use moq_net::Path;
 
 	/// A millisecond track: the frames written here carry timestamps.
 	#[cfg(all(feature = "websocket", feature = "quic"))]
@@ -1320,7 +1321,7 @@ mod tests {
 	#[tokio::test]
 	async fn broadcast_race_quic_wins() {
 		let pub_origin = crate::origin::spawn();
-		let broadcast = pub_origin.create_broadcast("test").expect("failed to create broadcast");
+		let broadcast = pub_origin.create_broadcast(Path::new("test").unwrap()).expect("failed to create broadcast");
 		broadcast
 			.announce(Default::default())
 			.expect("failed to create broadcast");
@@ -1412,7 +1413,7 @@ mod tests {
 		};
 		assert_eq!(update.prefix.as_str(), "test");
 		let broadcast = sub_consumer
-			.request_broadcast("test", None)
+			.request_broadcast(Path::new("test").unwrap(), None)
 			.await
 			.expect("broadcast resolves");
 		let mut track = broadcast
