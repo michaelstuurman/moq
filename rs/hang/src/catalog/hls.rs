@@ -15,8 +15,9 @@ use super::millis::MillisCeil;
 #[serde(rename_all = "camelCase")]
 #[non_exhaustive]
 pub struct Hls {
-	/// The track carrying the rendition's segment records, conventionally the media track's name
-	/// plus [`SUFFIX`](crate::hls::SUFFIX).
+	/// The track carrying the rendition's segment records, on the catalog's broadcast even when the
+	/// media lives in a sibling. Conventionally the media track's name plus
+	/// [`SUFFIX`](crate::hls::SUFFIX).
 	pub track: String,
 
 	/// The nominal segment duration, fixed for the life of the track. Serialized as whole

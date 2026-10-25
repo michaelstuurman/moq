@@ -55,8 +55,9 @@ const DEFAULT_DURATION_CEILING: Duration = Duration::from_secs(10);
 /// A pacer's segments may overrun their target to reach a group boundary, but not indefinitely.
 const DURATION_CEILING_MULTIPLIER: u32 = 3;
 
-/// Recent records repeated when the window track rolls to a new group.
-const CHECKPOINT_RECORDS: usize = 256;
+/// Recent records repeated when the window track rolls to a new group: one more than the 256
+/// segments an HLS edge lists, since a segment is listed only once the record after it arrives.
+const CHECKPOINT_RECORDS: usize = 257;
 
 /// The wire timescale for record `pts`/`duration`: milliseconds.
 const TIMESCALE: Timescale = Timescale::MILLI;
@@ -396,10 +397,11 @@ impl Iterator for Segmenter {
 	}
 }
 
-/// Publishes one track's records onto its HLS record track.
+/// Publishes one track's records onto its HLS record track, for a publisher that segments
+/// itself; [`catalog::Config::with_hls`](crate::catalog::Config::with_hls) records them for you.
 ///
 /// Records must be pushed in sequence order, starting at the window's next index.
-pub(crate) struct Producer {
+pub struct Producer {
 	sink: moq_json::window::Producer<Record>,
 }
 

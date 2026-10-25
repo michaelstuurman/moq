@@ -195,17 +195,14 @@ impl<E: CatalogExt> Outputs<E> {
 			.video
 			.renditions
 			.iter_mut()
-			.map(|(id, config)| (id, &config.broadcast, &config.track, &mut config.hls));
+			.map(|(id, config)| (id, &config.track, &mut config.hls));
 		let audio = catalog
 			.audio
 			.renditions
 			.iter_mut()
-			.map(|(id, config)| (id, &config.broadcast, &config.track, &mut config.hls));
-		for (id, broadcast, track, field) in video.chain(audio) {
-			// A rendition served from another broadcast carries that broadcast's records, if any.
-			if broadcast.is_some() {
-				continue;
-			}
+			.map(|(id, config)| (id, &config.track, &mut config.hls));
+		// Records live on the catalog's broadcast, a sibling rendition's included.
+		for (id, track, field) in video.chain(audio) {
 			if let Some(advertised) = hls.hls(track.as_deref().unwrap_or(id)) {
 				*field = Some(advertised);
 			}

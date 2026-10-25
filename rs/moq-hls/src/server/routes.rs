@@ -259,6 +259,16 @@ mod tests {
 		}
 	}
 
+	/// A catalog config recording two-second HLS segments, so its renditions are listed.
+	fn hls_config() -> moq_mux::catalog::Config {
+		let duration = Duration::from_secs(2);
+		moq_mux::catalog::Config::default().with_hls(
+			moq_mux::hls::Config::default()
+				.with_duration_min(duration)
+				.with_duration_hint(duration),
+		)
+	}
+
 	fn video_config() -> hang::catalog::VideoConfig {
 		let mut config = hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		config.coded_width = Some(320);
@@ -372,7 +382,7 @@ mod tests {
 		moq_net::track::Producer,
 		moq_mux::container::Producer<moq_mux::catalog::hang::Container, hang::catalog::VideoConfig>,
 	) {
-		let catalog = moq_mux::catalog::Producer::new(broadcast, moq_mux::catalog::Config::default()).unwrap();
+		let catalog = moq_mux::catalog::Producer::new(broadcast, hls_config()).unwrap();
 		let reserved = catalog.reserve();
 		let track = broadcast.create_track("video0", track).unwrap();
 		let media = reserved
@@ -417,7 +427,7 @@ mod tests {
 			if response.status() == StatusCode::OK {
 				let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
 				let body = String::from_utf8(body.to_vec()).unwrap();
-				if body.contains("seg/656e3d1b.0.m4s") {
+				if body.contains("seg/c2369933.0.m4s") {
 					break body;
 				}
 			}
@@ -428,7 +438,7 @@ mod tests {
 			tokio::time::sleep(Duration::from_millis(50)).await;
 		};
 		assert!(body.contains(".mp4?jwt=abc\""), "{body}");
-		assert!(body.contains("seg/656e3d1b.0.m4s?jwt=abc"), "{body}");
+		assert!(body.contains("seg/c2369933.0.m4s?jwt=abc"), "{body}");
 
 		pair.accept.abort();
 	}
@@ -447,11 +457,11 @@ mod tests {
 			let pair = lite_pair_on(version, moq_net::Hop::random()).await;
 			let mut broadcast = pair.pub_origin.create_broadcast("live").expect("publish");
 			broadcast.announce(Default::default()).expect("announce");
-			// A hinted timeline is declared before any media, so the rendition is listed early.
-			let hinted = moq_mux::timeline::Config::default().with_duration_hint(Duration::from_secs(2));
+			// A hinted segment duration is declared before any media, so the rendition is listed early.
+			let hinted = moq_mux::hls::Config::default().with_duration_hint(Duration::from_secs(2));
 			let catalog = moq_mux::catalog::Producer::new(
 				&mut broadcast,
-				moq_mux::catalog::Config::default().with_timeline(hinted),
+				moq_mux::catalog::Config::default().with_hls(hinted),
 			)
 			.unwrap();
 			let reserved = catalog.reserve();
@@ -545,9 +555,9 @@ mod tests {
 
 		let app = Server::new(origin.consume(), crate::export::Config::default()).router();
 		let old_playlist = format!("/live/@{RUN}/video/video0/media.m3u8");
-		let old_segment = format!("/live/@{RUN}/video/video0/seg/656e3d1b.0.m4s");
+		let old_segment = format!("/live/@{RUN}/video/video0/seg/c2369933.0.m4s");
 		wait_listed(&app, "/live/master.m3u8", &format!("@{RUN}/video/video0/media.m3u8")).await;
-		wait_listed(&app, &old_playlist, "seg/656e3d1b.0.m4s").await;
+		wait_listed(&app, &old_playlist, "seg/c2369933.0.m4s").await;
 
 		let next = moq_net::Epoch::mint();
 		let mut new = origin.create_broadcast("live").expect("publish");
@@ -562,7 +572,7 @@ mod tests {
 			&format!("@{}/video/video0/media.m3u8", next.as_str()),
 		)
 		.await;
-		wait_listed(&app, &new_playlist, "seg/656e3d1b.0.m4s").await;
+		wait_listed(&app, &new_playlist, "seg/c2369933.0.m4s").await;
 		assert_eq!(status(&app, &old_playlist).await, StatusCode::OK);
 		assert_eq!(status(&app, &old_segment).await, StatusCode::OK);
 
@@ -579,41 +589,34 @@ mod tests {
 		assert_eq!(status(&app, &new_playlist).await, StatusCode::OK);
 	}
 
-	/// A failed timeline answers every listing, a clip included, with an uncacheable error
-	/// rather than ending it as a complete recording or refusing the range.
+	/// Failed records answer every listing with an uncacheable error rather than ending it as a
+	/// complete recording.
 	#[tokio::test(start_paused = true)]
-	async fn a_failed_timeline_answers_an_uncacheable_error() {
+	async fn failed_records_answer_an_uncacheable_error() {
 		let origin = moq_tokio::origin::spawn();
 		let mut broadcast = origin.create_broadcast("live").expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
-		let name = hang::timeline::default_name("video0");
+		let name = hang::hls::default_name("video0");
 		catalog
 			.mutate(|catalog| {
-				catalog.video.renditions.insert("video0".into(), video_config());
-				let mut archive = hang::catalog::Archive::new();
-				archive
-					.timelines
-					.insert("video0".into(), hang::catalog::Timeline::new(name.clone(), 1_000));
-				catalog.archive = Some(archive);
+				let mut config = video_config();
+				config.hls = Some(hang::catalog::Hls::new(name.clone(), Duration::from_secs(2)));
+				catalog.video.renditions.insert("video0".into(), config);
 			})
 			.unwrap();
-		let track = broadcast
-			.create_track(name, moq_mux::timeline::Producer::info())
-			.unwrap();
-		let mut timeline = moq_mux::timeline::Producer::new(track.clone());
-		for sequence in 0..3 {
-			let start = hang::timeline::Position::group(sequence);
-			let end = hang::timeline::Position::group(sequence + 1);
-			let record = hang::timeline::Record::new(sequence, sequence * 2_000, 2_000, start, end);
-			timeline.push(&record).unwrap();
+		let track = broadcast.create_track(name, moq_mux::hls::Producer::info()).unwrap();
+		let mut records = moq_mux::hls::Producer::new(track.clone());
+		for sequence in 0..4 {
+			let record = hang::hls::Record::new(sequence, sequence, sequence * 2_000);
+			records.push(&record).unwrap();
 		}
 
 		let app = Server::new(origin.consume(), crate::export::Config::default()).router();
 		wait_listed(&app, &format!("/live/@{RUN}/video/video0/media.m3u8"), ".2.m4s").await;
 		assert_eq!(status(&app, "/live/manifest.mpd").await, StatusCode::OK);
 
-		drop(timeline);
+		drop(records);
 		track
 			.abort(moq_net::Error::Transport("connection lost".into()))
 			.unwrap();
@@ -647,7 +650,7 @@ mod tests {
 		wait_listed(
 			&app,
 			&format!("/live/@{RUN}/video/video0/media.m3u8"),
-			"seg/656e3d1b.0.m4s",
+			"seg/c2369933.0.m4s",
 		)
 		.await;
 		let broadcaster = server.broadcaster("live").await.expect("broadcaster");
@@ -656,7 +659,7 @@ mod tests {
 		let response = oneshot(app.clone(), &format!("/live/@{RUN}/video/video0/media.m3u8")).await;
 		let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
 		let playlist = String::from_utf8(body.to_vec()).unwrap();
-		assert!(playlist.contains("\nseg/run-1.656e3d1b.0.m4s\n"), "{playlist}");
+		assert!(playlist.contains("\nseg/run-1.c2369933.0.m4s\n"), "{playlist}");
 		let map = playlist.lines().find(|line| line.starts_with("#EXT-X-MAP:")).unwrap();
 		let init = map
 			.strip_prefix("#EXT-X-MAP:URI=\"")
@@ -678,26 +681,26 @@ mod tests {
 		);
 
 		assert_eq!(
-			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.656e3d1b.0.m4s")).await,
+			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.c2369933.0.m4s")).await,
 			StatusCode::OK
 		);
 		assert_eq!(
-			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.656e3d1b.t0.m4s")).await,
+			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.c2369933.t0.m4s")).await,
 			StatusCode::OK
 		);
 		assert_eq!(
-			status(&app, &format!("/live/@{RUN}/video/video0/seg/656e3d1b.0.m4s")).await,
+			status(&app, &format!("/live/@{RUN}/video/video0/seg/c2369933.0.m4s")).await,
 			StatusCode::NOT_FOUND
 		);
 		assert_eq!(
-			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-0.656e3d1b.0.m4s")).await,
+			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-0.c2369933.0.m4s")).await,
 			StatusCode::NOT_FOUND
 		);
 
 		// A new run: the previous generation's URLs are refused even for numbers it reuses.
 		broadcaster.set_generation(Some("run-2")).unwrap();
 		assert_eq!(
-			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.656e3d1b.0.m4s")).await,
+			status(&app, &format!("/live/@{RUN}/video/video0/seg/run-1.c2369933.0.m4s")).await,
 			StatusCode::NOT_FOUND
 		);
 	}
@@ -723,11 +726,11 @@ mod tests {
 		wait_listed(
 			&app,
 			&format!("/live/@{run}/video/video0/media.m3u8"),
-			"seg/656e3d1b.0.m4s",
+			"seg/c2369933.0.m4s",
 		)
 		.await;
 
-		let response = oneshot(app, &format!("/live/@{run}/video/video0/seg/656e3d1b.0.m4s")).await;
+		let response = oneshot(app, &format!("/live/@{run}/video/video0/seg/c2369933.0.m4s")).await;
 		assert_eq!(response.status(), StatusCode::NOT_FOUND);
 		assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
 
@@ -748,7 +751,7 @@ mod tests {
 		wait_listed(
 			&app,
 			&format!("/live/@{run}/video/video0/media.m3u8"),
-			"seg/656e3d1b.0.m4s",
+			"seg/c2369933.0.m4s",
 		)
 		.await;
 
@@ -761,7 +764,7 @@ mod tests {
 			.await
 			.expect("publisher close timed out");
 
-		let response = oneshot(app, &format!("/live/@{run}/video/video0/seg/656e3d1b.0.m4s")).await;
+		let response = oneshot(app, &format!("/live/@{run}/video/video0/seg/c2369933.0.m4s")).await;
 		assert_eq!(response.status(), StatusCode::NOT_FOUND);
 		assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
 
@@ -842,7 +845,7 @@ mod tests {
 		source.announce(Default::default()).unwrap();
 		let secret = origin.create_broadcast("room/secret").unwrap();
 		secret.announce(Default::default()).unwrap();
-		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
+		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, hls_config()).unwrap();
 		let reserved = catalog.reserve();
 		let mut config = video_config();
 		config.broadcast = Some(moq_net::path::Relative::new("./source").to_owned());
@@ -874,8 +877,8 @@ mod tests {
 		let server = Server::new(restricted, Default::default());
 		let broadcaster = server.broadcaster("room/live").await.unwrap();
 		broadcaster.ready().await;
-		let allowed_uri = &format!("/room/live/@{RUN}/video/video0/seg/656e3d1b.0.m4s");
-		let denied_uri = &format!("/room/live/@{RUN}/video/video1/seg/656e3d1b.0.m4s");
+		let allowed_uri = &format!("/room/live/@{RUN}/video/video0/seg/c2369933.0.m4s");
+		let denied_uri = &format!("/room/live/@{RUN}/video/video1/seg/c2369933.0.m4s");
 		let app = server.router();
 		assert_eq!(oneshot(app.clone(), allowed_uri).await.status(), StatusCode::OK);
 		for uri in [
@@ -901,7 +904,7 @@ mod tests {
 		assert!(!master.contains("video/video1/"));
 		let first = |rendition: &Rendition| segments::Id {
 			generation: rendition.generation().map(|generation| generation.to_string()),
-			reference: "656e3d1b".into(),
+			tag: "c2369933".into(),
 			at: segments::At::Sequence(0),
 		};
 		let rendition = broadcaster.rendition(Kind::Video, "video1").unwrap();
@@ -921,7 +924,7 @@ mod tests {
 		assert_eq!(oneshot(app.clone(), denied_uri).await.status(), StatusCode::FORBIDDEN);
 		assert_eq!(oneshot(app.clone(), allowed_uri).await.status(), StatusCode::OK);
 		assert_eq!(
-			oneshot(app, &format!("/room/live/@{RUN}/video/video0/seg/656e3d1b.9999.m4s"))
+			oneshot(app, &format!("/room/live/@{RUN}/video/video0/seg/c2369933.9999.m4s"))
 				.await
 				.status(),
 			StatusCode::NOT_FOUND
@@ -962,7 +965,7 @@ mod tests {
 		media_broadcast.announce(Default::default()).expect("announce media");
 
 		let catalog =
-			moq_mux::catalog::Producer::new(&mut catalog_broadcast, moq_mux::catalog::Config::default()).unwrap();
+			moq_mux::catalog::Producer::new(&mut catalog_broadcast, hls_config()).unwrap();
 		let reserved = catalog.reserve();
 		let mut config = video_config();
 		config.broadcast = Some(moq_net::path::Relative::new("./source").to_owned());
@@ -983,7 +986,7 @@ mod tests {
 		wait_listed(
 			&app,
 			&format!("/room/live/@{run}/video/video0/media.m3u8"),
-			"seg/656e3d1b.0.m4s",
+			"seg/c2369933.0.m4s",
 		)
 		.await;
 
@@ -999,7 +1002,7 @@ mod tests {
 			.await
 			.expect("sibling close timed out");
 
-		let response = oneshot(app, &format!("/room/live/@{run}/video/video0/seg/656e3d1b.0.m4s")).await;
+		let response = oneshot(app, &format!("/room/live/@{run}/video/video0/seg/c2369933.0.m4s")).await;
 		assert_eq!(response.status(), StatusCode::NOT_FOUND);
 		assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
 

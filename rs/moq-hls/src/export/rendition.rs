@@ -1,20 +1,19 @@
-//! One rendition: playlists from its view of the broadcast's segments, resolved against its own
-//! timeline, and segments fetched on demand.
+//! One rendition: playlists from its own HLS records, and segments fetched on demand.
 
 use moq_clock::Wall;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::task::Poll;
 use std::time::Duration;
 
 use bytes::Bytes;
-use hang::catalog::{Archive, AudioConfig, Clock, Reference, VideoConfig};
+use hang::catalog::{AudioConfig, Clock, Hls, Reference, VideoConfig};
 use moq_mux::container::fmp4::Muxer;
 use sha2::{Digest, Sha256};
 
 use super::playlist::{Segment, Snapshot};
-use super::spans::{Content, Spans};
-use super::{mpd, segments};
+use super::{mpd, renditions, segments};
 use crate::Result;
 
 /// Fallback advertised bitrates when the catalog doesn't carry one.
@@ -29,9 +28,12 @@ fn default_bandwidth(kind: Kind) -> u64 {
 	}
 }
 
-/// Upper bound on the groups fetched for one segment, so a corrupt timeline can't turn one
+/// Upper bound on the groups fetched for one segment, so a corrupt record can't turn one
 /// HTTP request into an endless fetch loop.
 const MAX_SEGMENT_GROUPS: u64 = 1024;
+
+/// HLS record times are milliseconds, so DASH timelines are too.
+const TIMESCALE: u32 = 1000;
 
 /// Whether a rendition carries video or audio.
 ///
@@ -64,8 +66,8 @@ impl Kind {
 	}
 }
 
-/// How far behind the live edge a cursor's feed still asks for a group. A group resolves
-/// into a row only once its successor starts, so a cursor keeping up fetches it at the live
+/// How far behind the live edge a cursor's feed still asks for a group. A segment is listed
+/// only once its successor's record arrives, so a cursor keeping up fetches it at the live
 /// edge; the budget only has to cover a burst (a publisher catching up) and a cursor that
 /// fell behind. The default zero would deliver only the newest group of a burst.
 const FEED_MAX_DELAY: Duration = Duration::from_secs(30);
@@ -96,11 +98,6 @@ struct Run {
 	init: Option<Arc<Init>>,
 	/// Bumped by every restart, so an init build that straddles one isn't cached for the new run.
 	epoch: u64,
-	/// The window [`resets`](segments::Producer::resets) during which a listed segment started
-	/// where a player can, so the master keeps advertising the rendition even once a GOP past
-	/// [`MAX_SEGMENTS`](segments::MAX_SEGMENTS) records evicts that segment. Stale once the window
-	/// is cleared (a new generation or a timeline skip or rewind).
-	startable: Option<u64>,
 }
 
 /// The rendition's catalog config, kept whole so a [`Muxer`] can be built per request.
@@ -161,7 +158,7 @@ impl Media {
 		})
 	}
 
-	/// Whether incoming timeline rows should be listed: not once the bound sibling ended.
+	/// Whether incoming rows should be listed: not once the bound sibling ended.
 	fn admits(&self, window: &segments::Producer) -> bool {
 		self.sync(window);
 		!self.handle.lock().expect("media lock poisoned").ended
@@ -179,7 +176,7 @@ impl Media {
 			handle.capture(&broadcast, &self.track);
 			if self.sibling && !handle.ended && broadcast.poll_closed(waiter).is_ready() {
 				// End and Restart both drain only the pinned instance. Looking its path up again
-				// could serve a replacement under the old timeline's rows.
+				// could serve a replacement under the old records' rows.
 				handle.ended = true;
 				window.end();
 			}
@@ -224,8 +221,7 @@ fn normalize_video(config: &VideoConfig) -> VideoConfig {
 	config.label = None;
 	config.enabled = true;
 	config.preference = 0;
-	// Publishers estimate it and republish once it settles. The rendition keeps the fMP4
-	// timescale it was built with, and the framerate is refreshed in place like the bitrate.
+	// Publishers estimate it and republish once it settles. Nothing muxed reads it.
 	config.framerate = None;
 	config
 }
@@ -241,7 +237,19 @@ fn normalize_audio(config: &AudioConfig) -> AudioConfig {
 	config
 }
 
-/// A single HLS rendition: master-playlist metadata, its view of the broadcast timeline (which
+/// What a listed row holds on its rendition.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Content {
+	/// These groups.
+	Groups(std::ops::Range<u64>),
+	/// Nothing to fetch: content stopped, or the segment does not line up with the lead
+	/// rendition's. Listed as `EXT-X-GAP` so the numbering stays consecutive.
+	Gap,
+	/// Not yet known: the lead rendition has not listed this number yet.
+	Pending,
+}
+
+/// A single HLS rendition: master-playlist metadata, its window over its own HLS records (which
 /// renders its media playlist), and on-demand segment fetching.
 pub struct Rendition {
 	/// The rendition's catalog ID, also its URL path component.
@@ -252,7 +260,7 @@ pub struct Rendition {
 	/// [`bandwidth`](Self::bandwidth), refreshed in place by [`refresh`](Self::refresh).
 	bitrate: RwLock<Option<u64>>,
 	/// The latest catalog framerate (video only), refreshed in place by [`refresh`](Self::refresh):
-	/// the muxer's fallback sample cadence and the DASH `frameRate`.
+	/// the DASH `frameRate`.
 	framerate: RwLock<Option<f64>>,
 	/// Whether the catalog currently enables the rendition, refreshed in place by
 	/// [`refresh`](Self::refresh). A disabled rendition keeps its window and media playlist but
@@ -266,20 +274,26 @@ pub struct Rendition {
 	pub codec: String,
 
 	config: Config,
-	/// The catalog's root archive timeline: the timescale timings decode with.
-	section: Archive,
-	/// The catalog's root broadcast clock: the wall anchor timings map through, after
-	/// timescale conversion. Absent when the publisher exposes none.
+	/// The catalog entry's `hls` field: the record track and nominal duration.
+	hls: Hls,
+	/// The [tag](segments::tag) of [`hls`](Self::hls)'s record track, in every segment URL.
+	tag: Arc<str>,
+	/// The catalog's root broadcast clock: the wall anchor record times map through. Absent when
+	/// the publisher exposes none.
 	clock: Option<Clock>,
-	/// This rendition's window over the broadcast's segments, fed by the catalog watcher's
-	/// fan-out.
+	/// This rendition's window over its records.
 	live: Arc<segments::Producer>,
-	/// This rendition's own timeline, which resolves each segment to its frames.
-	spans: Arc<Spans>,
-	/// The broadcast carrying the catalog and every timeline.
+	/// What every rendition of the broadcast shares: discontinuities, the run, the lead.
+	fanout: renditions::Fanout,
+	/// Whether each recent segment lines up with the lead rendition's, decided once so a
+	/// listing never changes under a player.
+	verdicts: Mutex<BTreeMap<u64, bool>>,
+	/// The broadcast carrying the catalog and every record track.
 	catalog: moq_net::broadcast::Consumer,
-	/// Feeds [`spans`](Self::spans); aborted when the rendition drops.
+	/// Follows the records into [`live`](Self::live); aborted when the rendition drops.
 	watcher: Mutex<Option<tokio::task::JoinHandle<()>>>,
+	/// Set once the catalog drops or replaces the rendition (see [`retire`](Self::retire)).
+	retiring: tokio::sync::watch::Sender<bool>,
 	/// The broadcast serving this rendition's media. A sibling is bound when the rendition is
 	/// created, and ends the rendition when it ends.
 	media: Media,
@@ -295,9 +309,10 @@ pub struct Rendition {
 
 impl Rendition {
 	/// Whether `config` describes the same media this rendition is already serving, i.e. whether
-	/// it decodes and muxes identically. Fields the publisher revises without touching the media
-	/// (its bitrate, jitter, and framerate estimates, a label) are ignored here, and the bitrate
-	/// and framerate are picked up by [`refresh`](Self::refresh) instead.
+	/// it decodes and muxes identically and lists the same records. Fields the publisher revises
+	/// without touching the media (its bitrate, jitter, and framerate estimates, a label) are
+	/// ignored here, and the bitrate and framerate are picked up by [`refresh`](Self::refresh)
+	/// instead.
 	pub(crate) fn matches_video(&self, config: &VideoConfig) -> bool {
 		let Config::Video(current) = &self.config else {
 			return false;
@@ -347,8 +362,8 @@ impl Rendition {
 		*self.framerate.read().expect("framerate lock poisoned")
 	}
 
-	/// Build a video rendition over the broadcast's timeline `section`, timed by the
-	/// catalog root `clock`.
+	/// Build a video rendition listing the records `hls` names, timed by the catalog root
+	/// `clock`.
 	///
 	/// Fails when the config's `broadcast` reference escapes above the origin root: it names no
 	/// broadcast, so there would be no media to serve.
@@ -356,8 +371,9 @@ impl Rendition {
 		name: String,
 		config: &VideoConfig,
 		source: &moq_mux::Source,
-		section: Archive,
+		hls: Hls,
 		clock: Option<Clock>,
+		fanout: renditions::Fanout,
 	) -> moq_mux::Result<Self> {
 		let media = Media::bind(source, config, config.track(&name))?;
 		Ok(Self {
@@ -370,26 +386,30 @@ impl Rendition {
 			height: config.coded_height,
 			codec: config.codec.to_string(),
 			config: Config::Video(config.clone()),
-			section,
+			tag: Arc::from(segments::tag(&hls.track)),
+			hls,
 			clock,
 			live: Arc::new(segments::Producer::new()),
-			spans: Arc::new(Spans::new()),
+			fanout,
+			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
+			retiring: tokio::sync::watch::Sender::new(false),
 			media,
 			run: Mutex::default(),
 			building: tokio::sync::Mutex::new(()),
 		})
 	}
 
-	/// Build an audio rendition over the broadcast's timeline `section`, timed by the catalog
-	/// root `clock`, failing like [`video`](Self::video).
+	/// Build an audio rendition listing the records `hls` names, failing like
+	/// [`video`](Self::video).
 	pub(crate) fn audio(
 		name: String,
 		config: &AudioConfig,
 		source: &moq_mux::Source,
-		section: Archive,
+		hls: Hls,
 		clock: Option<Clock>,
+		fanout: renditions::Fanout,
 	) -> moq_mux::Result<Self> {
 		let media = Media::bind(source, config, config.track(&name))?;
 		Ok(Self {
@@ -402,91 +422,117 @@ impl Rendition {
 			height: None,
 			codec: config.codec.to_string(),
 			config: Config::Audio(config.clone()),
-			section,
+			tag: Arc::from(segments::tag(&hls.track)),
+			hls,
 			clock,
 			live: Arc::new(segments::Producer::new()),
-			spans: Arc::new(Spans::new()),
+			fanout,
+			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
+			retiring: tokio::sync::watch::Sender::new(false),
 			media,
 			run: Mutex::default(),
 			building: tokio::sync::Mutex::new(()),
 		})
 	}
 
-	/// Start following this rendition's own timeline, trimmed to the listed segments.
-	pub(crate) fn watch(&self) {
-		let watcher = tokio::spawn(watch_spans(
+	/// Start following this rendition's own HLS records.
+	pub(crate) fn watch(self: &Arc<Self>) {
+		let watcher = tokio::spawn(watch_records(
 			self.catalog.clone(),
-			self.section.clone(),
-			self.track_name().to_string(),
-			self.spans.clone(),
-			self.live.clone(),
+			self.hls.clone(),
+			Arc::downgrade(self),
+			self.retiring.subscribe(),
 		));
 		*self.watcher.lock().expect("watcher lock poisoned") = Some(watcher);
 	}
 
-	/// Feed one reference timeline record into this rendition's window as a segment.
-	pub(crate) fn push(&self, row: segments::Row, window: Duration) {
-		if !self.media.admits(&self.live) {
-			return;
-		}
-		let starts = self.is(&row.reference) && row.starts_sync();
-		let resets = self.live.push(row, window);
-		if starts {
-			self.latch(resets);
-		}
-		self.trim();
+	/// End the window once the segment its records are still bounding is listed, because the
+	/// catalog dropped or replaced the rendition.
+	///
+	/// Its records go on (a replacement follows them too, and the publisher never finishes a
+	/// dropped track's), so they can't end it. Ending it at once would lose the last segment of
+	/// every recording, since it is listed only when the record after it arrives.
+	pub(crate) fn retire(&self) {
+		self.retiring.send_replace(true);
 	}
 
-	/// Drop this rendition's own records that no listed segment can resolve to anymore.
-	fn trim(&self) {
-		if let Some(oldest) = self.live.oldest() {
-			self.spans.trim(oldest);
+	/// List one segment, unless the bound sibling ended.
+	fn push(&self, row: segments::Row) {
+		if self.media.admits(&self.live) {
+			self.live.push(row, self.fanout.window());
 		}
 	}
 
-	/// What `row` holds on this rendition: the reference serves its own record, and every other
-	/// rendition resolves the span against its own timeline.
-	fn resolve(&self, row: &segments::Row) -> Content {
-		if self.is(&row.reference) {
-			return Content::Frames {
-				ranges: vec![row.frames.clone()],
-				filter: None,
-			};
+	/// What `row` holds on this rendition.
+	pub(crate) fn resolve(&self, row: &segments::Row) -> Content {
+		if row.stop {
+			return Content::Gap;
 		}
-		self.spans
-			.resolve(self.kind == Kind::Video, Duration::from(row.pts)..row.end)
+		match self.aligned(row) {
+			Some(true) => Content::Groups(row.groups.clone()),
+			Some(false) => Content::Gap,
+			None => Content::Pending,
+		}
 	}
 
-	/// Whether the rendition declares no media for this row.
+	/// Whether `row` lines up with the lead rendition's segment of the same number: it starts
+	/// within half that segment of it. `None` until the lead lists that number or never will.
+	///
+	/// A segment the lead never lists, or already evicted, can't be checked and is listed as is.
+	/// One the lead skipped while holding the numbers around it is misaligned.
+	fn aligned(&self, row: &segments::Row) -> Option<bool> {
+		if let Some(verdict) = self.verdicts.lock().expect("verdicts lock poisoned").get(&row.segment) {
+			return Some(*verdict);
+		}
+		let Some(lead) = self.fanout.lead() else {
+			return Some(true);
+		};
+		if std::ptr::eq(lead.as_ref(), self) {
+			return Some(true);
+		}
+		let pts = Duration::from(row.pts);
+		let verdict = match lead.live.numbered(row.segment) {
+			segments::Lookup::Found(lead) => {
+				!lead.stop && pts.abs_diff(Duration::from(lead.pts)) <= lead.duration / 2
+			}
+			segments::Lookup::Missing(span) => !span.contains(&pts),
+			segments::Lookup::Never => true,
+			segments::Lookup::Pending => return None,
+		};
+		if !verdict {
+			tracing::error!(
+				rendition = %self.name,
+				lead = %lead.name,
+				segment = row.segment,
+				"HLS segment does not line up with the lead rendition's; listing it as a gap"
+			);
+		}
+		let mut verdicts = self.verdicts.lock().expect("verdicts lock poisoned");
+		verdicts.insert(row.segment, verdict);
+		while verdicts.len() > 2 * segments::MAX_SEGMENTS {
+			verdicts.pop_first();
+		}
+		Some(verdict)
+	}
+
+	/// Whether the rendition has nothing to fetch for this row.
 	pub(crate) fn is_gap(&self, row: &segments::Row) -> bool {
 		self.resolve(row) == Content::Gap
 	}
 
-	/// Poll until `row` resolves on this rendition.
+	/// Poll until `row`'s alignment is decided.
 	pub(crate) fn poll_resolved(&self, waiter: &kio::Waiter, row: &segments::Row) -> Poll<()> {
-		if self.is(&row.reference) {
+		let Some(lead) = self.fanout.lead() else {
+			return Poll::Ready(());
+		};
+		// Read before resolving, so a row the lead lists in between wakes this poll.
+		let seen = lead.live.produced();
+		if self.resolve(row) != Content::Pending {
 			return Poll::Ready(());
 		}
-		self.spans
-			.poll_resolved(waiter, self.kind == Kind::Video, Duration::from(row.pts)..row.end)
-	}
-
-	/// Whether this rendition is `reference`.
-	fn is(&self, reference: &segments::ReferenceKey) -> bool {
-		reference.0 == self.kind && reference.1 == self.name && reference.2 == self.track_name()
-	}
-
-	/// Retire the playlist prefix through this shared media sequence.
-	pub(crate) fn retire(&self, through: u64) {
-		self.live.retire(through);
-		self.trim();
-	}
-
-	/// Clear rows that can no longer be followed by a consecutive source timeline record.
-	pub(crate) fn clear(&self) {
-		self.live.clear();
+		lead.live.poll_changed(waiter, seen)
 	}
 
 	/// List every segment URL under `generation` from now on, keeping the run's rows and init.
@@ -494,21 +540,18 @@ impl Rendition {
 		self.run.lock().expect("run lock poisoned").generation = generation;
 	}
 
-	/// Start a new publisher run labeled `generation`, dropping the previous run's rows, records,
-	/// and init.
+	/// Start a new publisher run labeled `generation`, dropping the previous run's rows and init.
 	///
 	/// The rows go first: renders read the run before the rows, so one that sees the new label
 	/// never lists the old run's segments under it.
 	pub(crate) fn restart(&self, generation: Option<Arc<str>>) {
 		self.live.clear();
-		// The old run's own records would bootstrap an inline init from its media.
-		self.spans.clear();
+		self.verdicts.lock().expect("verdicts lock poisoned").clear();
 		let mut run = self.run.lock().expect("run lock poisoned");
 		*run = Run {
 			generation,
 			init: None,
 			epoch: run.epoch + 1,
-			startable: None,
 		};
 	}
 
@@ -521,17 +564,17 @@ impl Rendition {
 		self.run().generation
 	}
 
-	/// Mark this rendition's window ended (the reference timeline finished).
+	/// Mark this rendition's window ended (its records finished, or it left the catalog).
 	pub(crate) fn end(&self) {
 		self.live.end();
 	}
 
-	/// Fail this rendition's window with the reference timeline's `err`.
+	/// Fail this rendition's window with `err`.
 	pub(crate) fn fail(&self, err: crate::Error) {
 		self.live.fail(err);
 	}
 
-	/// A cursor over this rendition's segments, with their media, in timeline order.
+	/// A cursor over this rendition's segments, with their media, in order.
 	/// For a recorder mirroring the broadcast; see [`segments::Consumer`].
 	pub fn segments(self: &Arc<Self>) -> segments::Consumer {
 		self.live.subscribe(self.clone())
@@ -550,13 +593,10 @@ impl Rendition {
 		kio::wait(|waiter| self.poll_playable(waiter)).await;
 	}
 
-	/// Poll until this rendition is playable, its media is denied, or a timeline failed.
+	/// Poll until this rendition is playable, its media is denied, or its window failed.
 	pub(crate) fn poll_playable(&self, waiter: &kio::Waiter) -> Poll<()> {
 		self.poll_media(waiter);
 		if self.media.refusal().is_some() {
-			return Poll::Ready(());
-		}
-		if self.spans.poll_failed(waiter).is_ready() {
 			return Poll::Ready(());
 		}
 		self.live.poll_playable(waiter)
@@ -568,14 +608,15 @@ impl Rendition {
 		self.media.poll_sync(waiter, &self.live)
 	}
 
-	/// Render this rendition's media playlist from the current timeline window, or `None` when
-	/// there is nothing to serve yet (no segment, and the broadcast has not ended) -- a
-	/// playlist with no segments confuses players, so a server should treat `None` as "not
-	/// ready" rather than serve it.
+	/// Render this rendition's media playlist from its current window, or `None` when there is
+	/// nothing to serve yet (no segment, and the records have not ended) -- a playlist with no
+	/// segments confuses players, so a server should treat `None` as "not ready" rather than
+	/// serve it.
 	///
-	/// Fails with [`TimelineFailed`](crate::Error::TimelineFailed) once the reference timeline
-	/// or this rendition's own timeline failed, or [`CatalogFailed`](crate::Error::CatalogFailed)
-	/// once the catalog did, rather than ending a truncated playlist with `EXT-X-ENDLIST`. A server should answer that with an uncacheable error.
+	/// Fails with [`RecordsFailed`](crate::Error::RecordsFailed) once this rendition's records
+	/// failed, or [`CatalogFailed`](crate::Error::CatalogFailed) once the catalog did, rather
+	/// than ending a truncated playlist with `EXT-X-ENDLIST`. A server should answer that with an
+	/// uncacheable error.
 	///
 	/// A denied referenced broadcast propagates the underlying authorization error; it is
 	/// not missing media. The HTTP server answers it with 403 and no-store.
@@ -608,12 +649,12 @@ impl Rendition {
 	/// Waits without bound for the first segment; bounding it is the caller's policy. `query`
 	/// propagates exactly as in [`media_playlist`](Self::media_playlist).
 	///
-	/// A failed timeline or catalog fails it as in [`media_playlist`](Self::media_playlist).
+	/// A failed rendition or catalog fails it as in [`media_playlist`](Self::media_playlist).
 	pub async fn playlist(&self, query: Option<&str>) -> Result<Option<String>> {
 		// A denied reference is refused before anything else, so no other error masks it.
 		self.authorize()?;
 		self.playable().await;
-		// A failed timeline may never supply the keyframe an inline init waits for.
+		// Failed records may never supply the keyframe an inline init waits for.
 		self.check()?;
 		// An inline-codec init needs a keyframe group fetched first. Building it caches, so the
 		// player's follow-up GET of the init is free.
@@ -623,48 +664,38 @@ impl Rendition {
 		self.media_playlist(query)
 	}
 
-	/// Snapshot the media playlist from the current timeline window.
+	/// Snapshot the media playlist from the current window.
 	#[cfg(test)]
 	pub(crate) fn snapshot(&self) -> Snapshot {
-		self.try_snapshot().expect("the timeline failed")
+		self.try_snapshot().expect("the rendition failed")
 	}
 
-	/// Snapshot the media playlist, or the error its timeline failed with.
+	/// Snapshot the media playlist, or the error its rendition failed with.
 	#[cfg(test)]
 	pub(crate) fn try_snapshot(&self) -> Result<Snapshot> {
 		self.snapshot_as(self.generation())
 	}
 
-	/// Snapshot the media playlist from the current timeline window, labeled `generation`.
+	/// Snapshot the media playlist from the current window, labeled `generation`.
 	fn snapshot_as(&self, generation: Option<Arc<str>>) -> Result<Snapshot> {
 		self.media.sync(&self.live);
 		let window = self.live.window();
 		if let Some(err) = self.failure(&window) {
 			return Err(err);
 		}
-		// An ended reference ends the playlist only once this rendition resolved every row, so a
-		// slower timeline's tail is listed before `EXT-X-ENDLIST` stops players polling.
+		// Ended records end the playlist only once every row's alignment is decided, so the tail
+		// is listed before `EXT-X-ENDLIST` stops players polling.
 		let complete = self.resolved(&window.segments).count() == window.segments.len();
 		let finished = window.ended && complete;
 		Ok(self.snapshot_from_window(window, finished, generation))
 	}
 
-	/// Why listings refuse: the referenced media is denied, or a timeline failed before
-	/// covering every row it lists or will list.
+	/// Why listings refuse: the referenced media is denied, or the window failed.
 	fn failure(&self, window: &segments::Window) -> Option<crate::Error> {
-		if let Some(err) = self.media.refusal() {
-			return Some(err);
-		}
-		if let Some(err) = &window.failed {
-			return Some(err.clone());
-		}
-		let failure = self.spans.failure()?;
-		// A timeline failing once the reference finished loses nothing if its records cover every
-		// row. One that failed earlier stays failed, however the reference ends.
-		(!failure.late || window.segments.iter().any(|row| self.is_failed(row))).then_some(failure.err)
+		self.media.refusal().or_else(|| window.failed.clone())
 	}
 
-	/// Return bound media or its authorization refusal, leaving timeline state alone.
+	/// Return bound media or its authorization refusal, leaving the window alone.
 	pub(crate) fn authorize(&self) -> Result<Arc<moq_mux::Binding>> {
 		let binding = self.media.sync(&self.live);
 		match self.media.refusal() {
@@ -673,35 +704,30 @@ impl Rendition {
 		}
 	}
 
-	/// Refuse denied media or a failed timeline (see [`failure`](Self::failure)).
+	/// Refuse denied media or a failed window (see [`failure`](Self::failure)).
 	pub(crate) fn check(&self) -> Result<()> {
 		self.authorize()?;
-		if let Some(err) = self.live.failure() {
-			return Err(err);
-		}
-		// Only a failed own timeline needs the window to judge.
-		if self.spans.failure().is_none() {
-			return Ok(());
-		}
-		match self.failure(&self.live.window()) {
+		match self.live.failure() {
 			Some(err) => Err(err),
 			None => Ok(()),
 		}
 	}
 
-	/// Whether this rendition failed independently of the reference timeline, so listings
-	/// leave it out while its siblings stay available.
+	/// Whether this rendition failed while the catalog did not, so listings leave it out while
+	/// its siblings stay available.
 	pub(crate) fn failed_alone(&self) -> bool {
-		self.live.failure().is_none() && self.check().is_err()
+		self.fanout.failure().is_none() && self.check().is_err()
 	}
 
 	fn snapshot_from_window(&self, window: segments::Window, finished: bool, generation: Option<Arc<str>>) -> Snapshot {
-		// HLS requires EXT-X-TARGETDURATION to be at least every EXTINF, rounded up to whole
-		// seconds. The catalog duration is nominal, while actual records can be longer.
+		// HLS requires EXT-X-TARGETDURATION to be at least every EXTINF, rounded to the nearest
+		// whole second; it is at least the declared duration, which every segment aims for.
 		let target_duration = window
 			.segments
 			.iter()
-			.map(|s| s.duration.as_secs_f64().ceil() as u64)
+			.map(|s| s.duration)
+			.chain([self.hls.duration])
+			.map(|duration| duration.as_secs_f64().round() as u64)
 			.max()
 			.unwrap_or(0)
 			.max(1);
@@ -713,7 +739,7 @@ impl Rendition {
 				let discontinuity = previous.replace(s.discontinuity).is_some_and(|p| p != s.discontinuity);
 				Segment {
 					segment: s.segment,
-					tag: segments::tag(&s.reference),
+					tag: s.tag.to_string(),
 					duration: s.duration,
 					gap: content == Content::Gap,
 					discontinuity,
@@ -731,26 +757,15 @@ impl Rendition {
 		}
 	}
 
-	/// `rows` with what each holds, up to the first one this rendition cannot resolve yet (or
-	/// ever, once its timeline failed): a segment is listed only once its content is final.
+	/// `rows` with what each holds, up to the first one whose alignment is still pending: a
+	/// segment is listed only once its content is final.
 	fn resolved<'a>(&'a self, rows: &'a [segments::Row]) -> impl Iterator<Item = (&'a segments::Row, Content)> {
 		rows.iter()
 			.map(|row| (row, self.resolve(row)))
-			.take_while(|(_, content)| !matches!(content, Content::Pending | Content::Failed))
+			.take_while(|(_, content)| *content != Content::Pending)
 	}
 
-	/// Whether this rendition's timeline failed before reaching `row`'s end, so neither it nor
-	/// any later row will resolve.
-	pub(crate) fn is_failed(&self, row: &segments::Row) -> bool {
-		self.resolve(row) == Content::Failed
-	}
-
-	/// Why this rendition's own timeline failed, whether or not that fails its listings.
-	pub(crate) fn own_failure(&self) -> Option<crate::Error> {
-		self.spans.failure().map(|failure| failure.err)
-	}
-
-	/// Whether the playlist has anything to serve yet (at least one segment, or the broadcast
+	/// Whether the playlist has anything to serve yet (at least one segment, or the records
 	/// already ended).
 	pub(crate) fn is_playable(&self) -> bool {
 		self.media.sync(&self.live);
@@ -759,10 +774,8 @@ impl Rendition {
 
 	/// Whether the multivariant playlist advertises this rendition, i.e. a player can start it.
 	///
-	/// Audio starts on any segment. Video starts only at a group start that is a sync point,
-	/// so it waits until a listed segment begins at one rather than send a stock player to
-	/// media it cannot decode. The window keeps its newest such segment, and a GOP too long for
-	/// that still stays advertised for the rest of the publisher run.
+	/// Every segment starts at a group, and every group at a keyframe, so a rendition can start
+	/// as soon as it lists anything.
 	pub(crate) fn is_advertised(&self) -> bool {
 		self.poll_advertised(&kio::Waiter::noop()).is_ready()
 	}
@@ -773,52 +786,14 @@ impl Rendition {
 		if self.failed_alone() {
 			return Poll::Pending;
 		}
-		if self.kind == Kind::Audio {
-			return self.poll_playable(waiter);
-		}
-		self.poll_media(waiter);
-		if self.run().startable == Some(self.live.resets()) {
-			return self.poll_playable(waiter);
-		}
-		let startable = self.live.poll_rows(waiter, |rows| {
-			for row in rows {
-				let mut content = self.resolve(row);
-				if content == Content::Pending {
-					// Wake when the oldest unresolved row resolves, since it may be the sync start.
-					if self.poll_resolved(waiter, row).is_pending() {
-						return Poll::Pending;
-					}
-					content = self.resolve(row);
-				}
-				match content {
-					// Another rendition's boundary only resolves to frames by snapping to a sync start.
-					Content::Frames { .. } if !self.is(&row.reference) || row.starts_sync() => return Poll::Ready(()),
-					Content::Failed => return Poll::Pending,
-					_ => {}
-				}
-			}
-			Poll::Pending
-		});
-		let Poll::Ready(resets) = startable else {
-			return Poll::Pending;
-		};
-		// Tagged with the scanned window, so a clear racing this store leaves it stale.
-		self.latch(resets);
-		Poll::Ready(())
+		self.poll_playable(waiter)
 	}
 
-	/// Record a start listed in window `resets`. Resets only grow, so a delayed latch for an
-	/// older window never replaces a newer one.
-	fn latch(&self, resets: u64) {
-		let mut run = self.run.lock().expect("run lock poisoned");
-		run.startable = run.startable.max(Some(resets));
-	}
-
-	/// This rendition's DASH representation: its master-level metadata plus its track's
-	/// timeline as `(t, d)` pairs in the timeline's own timescale (the record values
-	/// verbatim, so `$Time$` addressing resolves exactly). Empty until the init is known, as
-	/// for [`media_playlist`](Self::media_playlist), and failing like it.
-	pub(crate) fn representations(&self) -> Result<Vec<mpd::Representation>> {
+	/// This rendition's DASH representation: its master-level metadata plus its segments as
+	/// `(t, d)` pairs in milliseconds (the record values verbatim, so `$Time$` addressing resolves
+	/// exactly). Empty until the init is known, as for [`media_playlist`](Self::media_playlist),
+	/// and failing like it.
+	pub(crate) fn representation(&self) -> Result<Option<mpd::Representation>> {
 		// Read the run before the rows (see `restart`).
 		let run = self.run();
 		self.media.sync(&self.live);
@@ -827,64 +802,51 @@ impl Rendition {
 			return Err(err);
 		}
 		let Some(init) = self.built_init(&run) else {
-			return Ok(Vec::new());
+			return Ok(None);
 		};
-		let timescale = self.timescale();
 		let complete = self.resolved(&window.segments).count() == window.segments.len();
 		let ended = window.ended && complete;
-		let mut periods = std::collections::BTreeMap::<moq_net::Timestamp, (String, Vec<(u64, u64)>)>::new();
-		for (row, content) in self.resolved(&window.segments) {
-			if content == Content::Gap {
-				continue;
-			}
-			let t = row.pts.as_scale(timescale) as u64;
-			let span = row.end.saturating_sub(row.pts.into());
-			let d = (span.as_nanos() * timescale.as_u64() as u128 / 1_000_000_000) as u64;
-			// A zero-duration terminal record sits at the presentation end and cannot be
-			// requested by DASH timing. HLS still serves it by its source-addressed URL.
-			if d == 0 {
-				continue;
-			}
-			periods
-				.entry(row.period)
-				.or_insert_with(|| (segments::tag(&row.reference), Vec::new()))
-				.1
-				.push((t, d));
-		}
+		let segments = self
+			.resolved(&window.segments)
+			.filter(|(_, content)| *content != Content::Gap)
+			.map(|(row, _)| {
+				let t = row.pts.as_millis() as u64;
+				let d = row.end.saturating_sub(row.pts.into()).as_millis() as u64;
+				(t, d)
+			})
+			// A zero-duration segment cannot be requested by DASH timing.
+			.filter(|(_, d)| *d > 0)
+			.collect();
 		let (framerate, sample_rate, channel_count) = match &self.config {
 			Config::Video(_) => (self.framerate(), None, None),
 			Config::Audio(config) => (None, Some(config.sample_rate), Some(config.channel_count)),
 		};
-		Ok(periods
-			.into_iter()
-			.map(|(period, (tag, segments))| mpd::Representation {
-				name: self.name.clone(),
-				kind: self.kind,
-				bandwidth: self.bandwidth(),
-				codec: self.codec.clone(),
-				width: self.width,
-				height: self.height,
-				framerate,
-				sample_rate,
-				channel_count,
-				timescale: self.section.timescale.max(1),
-				segments,
-				ended,
-				period,
-				tag,
-				init: init.hash.clone(),
-				generation: run.generation.clone(),
-			})
-			.collect())
+		Ok(Some(mpd::Representation {
+			name: self.name.clone(),
+			kind: self.kind,
+			bandwidth: self.bandwidth(),
+			codec: self.codec.clone(),
+			width: self.width,
+			height: self.height,
+			framerate,
+			sample_rate,
+			channel_count,
+			timescale: TIMESCALE,
+			segments,
+			ended,
+			tag: self.tag.to_string(),
+			init: init.hash.clone(),
+			generation: run.generation.clone(),
+		}))
 	}
 
-	/// Fetch and transmux the segment of the reference tagged `tag` at `at`: its aligned
-	/// number, or its timeline pts in the timeline's timescale (DASH `$Time$`).
+	/// Fetch and transmux the segment of the record track tagged `tag` at `at`: its number, or
+	/// its start in milliseconds (DASH `$Time$`).
 	async fn segment_at(&self, tag: &str, at: segments::At) -> Result<Option<Bytes>> {
 		self.authorize()?;
 		let sequence = match at {
 			segments::At::Sequence(sequence) => sequence,
-			segments::At::Pts(pts) => match self.live.segment_number_at(tag, pts, self.timescale()) {
+			segments::At::Pts(pts) => match self.live.segment_number_at(tag, pts) {
 				Some(sequence) => sequence,
 				None => return Ok(None),
 			},
@@ -892,28 +854,24 @@ impl Rendition {
 		self.numbered(tag, sequence).await
 	}
 
-	/// The timeline's timescale; a declared 0 is clamped rather than trusted.
-	fn timescale(&self) -> moq_net::Timescale {
-		moq_net::Timescale::new((self.section.timescale as u64).max(1)).expect("clamped nonzero timescale")
-	}
-
 	/// The wall-clock time of a media timestamp, when the catalog advertises its broadcast
-	/// clock. Converts the timeline-timescale timestamp into the clock's timescale and applies
-	/// the root mapping; an unrepresentable result maps to no time rather than a truncated one.
+	/// clock; an unrepresentable result maps to no time rather than a truncated one.
 	pub(crate) fn wall_clock(&self, pts: moq_net::Timestamp) -> Option<Wall> {
 		let clock = self.clock.as_ref()?;
 		clock.wall_clock(pts).ok()
 	}
 
-	/// A muxer at the timescale this rendition's config chose, with the latest bitrate and
-	/// fallback framerate.
+	/// A muxer at the timescale this rendition's config chose, with the latest bitrate.
+	///
+	/// Each segment times its last sample from its own record, so no catalog estimate changes
+	/// the media bytes.
 	pub(crate) fn muxer(&self) -> Result<Muxer> {
 		let bitrate = self.bitrate();
 		Ok(match &self.config {
 			Config::Video(config) => {
 				let mut config = config.clone();
 				config.bitrate = bitrate;
-				Muxer::video(&config)?.with_framerate(self.framerate())
+				Muxer::video(&config)?
 			}
 			Config::Audio(config) => {
 				let mut config = config.clone();
@@ -957,22 +915,15 @@ impl Rendition {
 		Ok(track)
 	}
 
-	/// The media track's name in its broadcast, which can differ from the rendition's ID.
-	fn track_name(&self) -> &str {
-		match &self.config {
-			Config::Video(config) => config.track(&self.name),
-			Config::Audio(config) => config.track(&self.name),
-		}
-	}
-
 	/// The CMAF init segment served at `init.{hash}.mp4`, built on first request and cached.
 	///
 	/// `None` when it cannot be built yet, or `hash` (a [`Resource::Init`](super::Resource::Init)
 	/// hash) names any other bytes, so a URL never serves an init it does not describe.
 	///
 	/// For inline-parameter-set codecs (no catalog `description`), the parameter sets are
-	/// resolved by fetching the newest keyframe group first. A bound track's retained media
-	/// remains usable after its broadcast ends or is replaced; replacement media is never read.
+	/// resolved by fetching the newest listed segment's first group. A bound track's retained
+	/// media remains usable after its broadcast ends or is replaced; replacement media is never
+	/// read.
 	pub async fn init(&self, hash: &str) -> Result<Option<Bytes>> {
 		let init = self.load_init().await?;
 		Ok(init.filter(|init| init.hash == hash).map(|init| init.bytes.clone()))
@@ -1020,20 +971,18 @@ impl Rendition {
 		let mut muxer = self.muxer()?;
 
 		// An out-of-band codec builds its init straight from the catalog; an inline one returns
-		// `None` until a keyframe group is read, so bootstrap it from the newest one indexed.
+		// `None` until a keyframe group is read, so bootstrap it from the newest listed segment's
+		// first group: a segment starts at a group, and a group at a keyframe.
 		let bytes = match muxer.init()? {
 			Some(bytes) => bytes,
 			None => {
-				let reference = (self.kind, self.name.clone(), self.track_name().to_string());
-				let latest = self.spans.latest_keyframe_group();
-				let Some(sequence) = latest.or_else(|| self.live.latest_keyframe_group(&reference)) else {
+				let Some(sequence) = self.live.latest_group() else {
 					return Ok(None);
 				};
 				let Some((broadcast, track)) = self.track(&binding).await? else {
 					return Ok(None);
 				};
-				let Ok(mut group) = fetch(&track, hang::timeline::Position::group(sequence), None, &broadcast).await?
-				else {
+				let Ok(mut group) = fetch(&track, sequence, &broadcast).await? else {
 					return Ok(None);
 				};
 				// A cache eviction mid-read leaves the init unbuildable for now, not an error.
@@ -1051,9 +1000,9 @@ impl Rendition {
 
 	/// Fetch and transmux the segment a [`Resource::Segment`](super::Resource::Segment) URL names.
 	///
-	/// Fetches every frame the segment resolves to on this rendition (an audio segment packs many
+	/// Fetches every group the segment holds on this rendition (an audio segment packs many
 	/// short groups) and encodes them as a single CMAF fragment. `None` when the segment isn't in
-	/// the playlist window, is a gap or not yet resolved for this rendition, or its groups already
+	/// the playlist window, is a gap or not yet decided for this rendition, or its groups already
 	/// left the relay cache. After End or Restart, only the bound instance's retained media
 	/// drains; a replacement's media is never read under these rows. A denied referenced
 	/// broadcast returns its authorization error even when the requested row is absent.
@@ -1067,12 +1016,12 @@ impl Rendition {
 		if !current() {
 			return Ok(None);
 		}
-		let segment = self.segment_at(&id.reference, id.at).await?;
+		let segment = self.segment_at(&id.tag, id.at).await?;
 		// A generation change while fetching may have swapped the rows under the lookup.
 		Ok(segment.filter(|_| current()))
 	}
 
-	/// Fetch and transmux the segment numbered `segment` by the reference tagged `tag`,
+	/// Fetch and transmux the segment numbered `segment` by the record track tagged `tag`,
 	/// whatever the run; see [`segment`](Self::segment).
 	pub(crate) async fn numbered(&self, tag: &str, segment: u64) -> Result<Option<Bytes>> {
 		self.authorize()?;
@@ -1082,28 +1031,21 @@ impl Rendition {
 		self.fetch(&row).await
 	}
 
-	/// Fetch and transmux `row`'s frames on this rendition; see [`segment`](Self::segment).
+	/// Fetch and transmux `row`'s groups on this rendition; see [`segment`](Self::segment).
 	pub(crate) async fn fetch(&self, row: &segments::Row) -> Result<Option<Bytes>> {
 		let binding = self.authorize()?;
 		// Read the run before resolving the row (see `restart`), so an init decoded from its
 		// groups is never cached for a run that started while they were being fetched.
 		let run = self.run();
-		let Content::Frames { ranges, filter } = self.resolve(row) else {
+		let Content::Groups(groups) = self.resolve(row) else {
 			return Ok(None);
 		};
 
 		// A segment must be served whole. If its group span exceeds the safety cap (a
-		// pathologically coarse timeline), 404 rather than silently truncating it to a segment
+		// pathologically coarse record), 404 rather than silently truncating it to a segment
 		// shorter than its advertised duration.
-		let total: u64 = ranges
-			.iter()
-			.map(|range| last_group(range).saturating_sub(range.start.group).saturating_add(1))
-			.sum();
-		if total > MAX_SEGMENT_GROUPS {
-			tracing::warn!(
-				total,
-				"segment spans more than MAX_SEGMENT_GROUPS; refusing to truncate"
-			);
+		if groups.end.saturating_sub(groups.start) > MAX_SEGMENT_GROUPS {
+			tracing::warn!(?groups, "segment spans more than MAX_SEGMENT_GROUPS; refusing to truncate");
 			return Ok(None);
 		}
 
@@ -1117,43 +1059,44 @@ impl Rendition {
 		// group (its real successor lives in the next group), audible on audio segments that span
 		// many groups.
 		let mut frames = Vec::new();
-		for range in &ranges {
-			for sequence in range.start.group..=last_group(range) {
-				let start = match sequence == range.start.group {
-					true => range.start,
-					false => hang::timeline::Position::group(sequence),
-				};
-				let end = (sequence == range.end.group).then_some(range.end.frame);
-				let miss = match fetch(&track, start, end, &broadcast).await? {
-					Ok(mut group) => match read_group(&mut muxer, &mut group, &broadcast).await? {
-						Ok(mut group_frames) => {
-							frames.append(&mut group_frames);
-							continue;
-						}
-						Err(err) => err,
-					},
+		for sequence in groups {
+			let miss = match fetch(&track, sequence, &broadcast).await? {
+				Ok(mut group) => match read_group(&mut muxer, &mut group, &broadcast).await? {
+					Ok(mut group_frames) => {
+						frames.append(&mut group_frames);
+						continue;
+					}
 					Err(err) => err,
-				};
-				tracing::warn!(
-					segment = row.segment,
-					group = sequence,
-					err = %miss,
-					"abandoning an advertised segment: a group is unavailable"
-				);
-				return Ok(None);
-			}
-		}
-
-		// A rendition resolved by time keeps only the frames inside the segment's span.
-		if let Some(filter) = filter {
-			frames.retain(|frame| filter.contains(&Duration::from(frame.timestamp)));
+				},
+				Err(err) => err,
+			};
+			tracing::warn!(
+				segment = row.segment,
+				group = sequence,
+				err = %miss,
+				"abandoning an advertised segment: a group is unavailable"
+			);
+			return Ok(None);
 		}
 		if frames.is_empty() {
 			return Ok(None);
 		}
+		// The last presented sample has no successor to time it, but the record says where the
+		// segment ends, so the fragment ends exactly where the next one starts.
+		if let Some(last) = frames
+			.iter_mut()
+			.filter(|frame| frame.duration.is_none())
+			.max_by_key(|frame| frame.timestamp.as_micros())
+			&& let Ok(end) = moq_net::Timestamp::from_micros(row.end.as_micros() as u64)
+			&& let Ok(end) = end.convert(last.timestamp.scale())
+			&& let Ok(duration) = end.checked_sub(last.timestamp)
+			&& !duration.is_zero()
+		{
+			last.duration = Some(duration);
+		}
 		let fragment = muxer.fragment(row.segment as u32, &frames)?;
 		// Inline codec metadata was already decoded from these completed groups.
-		// Reuse it instead of fetching a newer, possibly unfinished timeline tail.
+		// Reuse it instead of fetching a newer, possibly unfinished group.
 		if let Some(bytes) = muxer.init()? {
 			self.cache_init(run.epoch, bytes);
 		}
@@ -1161,77 +1104,153 @@ impl Rendition {
 	}
 }
 
-/// The first retained reference tag, used by number-only test helpers for a single reference.
-#[cfg(test)]
-fn listed_tag(rows: &[segments::Row]) -> String {
-	rows.first()
-		.map(|row| segments::tag(&row.reference))
-		.unwrap_or_default()
-}
-
 #[cfg(test)]
 impl Rendition {
-	/// Fetch the listed segment numbered `segment`, under the tag its rows carry.
+	/// Fetch the listed segment numbered `segment`.
 	pub(crate) async fn listed_segment(&self, segment: u64) -> Result<Option<Bytes>> {
-		let tag = listed_tag(&self.live.window().segments);
-		self.numbered(&tag, segment).await
+		self.numbered(&self.tag.clone(), segment).await
 	}
 
 	/// What the listed segment numbered `segment` holds on this rendition.
 	pub(crate) fn listed_content(&self, segment: u64) -> Option<Content> {
-		let tag = listed_tag(&self.live.window().segments);
-		Some(self.resolve(&self.live.row(&tag, segment)?))
+		Some(self.resolve(&self.live.row(&self.tag, segment)?))
 	}
 
-	/// Fetch the listed segment starting at `time`, under the tag its rows carry.
+	/// Fetch the listed segment starting at `time` milliseconds.
 	pub(crate) async fn listed_segment_at(&self, time: u64) -> Result<Option<Bytes>> {
-		let tag = listed_tag(&self.live.window().segments);
-		self.segment_at(&tag, segments::At::Pts(time)).await
+		self.segment_at(&self.tag.clone(), segments::At::Pts(time)).await
 	}
 }
 
-/// The last group holding a frame of `range`.
-fn last_group(range: &std::ops::Range<hang::timeline::Position>) -> u64 {
-	match range.end.frame {
-		0 => range.end.group.saturating_sub(1),
-		_ => range.end.group,
-	}
-}
-
-/// Follow `track`'s own timeline into `spans` until it ends, then mark nothing pending.
-async fn watch_spans(
+/// Follow a rendition's HLS records into its window until they end or fail.
+///
+/// A record is listed once the next one arrives, which bounds its groups and, unless it states
+/// its own, its duration. A stop is listed at once, as a gap.
+async fn watch_records(
 	broadcast: moq_net::broadcast::Consumer,
-	section: Archive,
-	track: String,
-	spans: Arc<Spans>,
-	live: Arc<segments::Producer>,
+	hls: Hls,
+	rendition: Weak<Rendition>,
+	mut retiring: tokio::sync::watch::Receiver<bool>,
 ) {
 	let result: Result<()> = async {
-		let mut timeline = moq_mux::timeline::Consumer::<()>::subscribe(&broadcast, &section, &track).await?;
-		while let Some(event) = timeline.next().await? {
+		let mut records = tokio::select! {
+			records = moq_mux::hls::Consumer::subscribe(&broadcast, &hls) => records?,
+			_ = retiring.wait_for(|retiring| *retiring) => return Ok(()),
+		};
+		// The newest record, waiting for its successor.
+		let mut pending: Option<moq_mux::hls::Entry> = None;
+		// The next listed segment starts a new discontinuity.
+		let mut broken = false;
+		loop {
+			let event = tokio::select! {
+				event = records.next() => match event? {
+					Some(event) => event,
+					None => return Ok(()),
+				},
+				// Nothing waits on a successor, so a retiring rendition has listed all it will.
+				_ = retiring.wait_for(|retiring| *retiring), if pending.is_none() => return Ok(()),
+			};
+			let Some(rendition) = rendition.upgrade() else {
+				return Ok(());
+			};
 			match event {
-				moq_mux::timeline::Event::Push { entry, .. } => spans.push(entry),
-				moq_mux::timeline::Event::Pop(range) => spans.pop(range),
-				moq_mux::timeline::Event::Skip(_) => spans.clear(),
-				_ => unreachable!("unknown timeline event"),
+				moq_mux::hls::Event::Push { index, entry } => {
+					// The record bounds the one a retiring rendition was waiting on, and starts
+					// what the catalog no longer lists.
+					let last = *retiring.borrow();
+					if let Some(previous) = pending.take() {
+						match row(&rendition, &previous, &entry, broken) {
+							Some(row) => {
+								broken = false;
+								rendition.push(row);
+							}
+							// A successor that goes backwards can't bound it, so drop it.
+							None => broken = true,
+						}
+					}
+					if entry.is_stop() {
+						let pts = Duration::from(entry.pts);
+						let discontinuity = rendition.fanout.stamp(entry.sequence, broken, pts);
+						rendition.push(segments::Row {
+							index,
+							segment: entry.sequence,
+							tag: rendition.tag.clone(),
+							groups: entry.group..entry.group,
+							duration: Duration::ZERO,
+							pts: entry.pts,
+							end: pts,
+							discontinuity,
+							stop: true,
+						});
+						// Whatever resumes does not continue it.
+						broken = true;
+					} else {
+						pending = Some(entry);
+					}
+					if last {
+						return Ok(());
+					}
+				}
+				moq_mux::hls::Event::Pop(range) => {
+					// HLS assigns consecutive positions within a playlist. Removing an interior
+					// row would renumber every later URI, so retention retires a whole prefix.
+					if let Some(through) = range.end.checked_sub(1) {
+						rendition.live.retire(through);
+					}
+				}
+				moq_mux::hls::Event::Skip(_) => {
+					pending = None;
+					broken = true;
+					rendition.live.clear();
+				}
+				_ => unreachable!("unknown HLS record event"),
 			}
 		}
-		Ok(())
 	}
 	.await;
+	let Some(rendition) = rendition.upgrade() else {
+		return;
+	};
 	match result {
-		Ok(()) => spans.end(),
+		Ok(()) => rendition.end(),
 		// Never retried (the origin already rides out transient source failures), and not
 		// papered over with gaps: the rendition's playlist answers the error.
 		Err(err) => {
-			tracing::error!(%track, %err, "rendition timeline failed; failing its playlist");
-			let err = crate::Error::TimelineFailed {
-				track,
+			tracing::error!(track = %hls.track, %err, "HLS records failed; failing the rendition's playlist");
+			rendition.fail(crate::Error::RecordsFailed {
+				track: hls.track,
 				source: Box::new(err),
-			};
-			spans.fail(err, live.is_ended());
+			});
 		}
 	}
+	rendition.close();
+}
+
+/// The row of `record`, bounded by its successor `next`, or `None` when `next` goes backwards.
+fn row(
+	rendition: &Rendition,
+	record: &moq_mux::hls::Entry,
+	next: &moq_mux::hls::Entry,
+	broken: bool,
+) -> Option<segments::Row> {
+	let pts = Duration::from(record.pts);
+	if next.group < record.group || Duration::from(next.pts) < pts {
+		tracing::warn!(segment = record.sequence, "HLS record goes backwards; dropping its segment");
+		return None;
+	}
+	let duration = record.duration.unwrap_or(Duration::from(next.pts) - pts);
+	let end = pts + duration;
+	Some(segments::Row {
+		index: record.sequence,
+		segment: record.sequence,
+		tag: rendition.tag.clone(),
+		groups: record.group..next.group,
+		duration,
+		pts: record.pts,
+		end,
+		discontinuity: rendition.fanout.stamp(record.sequence, broken, end),
+		stop: false,
+	})
 }
 
 impl Drop for Rendition {
@@ -1244,20 +1263,13 @@ impl Drop for Rendition {
 
 /// Fetch one group, mapping "no longer (or not yet) servable" to the error that says so
 /// rather than a bare `None`: a caller abandoning a segment can only explain itself with it.
-///
-/// Fetches the whole group, since a group is the unit of decodability, and reads from `start`
-/// and, when `end` is set, stops before that frame of the group.
 async fn fetch(
 	track: &moq_net::track::Consumer,
-	start: hang::timeline::Position,
-	end: Option<u64>,
+	sequence: u64,
 	broadcast: &moq_net::broadcast::Consumer,
 ) -> Result<std::result::Result<moq_net::group::Consumer, moq_net::Error>> {
-	match track.fetch_group(start.group, None).await {
-		Ok(group) => Ok(Ok(match end {
-			Some(end) => group.with_range(start.frame..end),
-			None => group.with_range(start.frame..),
-		})),
+	match track.fetch_group(sequence, None).await {
+		Ok(group) => Ok(Ok(group)),
 		Err(err) if is_unservable(&err, broadcast) => Ok(Err(err)),
 		Err(err) => Err(err.into()),
 	}
@@ -1355,6 +1367,10 @@ mod tests {
 		producer
 	}
 
+	fn hls() -> Hls {
+		Hls::new("video.hls", Duration::from_secs(1))
+	}
+
 	#[tokio::test]
 	async fn pending_reads_preserve_a_later_authorization_refusal() {
 		let origin = moq_tokio::origin::spawn();
@@ -1363,51 +1379,35 @@ mod tests {
 		let source = moq_mux::Source::new(origin.consume(), broadcast.consume());
 		let mut config = VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		config.broadcast = Some(moq_net::path::Relative::new("./secret").to_owned());
-		let rendition = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
+		let renditions = renditions::Producer::new(Duration::from_secs(30));
+		let rendition =
+			Arc::new(Rendition::video("video".into(), &config, &source, hls(), None, renditions.fanout()).unwrap());
 		let request = dynamic.requested_broadcast().await.unwrap();
-		let other = origin.dynamic("room/hidden").unwrap();
-		config.broadcast = Some(moq_net::path::Relative::new("./hidden").to_owned());
-		let resolving = Arc::new(Rendition::video("video".into(), &config, &source, Archive::default(), None).unwrap());
-		let other_request = other.requested_broadcast().await.unwrap();
-		let row = |reference: &str| segments::Row {
+		let row = segments::Row {
 			index: 0,
 			segment: 0,
-			period: moq_net::Timestamp::ZERO,
-			reference: Arc::new((Kind::Video, reference.into(), reference.into())),
-			frames: hang::timeline::Position::group(0)..hang::timeline::Position::group(1),
-			keyframe: true,
+			tag: rendition.tag.clone(),
+			groups: 0..1,
 			duration: Duration::from_secs(1),
 			pts: moq_net::Timestamp::ZERO,
 			end: Duration::from_secs(1),
 			discontinuity: 0,
+			stop: false,
 		};
-		let own = row("video");
-		let segment = rendition.fetch(&own);
+		let segment = rendition.fetch(&row);
 		tokio::pin!(segment);
 		// The cursor waits on a window with no rows, which the refusal neither fills nor ends.
 		let mut cursor = rendition.segments();
 		let next = cursor.next();
 		tokio::pin!(next);
-		// This cursor waits for its own timeline to resolve another rendition's row, which the
-		// refusal never does either.
-		resolving.live.push(row("other"), Duration::from_secs(30));
-		let mut resolving_cursor = resolving.segments();
-		let resolving_next = resolving_cursor.next();
-		tokio::pin!(resolving_next);
 		tokio::select! {
 			biased;
 			_ = &mut segment => panic!("the reference request has not been answered"),
 			_ = &mut next => panic!("the reference request has not been answered"),
-			_ = &mut resolving_next => panic!("the reference request has not been answered"),
 			_ = std::future::ready(()) => {}
 		}
 		request.reject(moq_net::Error::Unauthorized);
-		other_request.reject(moq_net::Error::Unauthorized);
-		for read in [
-			segment.await,
-			next.await.map(|_| None),
-			resolving_next.await.map(|_| None),
-		] {
+		for read in [segment.await, next.await.map(|_| None)] {
 			assert!(matches!(
 				read,
 				Err(crate::Error::Mux(moq_mux::Error::Moq(moq_net::Error::Unauthorized)))

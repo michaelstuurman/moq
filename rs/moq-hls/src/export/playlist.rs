@@ -1,7 +1,7 @@
 //! Hand-written HLS media playlist generation.
 //!
-//! Each reference record defines one complete aligned segment with its own duration.
-//! URLs carry the source reference and record number, and that number is the segment's
+//! Each HLS record defines one complete segment with its own duration.
+//! URLs carry the record track's tag and record number, and that number is the segment's
 //! `EXT-X-MEDIA-SEQUENCE`, so every edge derives it alone. URIs are relative to the media playlist
 //! (`/<broadcast>/<kind>/<rendition>/media.m3u8`), so they resolve against the rendition
 //! directory.
@@ -41,7 +41,7 @@ pub(crate) struct Snapshot {
 pub(crate) struct Segment {
 	/// The source segment number; the URI is `seg/{tag}.{segment}.m4s`.
 	pub segment: u64,
-	/// The [`tag`](super::segments::tag) of the reference numbering the segment.
+	/// The [`tag`](super::segments::tag) of the record track numbering the segment.
 	pub tag: String,
 	/// `EXTINF` duration.
 	pub duration: Duration,
