@@ -29,9 +29,9 @@ listing only current instances, losing the recording's earlier part.
   repeats segments the old cursor wrote. Drain the old cursor first: it owns every
   segment it wrote. Discard replacement segments numbered at or below the old
   cursor's last, then write the replacement's init and mark the transition.
-- Discarding by number is sound: every rendition's rows fan out from one reference
-  timeline, so a number names the same content span on each, and numbers only
-  increase within a broadcaster run, including across reference handoffs.
+- Discarding by number is sound: every rendition's segment `n` is its own HLS
+  record `n`, aligned by the publisher, so a number names the same content span
+  on each, and numbers only increase within a broadcaster run.
 - A rewound timeline or a new generation can reuse lower numbers, but it also
   advances `Segment::discontinuity`. A repeated number with a newer discontinuity
   is a source reset and fails the recording instead of being discarded.

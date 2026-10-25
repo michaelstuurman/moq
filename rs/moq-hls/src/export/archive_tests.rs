@@ -489,7 +489,13 @@ async fn stopped_and_misaligned_segments_are_gaps_and_a_resume_is_a_discontinuit
 	};
 	assert_eq!(
 		flags(&low),
-		[(0, false, false), (1, true, false), (2, true, false), (3, false, true), (4, true, false)]
+		[
+			(0, false, false),
+			(1, true, false),
+			(2, true, false),
+			(3, false, true),
+			(4, true, false)
+		]
 	);
 	replay
 		.playlist_until(Kind::Video, "1080p", |playlist| playlist.contains("#EXT-X-ENDLIST"))
@@ -497,7 +503,13 @@ async fn stopped_and_misaligned_segments_are_gaps_and_a_resume_is_a_discontinuit
 	let high = replay.rendition(Kind::Video, "1080p").snapshot();
 	assert_eq!(
 		flags(&high),
-		[(0, false, false), (1, false, false), (2, true, false), (3, false, true), (4, true, false)]
+		[
+			(0, false, false),
+			(1, false, false),
+			(2, true, false),
+			(3, false, true),
+			(4, true, false)
+		]
 	);
 
 	// A gap is never fetched.

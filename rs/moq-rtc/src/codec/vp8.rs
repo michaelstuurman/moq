@@ -76,7 +76,10 @@ mod tests {
 			timestamp_us: 0,
 			payload: Bytes::from_static(&[0x10, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x40, 0x01, 0xf0, 0x00]),
 		});
-		assert!(result.is_err(), "an HLS record track collision must fail importer creation");
+		assert!(
+			result.is_err(),
+			"an HLS record track collision must fail importer creation"
+		);
 
 		Box::new(bridge).abort(moq_net::Error::Transport("session failed".into()));
 		let Err(error) = track.recv_group().await else {

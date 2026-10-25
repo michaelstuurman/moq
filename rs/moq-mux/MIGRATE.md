@@ -4,6 +4,15 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### HLS records are opt-in and replace timelines
+
+The `timeline` module is replaced by `hls`, and nothing publishes records by default.
+Enable them with `catalog::Config::with_hls(hls::Config::default())`; `with_timeline` is gone.
+`catalog::Reserved::with_timeline_hint` is `with_hls_hint`, and `catalog::Producer::timeline()` is gone.
+Each video and audio rendition then advertises its own `hls` field and `<track>.hls` record track, cut at group boundaries; untimed and data tracks get none.
+Read records with `hls::Consumer::subscribe(&broadcast, &hls)`, whose `Event::Push` carries an `hls::Entry`, or publish your own with `hls::Producer`.
+A publisher that enables HLS must align group boundaries across its renditions.
+
 ### `Programs::finish` returns the program broadcasts
 
 `Programs::finish` now returns each program's `broadcast::Producer` instead of `()`.
@@ -102,20 +111,10 @@ Recordings published with `pes` framing no longer export; import their source ag
 `container::fmp4::Wire::new` returns `Result<Wire>`, as `Wire::from_init` already did, and refuses any other handler instead of treating it as data.
 Handle the error from `Wire::new`.
 
-### Timeline durations are hints (#5715)
-
-`timeline::Config::duration_max`, `with_duration_max`, and `DEFAULT_DURATION_MAX` are gone; set `duration_hint` with `with_duration_hint`, the expected record duration such as the GOP, and the split ceiling follows from it.
-`DEFAULT_DURATION_MIN` is 4 s instead of 2 s, so set `with_duration_min` to keep the shorter records.
-
 ### The catalog consumer is opaque (#5630)
 
 Construct `catalog::Consumer` with `Consumer::new(broadcast, format).await`, or convert a `catalog::hang::Consumer` with `.into()`, then read it through `catalog::Stream`.
 Its `Hang`, `Msf`, and `Closed` variants and `catalog::msf::Consumer::track` are private.
-
-### Timelines record untimed tracks (#5720)
-
-`timeline::Segmenter::frame` takes `pts: impl Into<Option<Timestamp>>`, so existing callers compile.
-A segmenter fed the wrong timedness for its track fails with `Error::TimelineTiming` or `Error::TimelineUntimed`.
 
 ### An unset host clock publishes no wall mapping (#5429)
 

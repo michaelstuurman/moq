@@ -4,6 +4,11 @@ How to update your invocation and config for each breaking change, newest first.
 
 ## Unreleased
 
+### `import --hls` publishes the records `export hls` needs
+
+Imports no longer publish HLS records by default, so `export hls` lists nothing for a broadcast published without them.
+Pass `--hls` to `import` (the stdin formats, `hls`, `rtsp`, and `capture`), and start keyframes at the same timestamps across renditions.
+
 ### `import --linger` sets how long a finished broadcast stays up
 
 A cleanly ended import used to stay up for its `--max-age`; it now stays up for `--linger` (default 30 s), counted from the end, and `--max-age` only sets retention.

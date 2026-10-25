@@ -35,7 +35,7 @@ use crate::Result;
 pub struct Id {
 	/// The publisher run the URL names, if the broadcaster carries one.
 	pub generation: Option<String>,
-	/// The [tag](tag) of the record track numbering the segment.
+	/// A short hash of the name of the record track numbering the segment.
 	pub tag: String,
 	/// Where the segment sits in that numbering.
 	pub at: At,
@@ -397,7 +397,12 @@ impl Producer {
 	/// for inline-parameter-set codecs: a segment starts at a group, and a group at a keyframe.
 	pub fn latest_group(&self) -> Option<u64> {
 		let state = self.state.read();
-		state.rows.iter().rev().find(|row| !row.stop).map(|row| row.groups.start)
+		state
+			.rows
+			.iter()
+			.rev()
+			.find(|row| !row.stop)
+			.map(|row| row.groups.start)
 	}
 
 	/// Whether the playlist has anything to serve yet (at least one segment, or the records
@@ -746,7 +751,11 @@ mod tests {
 		let mut breaks = Discontinuities::default();
 		assert_eq!(breaks.stamp(5, false), 0);
 		breaks.restart();
-		assert_eq!(breaks.stamp(0, false), 1, "the new run's numbering is unrelated to the old");
+		assert_eq!(
+			breaks.stamp(0, false),
+			1,
+			"the new run's numbering is unrelated to the old"
+		);
 	}
 
 	#[test]
@@ -796,7 +805,9 @@ mod tests {
 		live.push(row(5, 5, 10_000, 2_000), window);
 		assert!(matches!(live.numbered(2), Lookup::Never), "evicted or never listed");
 		assert!(matches!(live.numbered(3), Lookup::Found(row) if row.segment == 3));
-		assert!(matches!(live.numbered(4), Lookup::Missing(span) if span == (Duration::from_secs(6)..Duration::from_secs(12))));
+		assert!(
+			matches!(live.numbered(4), Lookup::Missing(span) if span == (Duration::from_secs(6)..Duration::from_secs(12)))
+		);
 		assert!(matches!(live.numbered(6), Lookup::Pending));
 		live.end();
 		assert!(matches!(live.numbered(6), Lookup::Never));

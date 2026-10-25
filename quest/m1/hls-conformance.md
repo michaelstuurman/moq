@@ -16,7 +16,7 @@ From the 2026-10-24 moq-hls audit, which found no player-level HLS or DASH
 coverage. Decided with the maintainer on 2026-10-24:
 
 - ffprobe conformance lands in m1, so it validates the
-  [Catalog HLS field](/quest/m1/archive/catalog-hls.md) redesign and the
+  Catalog HLS field redesign and the
   [fixed target duration](/quest/m1/archive/hls-target.md) before the cut. A
   browser player test follows in m2
   ([HLS and DASH browser playback](/quest/m2/hls-player-test.md)).
@@ -29,7 +29,6 @@ Public API: none. Wire: none.
 
 ## Required
 
-- [Catalog HLS field](/quest/m1/archive/catalog-hls.md) - aligned per-rendition records that this checks the manifests against
 - [Fixed HLS target duration](/quest/m1/archive/hls-target.md) - the run-wide target this asserts
 
 ## Related

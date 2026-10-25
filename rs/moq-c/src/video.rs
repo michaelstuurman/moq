@@ -1045,9 +1045,7 @@ mod tests {
 		// Probed rather than hand-built, so the test track carries what a real one would.
 		let encode = moq_video::encode::Config::new(320, 240, moq_video::FrameRate::new(30, 1).unwrap());
 		let rendition = encode.probe().await.unwrap();
-		let reserved = catalog
-			.reserve()
-			.with_hls_hint(encode.gop.duration(encode.framerate));
+		let reserved = catalog.reserve().with_hls_hint(encode.gop.duration(encode.framerate));
 		let producer = moq_video::encode::Producer::new(broadcast, reserved, rendition).unwrap();
 
 		let name = producer.demand().name().to_string();

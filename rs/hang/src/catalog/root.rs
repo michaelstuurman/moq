@@ -1076,14 +1076,22 @@ mod test {
 		let clock = catalog.clock.expect("the fixture carries a root clock");
 		assert_eq!(clock.wall.scale().as_u64(), 1_000_000);
 
-		let hls = catalog.video.renditions["video"].hls.clone().expect("the fixture opts video into HLS");
-		assert_eq!(hls, crate::catalog::Hls::new("video.hls", std::time::Duration::from_secs(2)));
+		let hls = catalog.video.renditions["video"]
+			.hls
+			.clone()
+			.expect("the fixture opts video into HLS");
+		assert_eq!(
+			hls,
+			crate::catalog::Hls::new("video.hls", std::time::Duration::from_secs(2))
+		);
 
 		// Record PTS 2000 (ms) lands 2s after the wall epoch, whatever the track timescale.
 		let expected = moq_clock::Wall::UNIX_EPOCH
 			+ std::time::Duration::from_millis(crate::catalog::MOQ_EPOCH_UNIX_MILLIS + 1_751_846_402_000);
 		assert_eq!(
-			clock.wall_clock(moq_net::Timestamp::from_millis(2000).unwrap()).unwrap(),
+			clock
+				.wall_clock(moq_net::Timestamp::from_millis(2000).unwrap())
+				.unwrap(),
 			expected
 		);
 	}
@@ -1110,8 +1118,9 @@ mod test {
 	#[test]
 	fn an_undecodable_hls_field_leaves_media_playable() {
 		let rendition = serde_json::json!({"codec": "avc1.64001f", "container": {"kind": "legacy"}});
-		let media = Catalog::<()>::from_str(&serde_json::json!({"video": {"renditions": {"video": rendition}}}).to_string())
-			.unwrap();
+		let media =
+			Catalog::<()>::from_str(&serde_json::json!({"video": {"renditions": {"video": rendition}}}).to_string())
+				.unwrap();
 		for hls in [
 			serde_json::json!({"track": "video.hls"}),
 			serde_json::json!({"duration": 4000}),

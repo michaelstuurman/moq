@@ -494,9 +494,7 @@ impl Rendition {
 		}
 		let pts = Duration::from(row.pts);
 		let verdict = match lead.live.numbered(row.segment) {
-			segments::Lookup::Found(lead) => {
-				!lead.stop && pts.abs_diff(Duration::from(lead.pts)) <= lead.duration / 2
-			}
+			segments::Lookup::Found(lead) => !lead.stop && pts.abs_diff(Duration::from(lead.pts)) <= lead.duration / 2,
 			segments::Lookup::Missing(span) => !span.contains(&pts),
 			segments::Lookup::Never => true,
 			segments::Lookup::Pending => return None,
@@ -1045,7 +1043,10 @@ impl Rendition {
 		// pathologically coarse record), 404 rather than silently truncating it to a segment
 		// shorter than its advertised duration.
 		if groups.end.saturating_sub(groups.start) > MAX_SEGMENT_GROUPS {
-			tracing::warn!(?groups, "segment spans more than MAX_SEGMENT_GROUPS; refusing to truncate");
+			tracing::warn!(
+				?groups,
+				"segment spans more than MAX_SEGMENT_GROUPS; refusing to truncate"
+			);
 			return Ok(None);
 		}
 
@@ -1235,7 +1236,10 @@ fn row(
 ) -> Option<segments::Row> {
 	let pts = Duration::from(record.pts);
 	if next.group < record.group || Duration::from(next.pts) < pts {
-		tracing::warn!(segment = record.sequence, "HLS record goes backwards; dropping its segment");
+		tracing::warn!(
+			segment = record.sequence,
+			"HLS record goes backwards; dropping its segment"
+		);
 		return None;
 	}
 	let duration = record.duration.unwrap_or(Duration::from(next.pts) - pts);

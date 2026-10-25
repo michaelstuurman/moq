@@ -1505,10 +1505,15 @@ mod tests {
 	}
 
 	/// Each HLS record of `tracks`' `video` as `(group, pts ms, stop)`.
-	async fn hls_records(broadcast: &moq_net::broadcast::Producer, tracks: &crate::hls::Tracks) -> Vec<(u64, u64, bool)> {
+	async fn hls_records(
+		broadcast: &moq_net::broadcast::Producer,
+		tracks: &crate::hls::Tracks,
+	) -> Vec<(u64, u64, bool)> {
 		tracks.finish();
 		let hls = tracks.hls("video").expect("declared");
-		let mut consumer = crate::hls::Consumer::subscribe(&broadcast.consume(), &hls).await.unwrap();
+		let mut consumer = crate::hls::Consumer::subscribe(&broadcast.consume(), &hls)
+			.await
+			.unwrap();
 		let mut records = Vec::new();
 		while let Some(event) = consumer.next().await.unwrap() {
 			if let crate::hls::Event::Push { entry, .. } = event {
@@ -1558,7 +1563,12 @@ mod tests {
 
 		assert_eq!(
 			hls_records(&broadcast, &tracks).await,
-			[(0, 0, false), (1, 66, true), (2, 2_400_000, false), (3, 2_400_000, true)]
+			[
+				(0, 0, false),
+				(1, 66, true),
+				(2, 2_400_000, false),
+				(3, 2_400_000, true)
+			]
 		);
 	}
 

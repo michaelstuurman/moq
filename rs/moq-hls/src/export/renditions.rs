@@ -454,7 +454,9 @@ impl Producer {
 			self.register(&rendition);
 			current.renditions.insert(key, rendition);
 		}
-		if current.renditions.is_empty() && (!catalog.video.renditions.is_empty() || !catalog.audio.renditions.is_empty()) {
+		if current.renditions.is_empty()
+			&& (!catalog.video.renditions.is_empty() || !catalog.audio.renditions.is_empty())
+		{
 			tracing::debug!("no rendition advertises HLS records yet; nothing to serve");
 		}
 

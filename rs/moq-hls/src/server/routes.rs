@@ -17,7 +17,7 @@ const M3U8: &str = "application/vnd.apple.mpegurl";
 const MPD: &str = "application/dash+xml";
 const MP4: &str = "video/mp4";
 
-/// How long a rendition lookup waits for the catalog (and its first timeline records) to
+/// How long a rendition lookup waits for the catalog (and its first HLS records) to
 /// populate.
 const READY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -88,7 +88,7 @@ async fn manifest(server: &Server, broadcast: &str, query: Option<&str>) -> Resp
 	if broadcaster.is_empty() {
 		return not_found();
 	}
-	// A manifest whose timelines are all empty confuses players; give the broadcast a moment
+	// A manifest whose renditions are all empty confuses players; give the broadcast a moment
 	// to index its first complete segment before answering.
 	let _ = moq_clock::timeout(READY_TIMEOUT, broadcaster.playable()).await;
 	// Each representation names its init by hash, which an inline codec only learns from media.
@@ -459,11 +459,9 @@ mod tests {
 			broadcast.announce(Default::default()).expect("announce");
 			// A hinted segment duration is declared before any media, so the rendition is listed early.
 			let hinted = moq_mux::hls::Config::default().with_duration_hint(Duration::from_secs(2));
-			let catalog = moq_mux::catalog::Producer::new(
-				&mut broadcast,
-				moq_mux::catalog::Config::default().with_hls(hinted),
-			)
-			.unwrap();
+			let catalog =
+				moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default().with_hls(hinted))
+					.unwrap();
 			let reserved = catalog.reserve();
 			let track = broadcast.create_track("video0", timed()).unwrap();
 			let mut media = reserved
@@ -945,7 +943,7 @@ mod tests {
 			StatusCode::FORBIDDEN
 		);
 
-		// A timeline failure refuses listings, but its already-retained media
+		// A records failure refuses listings, but its already-retained media
 		// still drains. Authorization checks must not broaden that failure.
 		let retained = broadcaster.rendition(Kind::Video, "video0").unwrap();
 		retained.fail(crate::Error::Moq(moq_net::Error::Transport("connection lost".into())));
@@ -964,8 +962,7 @@ mod tests {
 		let media_broadcast = pair.pub_origin.create_broadcast("room/source").expect("media");
 		media_broadcast.announce(Default::default()).expect("announce media");
 
-		let catalog =
-			moq_mux::catalog::Producer::new(&mut catalog_broadcast, hls_config()).unwrap();
+		let catalog = moq_mux::catalog::Producer::new(&mut catalog_broadcast, hls_config()).unwrap();
 		let reserved = catalog.reserve();
 		let mut config = video_config();
 		config.broadcast = Some(moq_net::path::Relative::new("./source").to_owned());

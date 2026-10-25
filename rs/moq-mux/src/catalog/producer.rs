@@ -167,6 +167,9 @@ struct Outputs<E: CatalogExt> {
 	msf_track: moq_net::track::Producer,
 	/// The broadcast's HLS record tracks, when [`Config::with_hls`] enabled them.
 	hls: Option<crate::hls::Tracks>,
+	/// Keeps the broadcast open while the catalog is, so a publisher may hand its own handle to a
+	/// media producer and drop it.
+	broadcast: moq_net::broadcast::Producer,
 }
 
 impl<E: CatalogExt> Clone for Outputs<E> {
@@ -177,6 +180,7 @@ impl<E: CatalogExt> Clone for Outputs<E> {
 			hangz: self.hangz.clone(),
 			msf_track: self.msf_track.clone(),
 			hls: self.hls.clone(),
+			broadcast: self.broadcast.clone(),
 		}
 	}
 }
@@ -448,6 +452,7 @@ impl<E: CatalogExt> Producer<E> {
 				hangz,
 				msf_track,
 				hls,
+				broadcast: broadcast.clone(),
 			},
 			current: Arc::new(Mutex::new(State {
 				catalog,
@@ -1923,7 +1928,12 @@ mod test {
 	fn nothing_publishes_hls_unless_enabled() {
 		let mut broadcast = moq_net::broadcast::Info::new().produce();
 		let catalog = Producer::new(&mut broadcast, Config::default()).unwrap();
-		assert!(catalog.enroll("audio0", Some(std::time::Duration::from_secs(4))).unwrap().is_none());
+		assert!(
+			catalog
+				.enroll("audio0", Some(std::time::Duration::from_secs(4)))
+				.unwrap()
+				.is_none()
+		);
 
 		let _video = video0(&mut broadcast, &catalog, &[0, 4_000, 8_000]);
 		assert_eq!(catalog.snapshot().video.renditions["video0"].hls, None);
@@ -1979,8 +1989,14 @@ mod test {
 			.unwrap();
 
 		let tracks = catalog.outputs.hls.as_ref().unwrap();
-		assert_eq!(tracks.hls("video0").unwrap().duration, std::time::Duration::from_secs(6));
-		assert_eq!(tracks.hls("audio0").unwrap().duration, std::time::Duration::from_secs(5));
+		assert_eq!(
+			tracks.hls("video0").unwrap().duration,
+			std::time::Duration::from_secs(6)
+		);
+		assert_eq!(
+			tracks.hls("audio0").unwrap().duration,
+			std::time::Duration::from_secs(5)
+		);
 	}
 
 	#[test]

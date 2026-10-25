@@ -44,8 +44,7 @@ Rules every child follows:
 Already gated elsewhere, so not a child: the binary-to-flate fold is followed
 by flate's removal ([compress migrate](/quest/m1/compress/migrate.md)), in m1,
 so the cut waits for it. hang's
-`Archive::replay_epoch` goes with the root `archive` section in
-[catalog HLS](/quest/m1/archive/catalog-hls.md).
+`Archive::replay_epoch` went with the root `archive` section in catalog HLS.
 
 Rejected in planning:
 

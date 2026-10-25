@@ -930,7 +930,11 @@ mod test {
 	fn drain(segmenter: &mut Segmenter) -> Vec<(u64, u64, Option<u64>)> {
 		let mut out = Vec::new();
 		for record in segmenter.by_ref() {
-			assert_eq!(record.sequence, out.len() as u64 + first(&out), "records are numbered consecutively");
+			assert_eq!(
+				record.sequence,
+				out.len() as u64 + first(&out),
+				"records are numbered consecutively"
+			);
 			out.push((record.group, record.pts, record.duration));
 		}
 		out
@@ -962,7 +966,10 @@ mod test {
 	fn short_groups_pack_up_to_the_minimum() {
 		let mut segmenter = Segmenter::new(Config::default());
 		groups(&mut segmenter, 0..10, 1_000);
-		assert_eq!(drain(&mut segmenter), [(0, 0, None), (4, 4_000, None), (8, 8_000, None)]);
+		assert_eq!(
+			drain(&mut segmenter),
+			[(0, 0, None), (4, 4_000, None), (8, 8_000, None)]
+		);
 	}
 
 	#[test]
@@ -1033,7 +1040,10 @@ mod test {
 		segmenter.cut(ms(2_000));
 		segmenter.cut(ms(3_000));
 		groups(&mut segmenter, 0..5, 1_000);
-		assert_eq!(drain(&mut segmenter), [(0, 0, None), (2, 2_000, None), (3, 3_000, None)]);
+		assert_eq!(
+			drain(&mut segmenter),
+			[(0, 0, None), (2, 2_000, None), (3, 3_000, None)]
+		);
 	}
 
 	#[test]

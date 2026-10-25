@@ -1278,7 +1278,10 @@ async fn groups(records: &mut crate::hls::Consumer) -> Vec<(u64, u64)> {
 			entries.push(entry);
 		}
 	}
-	assert!(entries.last().is_some_and(|entry| entry.is_stop()), "the track's end stops the last segment");
+	assert!(
+		entries.last().is_some_and(|entry| entry.is_stop()),
+		"the track's end stops the last segment"
+	);
 	entries
 		.windows(2)
 		.filter(|pair| !pair[0].is_stop())
@@ -1311,8 +1314,14 @@ async fn import_populates_the_hls_records() {
 	// This short fixture ends before the first four-second segment closes, so finishing the import
 	// stops it and declares the minimum while the catalog stays live.
 	let four = std::time::Duration::from_secs(4);
-	assert_eq!(snapshot.video.renditions[&video_name].hls.as_ref().unwrap().duration, four);
-	assert_eq!(snapshot.audio.renditions[&audio_name].hls.as_ref().unwrap().duration, four);
+	assert_eq!(
+		snapshot.video.renditions[&video_name].hls.as_ref().unwrap().duration,
+		four
+	);
+	assert_eq!(
+		snapshot.audio.renditions[&audio_name].hls.as_ref().unwrap().duration,
+		four
+	);
 
 	// Subscribe while the producer is alive, then finish so the record tracks close and the
 	// readers terminate rather than blocking.

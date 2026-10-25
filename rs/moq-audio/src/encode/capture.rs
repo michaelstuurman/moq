@@ -2450,15 +2450,20 @@ mod tests {
 				let mut track = fixture.subscribe().await;
 				live.push(fixture.deliver(samples, &mut track, &live).await);
 				drop(track);
-				wait_for(&mut fixture.publication, Status::Waiting).await;
-				// The first run's stop declares the unhinted duration.
-				if records.is_none() {
+				// The break is marked when the second run resumes, and its stop declares the unhinted
+				// duration.
+				if records.is_none() && live.len() > 1 {
 					let hls = fixture.catalog.snapshot().audio.renditions["audio"]
 						.hls
 						.clone()
-						.expect("the audio track declares its HLS records once the run stops");
-					records = Some(moq_mux::hls::Consumer::subscribe(&fixture.consumer, &hls).await.unwrap());
+						.expect("the audio track declares its HLS records once the first run stops");
+					records = Some(
+						moq_mux::hls::Consumer::subscribe(&fixture.consumer, &hls)
+							.await
+							.unwrap(),
+					);
 				}
+				wait_for(&mut fixture.publication, Status::Waiting).await;
 				// Idle past the minimum segment, so each run is listed as its own segment.
 				tokio::time::sleep(moq_mux::hls::DEFAULT_DURATION_MIN + Duration::from_millis(100)).await;
 			}

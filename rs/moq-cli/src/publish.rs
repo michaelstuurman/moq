@@ -460,8 +460,11 @@ impl Publish {
 		args: &CaptureArgs,
 		bandwidth: moq_net::bandwidth::Allocator,
 		max_age: Option<std::time::Duration>,
+		hls: bool,
 	) -> anyhow::Result<Self> {
-		let config = moq_mux::catalog::Config::default().with_max_age(max_age);
+		let config = moq_mux::catalog::Config::default()
+			.with_max_age(max_age)
+			.with_hls(hls.then(moq_mux::hls::Config::default));
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, config)?;
 
 		let video = if args.no_video {

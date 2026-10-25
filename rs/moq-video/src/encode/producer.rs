@@ -865,9 +865,7 @@ mod tests {
 
 		let mut producer = Producer::new(
 			broadcast,
-			catalog
-				.reserve()
-				.with_hls_hint(config.gop.duration(config.framerate)),
+			catalog.reserve().with_hls_hint(config.gop.duration(config.framerate)),
 			config.probe().await.unwrap(),
 		)
 		.unwrap();
@@ -938,9 +936,7 @@ mod tests {
 		config.kind = encoder::Kind::Software;
 		let mut producer = Producer::with_track(
 			track,
-			catalog
-				.reserve()
-				.with_hls_hint(config.gop.duration(config.framerate)),
+			catalog.reserve().with_hls_hint(config.gop.duration(config.framerate)),
 			config.probe().await.unwrap(),
 		)
 		.unwrap();
@@ -970,9 +966,7 @@ mod tests {
 		initial.kind = encoder::Kind::Software;
 		let mut producer = Producer::new(
 			broadcast,
-			catalog
-				.reserve()
-				.with_hls_hint(initial.gop.duration(initial.framerate)),
+			catalog.reserve().with_hls_hint(initial.gop.duration(initial.framerate)),
 			initial.probe().await.unwrap(),
 		)
 		.unwrap();
@@ -1043,9 +1037,7 @@ mod tests {
 		config.kind = encoder::Kind::Software;
 		let _producer = Producer::new(
 			broadcast,
-			catalog
-				.reserve()
-				.with_hls_hint(config.gop.duration(config.framerate)),
+			catalog.reserve().with_hls_hint(config.gop.duration(config.framerate)),
 			config.probe().await.unwrap(),
 		)
 		.unwrap();
@@ -1091,9 +1083,7 @@ mod tests {
 		let mut subscriber = track.subscribe(None);
 		let mut producer = Producer::with_track(
 			track,
-			catalog
-				.reserve()
-				.with_hls_hint(config.gop.duration(config.framerate)),
+			catalog.reserve().with_hls_hint(config.gop.duration(config.framerate)),
 			config.probe().await.unwrap(),
 		)
 		.unwrap();
@@ -1202,9 +1192,7 @@ mod tests {
 				probe.kind = encoder::Kind::Software;
 				let mut producer = Producer::with_track(
 					track,
-					catalog
-						.reserve()
-						.with_hls_hint(probe.gop.duration(probe.framerate)),
+					catalog.reserve().with_hls_hint(probe.gop.duration(probe.framerate)),
 					probe.probe().await.unwrap(),
 				)
 				.unwrap();
@@ -1471,7 +1459,9 @@ mod tests {
 						.hls
 						.clone()
 						.expect("the video track advertises its HLS records");
-					let mut records = moq_mux::hls::Consumer::subscribe(&fixture.consumer, &hls).await.unwrap();
+					let mut records = moq_mux::hls::Consumer::subscribe(&fixture.consumer, &hls)
+						.await
+						.unwrap();
 
 					let mut live = Vec::new();
 					for _ in 0..2 {

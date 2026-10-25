@@ -18,7 +18,7 @@ The 09-28 audit reversed #4280's decision 4 (the observed maximum), and the
 09-29 planning settled the rest:
 
 - The target is `ceil` of the declared `hls` duration from
-  [Catalog HLS field](/quest/m1/archive/catalog-hls.md) (retargeted
+  Catalog HLS field (retargeted
   2026-10-17 from the root `archive` map). Until it is declared, the rendition
   has no playlist yet.
 - A segment whose rounded `EXTINF` exceeds the target (a GOP that overran the
@@ -42,6 +42,3 @@ playlist URI, not per `Rendition`: `renditions::Producer::sync` replaces the
 `Rendition` on a catalog reconfigure, so test that a reconfigure mid-run
 keeps the original target.
 
-## Required
-
-- [Catalog HLS field](/quest/m1/archive/catalog-hls.md) - the opt-in `hls` field whose declared duration sets the target

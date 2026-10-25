@@ -41,6 +41,7 @@ pub mod codec;
 pub mod container;
 mod error;
 pub mod follow;
+pub mod hls;
 pub mod import;
 mod jitter;
 pub mod json;
@@ -50,7 +51,6 @@ pub mod rate;
 pub mod select;
 mod source;
 mod stats;
-pub mod hls;
 
 pub use clock::Clock;
 pub use error::*;

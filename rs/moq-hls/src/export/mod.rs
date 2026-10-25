@@ -590,7 +590,11 @@ mod tests {
 		let mut cursor = std::io::Cursor::new(fragment.as_ref());
 		while let Some(atom) = mp4_atom::Any::decode_maybe(&mut cursor).unwrap() {
 			if let mp4_atom::Any::Moof(moof) = atom {
-				return moof.traf[0].trun[0].entries.iter().map(|entry| entry.duration).collect();
+				return moof.traf[0].trun[0]
+					.entries
+					.iter()
+					.map(|entry| entry.duration)
+					.collect();
 			}
 		}
 		panic!("no moof in fragment");
@@ -1361,7 +1365,10 @@ mod tests {
 		// Both renditions list the same aligned segment spans (the live edge is not listed).
 		assert_eq!(manifest.matches("<S t=\"0\" d=\"2000\"/>").count(), 2, "{manifest}");
 		assert_eq!(manifest.matches("<S t=\"2000\" d=\"2000\"/>").count(), 2);
-		assert!(!manifest.contains("<S t=\"4000\""), "the live-edge segment is not listed");
+		assert!(
+			!manifest.contains("<S t=\"4000\""),
+			"the live-edge segment is not listed"
+		);
 		assert_eq!(manifest.matches("<Period ").count(), 1);
 
 		// A credential rides every child URL, and the init is named by its hash.
@@ -1407,8 +1414,8 @@ mod tests {
 
 		// PTS zero at exactly the moq epoch, so every timestamp maps to a fixed string.
 		let wall = moq_clock::Wall::UNIX_EPOCH + Duration::from_millis(hang::catalog::MOQ_EPOCH_UNIX_MILLIS);
-		let config =
-			catalog_config().with_clock(moq_mux::Clock::at(moq_net::time::Instant::now(), wall).expect("a representable wall"));
+		let config = catalog_config()
+			.with_clock(moq_mux::Clock::at(moq_net::time::Instant::now(), wall).expect("a representable wall"));
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast, config).unwrap();
 		let mut media = video(&catalog, &broadcast, "video0", video_config());
 		media.write(frame(0, true)).unwrap();
@@ -1731,7 +1738,10 @@ mod tests {
 		// lists it, but a SegmentTimeline entry at the presentation end would never be
 		// requested, so the manifest omits it and the presentation ends at the last bounded one.
 		assert!(manifest.contains("<S t=\"0\" d=\"2000\"/>"), "{manifest}");
-		assert!(!manifest.contains("<S t=\"2000\""), "the zero-duration tail is not listed");
+		assert!(
+			!manifest.contains("<S t=\"2000\""),
+			"the zero-duration tail is not listed"
+		);
 		assert!(manifest.contains(" mediaPresentationDuration=\"PT2.000S\""));
 		assert!(!manifest.contains("presentationTimeOffset"));
 		assert!(!manifest.contains("availabilityStartTime"));
@@ -1838,7 +1848,11 @@ mod tests {
 		let audio_playlist = audio_rendition.snapshot();
 		assert_eq!(video_playlist.media_sequence, audio_playlist.media_sequence);
 		assert_eq!(numbers(&video_playlist), [0, 1]);
-		assert_eq!(numbers(&audio_playlist), [0, 1], "audio lists the same aligned segments");
+		assert_eq!(
+			numbers(&audio_playlist),
+			[0, 1],
+			"audio lists the same aligned segments"
+		);
 		assert!(gaps(&audio_playlist).is_empty());
 		assert_eq!(
 			audio_playlist.segments[0].duration,
@@ -1903,7 +1917,10 @@ mod tests {
 
 	/// A one-video-rendition catalog snapshot reconciled by hand, which is what `watch_catalog`
 	/// does with each snapshot: the rendition follows its records on its own.
-	fn export(upstream: &moq_mux::Source, config: &hang::catalog::VideoConfig) -> (renditions::Producer, Arc<Rendition>) {
+	fn export(
+		upstream: &moq_mux::Source,
+		config: &hang::catalog::VideoConfig,
+	) -> (renditions::Producer, Arc<Rendition>) {
 		let mut config = config.clone();
 		config.hls = Some(hls("video0"));
 		let mut catalog = moq_mux::catalog::hang::Catalog::default();
@@ -2129,7 +2146,10 @@ mod tests {
 				"the replacement publisher's media was served under the replaced broadcast's catalog"
 			);
 		}
-		assert!(served.is_none(), "the replaced broadcast is closed, so it serves nothing");
+		assert!(
+			served.is_none(),
+			"the replaced broadcast is closed, so it serves nothing"
+		);
 
 		// Control: an export started after the takeover does serve the new publisher's media, so
 		// the assertion above is about which epoch a rendition is bound to, not about a broadcast
@@ -2144,7 +2164,10 @@ mod tests {
 			.await
 			.unwrap()
 			.expect("the new publisher is servable on its own catalog");
-		assert!(contains(&served, NEW), "the new export serves the new publisher's media");
+		assert!(
+			contains(&served, NEW),
+			"the new export serves the new publisher's media"
+		);
 
 		drop(new);
 	}
@@ -2222,7 +2245,10 @@ mod tests {
 			.await
 			.unwrap()
 			.expect("the new publisher is servable on a freshly bound rendition");
-		assert!(contains(&served, NEW), "the new export serves the new publisher's media");
+		assert!(
+			contains(&served, NEW),
+			"the new export serves the new publisher's media"
+		);
 
 		drop((new_media, records, live));
 	}
@@ -2245,10 +2271,7 @@ mod tests {
 			if rendition.snapshot().finished {
 				return;
 			}
-			assert!(
-				tokio::time::Instant::now() < deadline,
-				"the playlist did not end"
-			);
+			assert!(tokio::time::Instant::now() < deadline, "the playlist did not end");
 			tokio::task::yield_now().await;
 		}
 	}
@@ -3057,7 +3080,10 @@ mod tests {
 		let snapshot = test.finished("video1").await;
 		assert_eq!(gaps(&snapshot), [0, 2]);
 		let rendition = test.rendition("video1");
-		assert!(rendition.listed_segment(0).await.unwrap().is_none(), "a gap is never fetched");
+		assert!(
+			rendition.listed_segment(0).await.unwrap().is_none(),
+			"a gap is never fetched"
+		);
 		let mut cursor = rendition.segments();
 		assert_eq!(cursor.next().await.unwrap().unwrap().segment, 1);
 		assert!(cursor.next().await.unwrap().is_none());
@@ -3131,7 +3157,11 @@ mod tests {
 		let snapshot = test.listed("video0", 3).await;
 		assert_eq!(numbers(&snapshot), [0, 1, 2, 3]);
 		assert_eq!(gaps(&snapshot), [2]);
-		let rendered = test.rendition("video0").media_playlist(None).unwrap().expect("playable");
+		let rendered = test
+			.rendition("video0")
+			.media_playlist(None)
+			.unwrap()
+			.expect("playable");
 		assert!(rendered.contains("#EXT-X-GAP\n"), "{rendered}");
 		assert!(rendered.contains("#EXT-X-DISCONTINUITY\n"), "{rendered}");
 	}
