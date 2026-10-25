@@ -25,6 +25,19 @@ function parseUrl(value: string | null): URL | undefined {
 	}
 }
 
+// Parse the `name` attribute: a broadcast path, or the root when absent or invalid.
+function parseName(value: string | null): Moq.Path.Valid {
+	if (!value) return Moq.Path.empty();
+	try {
+		return Moq.Path.from(value);
+	} catch {
+		console.warn(
+			`moq-publish: invalid name="${value}", expected a path without a leading, trailing, or doubled "/"`,
+		);
+		return Moq.Path.empty();
+	}
+}
+
 // Parse the `versions` attribute: a comma-separated list, or the defaults when absent or empty.
 // The connection checks the names and reports an unsupported one on `connection.error`.
 function parseVersions(value: string | null): string[] | undefined {
@@ -342,7 +355,7 @@ export default class MoqPublish extends HTMLElement {
 		} else if (name === "versions") {
 			this.connection.versions.set(parseVersions(newValue));
 		} else if (name === "name") {
-			this.#name.set(Moq.Path.from(newValue ?? ""));
+			this.#name.set(parseName(newValue));
 		} else if (name === "source") {
 			this.controls.source.set(parseSource(newValue));
 		} else if (name === "announce") {
