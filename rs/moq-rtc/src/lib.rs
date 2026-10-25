@@ -154,7 +154,9 @@ mod tests {
 		origin: &moq_net::origin::Producer,
 		epoch: moq_net::Epoch,
 	) -> (Box<dyn Bridge>, moq_mux::catalog::Producer) {
-		let broadcast = origin.create_broadcast(moq_net::Path::new("source").unwrap()).expect("create source broadcast");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("source").unwrap())
+			.expect("create source broadcast");
 		broadcast
 			.announce(moq_net::origin::Route::default().with_epoch(epoch))
 			.expect("announce source broadcast");

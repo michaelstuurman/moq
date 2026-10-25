@@ -9406,7 +9406,10 @@ mod serve_tests {
 		let version = Version::Draft22;
 		for path in [".", "./child", ".session", ".session/extension"] {
 			let h = serve(version);
-			let claim = h._origin.dynamic_route(crate::Path::new("").unwrap(), crate::origin::Route::default()).unwrap();
+			let claim = h
+				._origin
+				.dynamic_route(crate::Path::new("").unwrap(), crate::origin::Route::default())
+				.unwrap();
 			settle().await;
 			let stream = Stream::open(&mut crate::driver::Transport::new(h.session.clone()), version)
 				.await

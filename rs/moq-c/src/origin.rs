@@ -462,7 +462,11 @@ mod supervision_tests {
 			.unwrap();
 		let mut publish = crate::publish::Publish::default();
 		let broadcast = publish
-			.create_publication(origins.create_broadcast(origin, moq_net::Path::new("retained").unwrap()).unwrap())
+			.create_publication(
+				origins
+					.create_broadcast(origin, moq_net::Path::new("retained").unwrap())
+					.unwrap(),
+			)
 			.unwrap();
 		origins.close(origin).unwrap();
 		*trigger
@@ -476,7 +480,11 @@ mod supervision_tests {
 		));
 		let healthy = origins.create().unwrap();
 		let broadcast = publish
-			.create_publication(origins.create_broadcast(healthy, moq_net::Path::new("healthy").unwrap()).unwrap())
+			.create_publication(
+				origins
+					.create_broadcast(healthy, moq_net::Path::new("healthy").unwrap())
+					.unwrap(),
+			)
 			.unwrap();
 		publish.announce(broadcast, Default::default()).unwrap();
 	}

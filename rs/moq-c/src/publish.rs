@@ -1183,7 +1183,9 @@ mod supervision_tests {
 	async fn admission_must_match_the_broadcast_it_filled() {
 		let origin = moq_tokio::origin::spawn();
 		let claim = origin.dynamic(moq_net::Path::new("room").unwrap()).unwrap();
-		let pending = origin.consume().request_broadcast(moq_net::Path::new("room/first").unwrap(), None);
+		let pending = origin
+			.consume()
+			.request_broadcast(moq_net::Path::new("room/first").unwrap(), None);
 		let prepared = claim
 			.requested_broadcast()
 			.await
@@ -1212,7 +1214,9 @@ mod supervision_tests {
 		publish.admit(clone, prepared).unwrap();
 		pending.await.unwrap();
 
-		let pending = origin.consume().request_broadcast(moq_net::Path::new("room/second").unwrap(), None);
+		let pending = origin
+			.consume()
+			.request_broadcast(moq_net::Path::new("room/second").unwrap(), None);
 		let prepared = claim
 			.requested_broadcast()
 			.await
@@ -1235,7 +1239,12 @@ mod supervision_tests {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create_publication((origin.create_broadcast(moq_net::Path::new("retained").unwrap()).unwrap(), completion.clone()))
+			.create_publication((
+				origin
+					.create_broadcast(moq_net::Path::new("retained").unwrap())
+					.unwrap(),
+				completion.clone(),
+			))
 			.unwrap();
 		let container = publish
 			.container(
@@ -1259,7 +1268,12 @@ mod supervision_tests {
 		let (origin, completion, trigger) = crate::ffi::panicking_origin();
 		let mut publish = Publish::default();
 		let broadcast = publish
-			.create_publication((origin.create_broadcast(moq_net::Path::new("retained").unwrap()).unwrap(), completion.clone()))
+			.create_publication((
+				origin
+					.create_broadcast(moq_net::Path::new("retained").unwrap())
+					.unwrap(),
+				completion.clone(),
+			))
 			.unwrap();
 		let producer = &publish.broadcast(broadcast).unwrap().producer;
 		// A dynamic handle outlives the consumed broadcast, so only an explicit close ends it.

@@ -89,7 +89,9 @@ async fn read(mut sub: moq_net::track::Subscriber) -> Outcome {
 async fn round(name: &str, end: End) -> Vec<Outcome> {
 	let version: Version = name.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast(moq_net::Path::new("bcast").unwrap()).unwrap();
+	let broadcast = publisher
+		.create_broadcast(moq_net::Path::new("bcast").unwrap())
+		.unwrap();
 	let tracks: Vec<_> = (0..TRACKS)
 		.map(|index| {
 			broadcast

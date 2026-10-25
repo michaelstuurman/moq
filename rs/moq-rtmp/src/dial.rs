@@ -568,7 +568,10 @@ impl Publisher {
 	fn new(origin: &origin::Producer, path: &str, config: moq_mux::catalog::Config) -> anyhow::Result<Self> {
 		let epoch = moq_net::Epoch::mint();
 		let broadcast = origin
-			.publish(&moq_net::Path::new(path)?, moq_net::origin::Route::default().with_epoch(epoch.clone()))
+			.publish(
+				&moq_net::Path::new(path)?,
+				moq_net::origin::Route::default().with_epoch(epoch.clone()),
+			)
 			.map_err(|err| anyhow::anyhow!("broadcast '{path}' could not be published: {err}"))?;
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), config)?;
 		let handle = broadcast.clone();
@@ -696,7 +699,9 @@ mod tests {
 		let mut vframe = vec![0x17, 0x01, 0x00, 0x00, 0x00];
 		vframe.extend_from_slice(&[0, 0, 0, 5, 0x65, 0x88, 0x84, 0x21, 0x00]);
 
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -796,7 +801,9 @@ mod tests {
 			vseq.extend_from_slice(&[0x01, 0x00, 0x04, 0x68, 0xce, 0x3c, 0x80]);
 			let mut vframe = vec![0x17, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, idr.len() as u8];
 			vframe.extend_from_slice(idr);
-			let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+			let broadcast = origin
+				.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+				.unwrap();
 			broadcast
 				.announce(origin::Route::default().with_epoch(epoch.clone()))
 				.unwrap();
@@ -896,7 +903,9 @@ mod tests {
 		vframe.extend_from_slice(&[0, 0, 0, 5, 0x65, 0x88, 0x84, 0x21, 0x00]);
 
 		let server_origin = moq_tokio::origin::spawn();
-		let broadcast = server_origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = server_origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())

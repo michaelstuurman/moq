@@ -159,7 +159,9 @@ pub async fn import(target: ImportTarget, args: ImportArgs, epoch: moq_net::Epoc
 		linger,
 		bandwidth,
 	} = target;
-	let producer = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
+	let producer = origin
+		.create_broadcast(moq_net::Path::new(&name)?)
+		.context("failed to create broadcast")?;
 
 	let config = moq_mux::catalog::Config::default()
 		.with_max_age(max_age)

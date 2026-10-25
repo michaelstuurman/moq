@@ -611,7 +611,9 @@ mod tests {
 
 		let (origin, driver) = moq_net::origin::Producer::new(Default::default());
 		tokio::spawn(moq_net::time::run(driver));
-		let source = origin.publish(moq_net::Path::new("test").unwrap(), Default::default()).unwrap();
+		let source = origin
+			.publish(moq_net::Path::new("test").unwrap(), Default::default())
+			.unwrap();
 		let mut source_catalog =
 			moq_mux::catalog::Producer::new(&mut source.broadcast().clone(), moq_mux::catalog::Config::default())
 				.unwrap();

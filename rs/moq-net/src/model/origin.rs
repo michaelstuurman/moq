@@ -11179,7 +11179,9 @@ mod tests {
 		let producer = origin(1).produce();
 		let consumer = producer.consume();
 		let mut events = consumer.announced();
-		let publication = producer.create_broadcast(crate::Path::new("room/alice").unwrap()).unwrap();
+		let publication = producer
+			.create_broadcast(crate::Path::new("room/alice").unwrap())
+			.unwrap();
 		let fill = publication.broadcast().clone();
 		let control = publication.clone();
 		publication.announce(Route::default().with_epoch(epoch())).unwrap();
@@ -11192,7 +11194,10 @@ mod tests {
 		drop(control);
 		drop(publication);
 		events.assert_next_wait();
-		consumer.request_broadcast(crate::Path::new("room/alice").unwrap(), None).await.unwrap();
+		consumer
+			.request_broadcast(crate::Path::new("room/alice").unwrap(), None)
+			.await
+			.unwrap();
 		drop(fill);
 		events.expect_next_ended(crate::Path::new("room/alice").unwrap()).await;
 	}
@@ -11204,11 +11209,17 @@ mod tests {
 		let producer = origin(1).produce();
 		let consumer = producer.consume();
 		let old = producer
-			.publish(crate::Path::new("room/alice").unwrap(), Route::default().with_epoch(epoch()))
+			.publish(
+				crate::Path::new("room/alice").unwrap(),
+				Route::default().with_epoch(epoch()),
+			)
 			.unwrap();
 		let replacement_epoch: crate::Epoch = "01900000-0000-7000-8000-000000000002".parse().unwrap();
 		let replacement = producer
-			.publish(crate::Path::new("room/alice").unwrap(), Route::default().with_epoch(replacement_epoch.clone()))
+			.publish(
+				crate::Path::new("room/alice").unwrap(),
+				Route::default().with_epoch(replacement_epoch.clone()),
+			)
 			.unwrap();
 		old.unannounce();
 		old.close();

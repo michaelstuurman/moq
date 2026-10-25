@@ -252,7 +252,9 @@ pub async fn import(
 	if let Some(refresh) = args.refresh {
 		config = config.with_refresh(refresh.into());
 	}
-	let broadcast = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
+	let broadcast = origin
+		.create_broadcast(moq_net::Path::new(&name)?)
+		.context("failed to create broadcast")?;
 	let consumer = moq_archive::Consumer::open(store, broadcast.broadcast().clone(), config)
 		.await
 		.with_context(|| format!("no readable recording at {}", args.store))?;

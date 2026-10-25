@@ -83,8 +83,12 @@ struct Published {
 
 fn publish(origin: &origin::Producer, epoch: &Epoch, tag: &str) -> Published {
 	let route = origin::Route::default().with_epoch(epoch.clone());
-	let broadcast = origin.publish(moq_net::Path::new("live/catalog.hang").unwrap(), route.clone()).unwrap();
-	let sibling = origin.publish(moq_net::Path::new("live/media").unwrap(), route).unwrap();
+	let broadcast = origin
+		.publish(moq_net::Path::new("live/catalog.hang").unwrap(), route.clone())
+		.unwrap();
+	let sibling = origin
+		.publish(moq_net::Path::new("live/media").unwrap(), route)
+		.unwrap();
 	let media = sibling
 		.create_track(
 			"audio",

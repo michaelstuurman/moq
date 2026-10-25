@@ -1095,7 +1095,9 @@ mod tests {
 	#[tokio::test]
 	async fn master_lists_only_playable_renditions() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -1159,7 +1161,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_disabled_rendition_leaves_the_master_and_keeps_its_playlist() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -1754,7 +1758,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_transmuxed_segment_keeps_its_init_with_an_unfinished_tail() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		let (mut catalog, mut registration, _media) = publish_vp8(&mut broadcast.broadcast().clone());
 		registration
 			.set(hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8))
@@ -1785,7 +1791,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_blocked_init_bootstrap_does_not_hide_a_cached_init() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		let (mut catalog, mut registration, _media) = publish_vp8(&mut broadcast.broadcast().clone());
 		registration
 			.set(hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8))
@@ -1822,7 +1830,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_reconfigure_versions_the_init_url() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let (_catalog, mut registration, _media) = publish_vp8(&mut broadcast.broadcast().clone());
@@ -1867,7 +1877,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_generation_versions_segment_urls_and_a_new_one_resets_the_window() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let (_catalog, _registration, mut media) = publish_vp8(&mut broadcast.broadcast().clone());
@@ -1924,7 +1936,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_new_generation_rebuilds_an_inline_init() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -1977,7 +1991,9 @@ mod tests {
 	#[tokio::test]
 	async fn serves_playlist_and_segments_from_the_timeline() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2067,7 +2083,9 @@ mod tests {
 	#[tokio::test]
 	async fn a_duration_marker_times_the_hls_trailing_sample() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2113,7 +2131,9 @@ mod tests {
 	#[tokio::test]
 	async fn serves_dash_manifest_and_time_addressed_segments() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2221,7 +2241,9 @@ mod tests {
 	#[tokio::test]
 	async fn root_clock_times_playlists_and_manifest() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 
@@ -2360,7 +2382,9 @@ mod tests {
 		}
 
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2552,7 +2576,9 @@ mod tests {
 	#[tokio::test]
 	async fn dash_manifest_turns_static_when_finished() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let mut catalog =
@@ -2616,7 +2642,9 @@ mod tests {
 	#[tokio::test]
 	async fn renditions_snap_to_their_own_keyframes() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2707,7 +2735,9 @@ mod tests {
 	#[tokio::test]
 	async fn an_audio_only_broadcast_segments_on_its_audio() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2761,7 +2791,9 @@ mod tests {
 	#[tokio::test]
 	async fn target_duration_follows_the_observed_segments() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2803,7 +2835,9 @@ mod tests {
 	#[tokio::test]
 	async fn audio_and_video_segments_are_aligned() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -2898,7 +2932,9 @@ mod tests {
 	#[tokio::test]
 	async fn dropping_the_broadcaster_keeps_a_cursor_drainable() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let mut catalog =
@@ -3141,7 +3177,9 @@ mod tests {
 			origin: &moq_net::origin::Producer,
 			payload: &'static [u8],
 		) -> (Box<dyn std::any::Any>, hang::catalog::VideoConfig) {
-			let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+			let broadcast = origin
+				.create_broadcast(moq_net::Path::new("live").unwrap())
+				.expect("publish allowed");
 			broadcast.announce(Default::default()).expect("publish allowed");
 			let catalog = moq_mux::catalog::Producer::new(
 				&mut broadcast.broadcast().clone(),
@@ -3265,7 +3303,9 @@ mod tests {
 		let origin = produce_origin();
 
 		// The catalog broadcast carries the catalog and the timeline; the media lives next door.
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3388,7 +3428,9 @@ mod tests {
 		const NEW: &[u8] = b"NEWNEWNEWNEWNEWN";
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3464,7 +3506,9 @@ mod tests {
 		const KEYFRAME: &[u8] = &[0x10, 0x00, 0x00, 0x9d, 0x01, 0x2a, 0x40, 0x01, 0xf0, 0x00];
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3522,7 +3566,9 @@ mod tests {
 		const NEW: &[u8] = b"NEWNEWNEWNEWNEWN";
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3562,7 +3608,9 @@ mod tests {
 		const NEW: &[u8] = b"NEWNEWNEWNEWNEWN";
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3623,7 +3671,9 @@ mod tests {
 		const OLD: &[u8] = b"OLDOLDOLDOLDOLDO";
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3673,7 +3723,9 @@ mod tests {
 		const OLD: &[u8] = b"OLDOLDOLDOLDOLDO";
 
 		let origin = produce_origin();
-		let live = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let live = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		live.announce(Default::default()).expect("publish allowed");
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -3792,7 +3844,9 @@ mod tests {
 	#[tokio::test]
 	async fn dropping_the_broadcaster_releases_its_renditions() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -3852,7 +3906,9 @@ mod tests {
 	#[tokio::test]
 	async fn record_cursors_yield_renditions_and_segments() {
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =
@@ -4464,7 +4520,9 @@ mod tests {
 		const NEW: &[u8] = b"NEWNEWNEWNEWNEWN";
 
 		let origin = produce_origin();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish allowed");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog =

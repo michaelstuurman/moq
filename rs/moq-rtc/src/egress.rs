@@ -913,8 +913,12 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_moved_rendition_follows_its_new_track() {
 		let origin = produce_origin();
-		let live = origin.publish(moq_net::Path::new("live").unwrap(), Default::default()).unwrap();
-		let other = origin.publish(moq_net::Path::new("other").unwrap(), Default::default()).unwrap();
+		let live = origin
+			.publish(moq_net::Path::new("live").unwrap(), Default::default())
+			.unwrap();
+		let other = origin
+			.publish(moq_net::Path::new("other").unwrap(), Default::default())
+			.unwrap();
 		let mut catalog =
 			moq_mux::catalog::Producer::new(&mut live.broadcast().clone(), moq_mux::catalog::Config::default())
 				.unwrap();

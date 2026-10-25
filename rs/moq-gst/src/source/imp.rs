@@ -2256,7 +2256,9 @@ mod session_tests {
 		let _pad_ids = pad_ids();
 		let element = element();
 		let origin = origin();
-		let catalog_broadcast = origin.create_broadcast(moq_net::Path::new("room/catalog").unwrap()).unwrap();
+		let catalog_broadcast = origin
+			.create_broadcast(moq_net::Path::new("room/catalog").unwrap())
+			.unwrap();
 		let mut local = catalog_broadcast.dynamic();
 		let left = origin.create_broadcast(Path::new("room/left").unwrap()).unwrap();
 		let mut remote = left.dynamic();

@@ -9682,7 +9682,9 @@ mod tests {
 	async fn a_minted_source_closes_unheld_or_retracted() {
 		let (subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let run = |route: &kio::Producer<()>| {
-			let source = crate::model::broadcast::SourceGuard::new(origin.create_source(crate::Path::new("pool/p").unwrap(), Default::default()));
+			let source = crate::model::broadcast::SourceGuard::new(
+				origin.create_source(crate::Path::new("pool/p").unwrap(), Default::default()),
+			);
 			let (holder, dynamic) = (source.consume(), source.dynamic());
 			let (this, route) = (subscriber.clone(), route.consume());
 			let task = moq_clock::sim::spawn(async move {
@@ -16803,7 +16805,12 @@ mod joining_fetch_tests {
 
 				subscriber
 					.clone()
-					.run_group_fetch(Path::new("broadcast").to_owned().unwrap(), "video".into(), request, None)
+					.run_group_fetch(
+						Path::new("broadcast").to_owned().unwrap(),
+						"video".into(),
+						request,
+						None,
+					)
 					.await;
 
 				assert_eq!(

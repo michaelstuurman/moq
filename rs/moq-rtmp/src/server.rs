@@ -1498,7 +1498,10 @@ impl Publisher {
 	/// the FLV file header, so subsequent tags decode against an initialized demuxer.
 	fn new(origin: &origin::Producer, path: &str, config: moq_mux::catalog::Config) -> anyhow::Result<Self> {
 		let epoch = moq_net::Epoch::mint();
-		let broadcast = origin.publish(&moq_net::Path::new(path)?, moq_net::origin::Route::default().with_epoch(epoch.clone()))?;
+		let broadcast = origin.publish(
+			&moq_net::Path::new(path)?,
+			moq_net::origin::Route::default().with_epoch(epoch.clone()),
+		)?;
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), config)?;
 		let handle = broadcast.clone();
 		let mut importer = FlvImport::new(broadcast.broadcast().clone(), catalog.reserve());
@@ -2133,7 +2136,9 @@ mod tests {
 
 		// Publish the broadcast at `live/cam0` by feeding synthetic FLV to the importer.
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -2191,7 +2196,9 @@ mod tests {
 		let mut vframe = vec![0x17, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, idr.len() as u8];
 		vframe.extend_from_slice(idr);
 
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(origin::Route::default().with_epoch(epoch)).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -2265,7 +2272,9 @@ mod tests {
 		const VP9_KEYFRAME_320X240: &[u8] = &[0x82, 0x49, 0x83, 0x42, 0x20, 0x13, 0xf0, 0x0e, 0xf0, 0x00];
 
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())
@@ -2544,7 +2553,9 @@ mod tests {
 		let frames = multitrack_body(CODED_FRAMES, &[(0, nalu(0x88)), (1, nalu(0x99))]);
 
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live/cam0").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live/cam0").unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())

@@ -746,7 +746,9 @@ fn spawn_import(
 			let name = require_broadcast(name, "import ts --program all")?;
 			Publish::ts_programs(origin.clone(), moq_net::PathOwned::try_from(name)?, config)
 		} else {
-			let broadcast = origin.create_broadcast(moq_net::Path::new(&name)?).context("failed to create broadcast")?;
+			let broadcast = origin
+				.create_broadcast(moq_net::Path::new(&name)?)
+				.context("failed to create broadcast")?;
 			Publish::from_publication(broadcast, &format, config)?
 		}
 		.with_linger(linger);

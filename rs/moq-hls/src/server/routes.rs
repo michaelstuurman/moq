@@ -402,7 +402,10 @@ mod tests {
 	#[tokio::test]
 	async fn respond_serves_a_route_rewritten_into_scope() {
 		let pair = lite_pair().await;
-		let broadcast = pair.pub_origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = pair
+			.pub_origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (_catalog, _registration, _track, mut media) =
 			publish_video(&mut broadcast.broadcast().clone(), video_config(), timed());
@@ -447,7 +450,10 @@ mod tests {
 			"moq-lite-05",
 		] {
 			let pair = lite_pair_on(version, moq_net::Hop::random()).await;
-			let broadcast = pair.pub_origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+			let broadcast = pair
+				.pub_origin
+				.create_broadcast(moq_net::Path::new("live").unwrap())
+				.expect("publish");
 			broadcast.announce(Default::default()).expect("announce");
 			// A hinted timeline is declared before any media, so the rendition is listed early.
 			let hinted = moq_mux::timeline::Config::default().with_duration_hint(Duration::from_secs(2));
@@ -523,7 +529,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn master_answers_404_until_a_rendition_can_start() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let (_catalog, _registration, _track, mut media) =
 			publish_video(&mut broadcast.broadcast().clone(), video_config(), timed());
@@ -541,7 +549,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_restart_lists_the_replacement_under_its_own_urls() {
 		let origin = moq_tokio::origin::spawn();
-		let old = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let old = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		old.announce(run()).expect("announce");
 		let (old_catalog, _, old_track, mut old_media) =
 			publish_video(&mut old.broadcast().clone(), video_config(), timed());
@@ -554,7 +564,9 @@ mod tests {
 		wait_listed(&app, &old_playlist, "seg/656e3d1b.0.m4s").await;
 
 		let next = moq_net::Epoch::mint();
-		let new = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let new = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		new.announce(moq_net::origin::Route::default().with_epoch(next.clone()))
 			.expect("announce");
 		let (_new_catalog, _, _new_track, mut new_media) =
@@ -589,7 +601,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_failed_timeline_answers_an_uncacheable_error() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let mut catalog =
 			moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), Default::default()).unwrap();
@@ -643,7 +657,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn serves_only_versioned_media_urls() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let (_catalog, _registration, _track, mut media) =
 			publish_video(&mut broadcast.broadcast().clone(), video_config(), timed());
@@ -719,7 +735,10 @@ mod tests {
 			config
 		})
 		.await;
-		let broadcast = pair.pub_origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = pair
+			.pub_origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (_catalog, _registration, _track, mut media) =
 			publish_video(&mut broadcast.broadcast().clone(), video_config(), timed());
@@ -745,7 +764,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_disconnected_publisher_on_the_catalog_broadcast_answers_404() {
 		let pair = lite_pair().await;
-		let broadcast = pair.pub_origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = pair
+			.pub_origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(Default::default()).expect("announce");
 		let (catalog, registration, track, mut media) =
 			publish_video(&mut broadcast.broadcast().clone(), video_config(), timed());
@@ -859,7 +881,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn denied_sibling_media_answers_403_without_poisoning_allowed_siblings() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("room/live").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("room/live").unwrap())
+			.unwrap();
 		broadcast.announce(run()).unwrap();
 		let source = origin.create_broadcast(Path::new("room/source").unwrap()).unwrap();
 		source.announce(Default::default()).unwrap();
@@ -977,7 +1001,10 @@ mod tests {
 	#[tokio::test]
 	async fn a_disconnected_sibling_publisher_answers_404() {
 		let pair = lite_pair().await;
-		let catalog_broadcast = pair.pub_origin.create_broadcast(moq_net::Path::new("room/live").unwrap()).expect("catalog");
+		let catalog_broadcast = pair
+			.pub_origin
+			.create_broadcast(moq_net::Path::new("room/live").unwrap())
+			.expect("catalog");
 		catalog_broadcast
 			.announce(Default::default())
 			.expect("announce catalog");

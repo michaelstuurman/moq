@@ -284,7 +284,9 @@ mod tests {
 	async fn a_broadcast_resolves_through_a_lazy_client_session() {
 		let pub_origin = moq_tokio::origin::spawn();
 
-		let source = pub_origin.create_broadcast(moq_net::Path::new("cam").unwrap()).expect("create broadcast");
+		let source = pub_origin
+			.create_broadcast(moq_net::Path::new("cam").unwrap())
+			.expect("create broadcast");
 		source
 			.announce(moq_net::origin::Route::default())
 			.expect("announce broadcast");

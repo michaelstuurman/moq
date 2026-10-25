@@ -119,8 +119,12 @@ impl Moving {
 
 	pub(crate) fn new() -> Self {
 		let origin = crate::source::produce_origin();
-		let live = origin.publish(moq_net::Path::new("live").unwrap(), Default::default()).unwrap();
-		let other = origin.publish(moq_net::Path::new("other").unwrap(), Default::default()).unwrap();
+		let live = origin
+			.publish(moq_net::Path::new("live").unwrap(), Default::default())
+			.unwrap();
+		let other = origin
+			.publish(moq_net::Path::new("other").unwrap(), Default::default())
+			.unwrap();
 		let catalog =
 			crate::catalog::Producer::new(&mut live.broadcast().clone(), crate::catalog::Config::default()).unwrap();
 		let track = |broadcast: &mut moq_net::broadcast::Producer, name: &str| {

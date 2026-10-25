@@ -363,7 +363,10 @@ impl Cluster {
 	/// Publish `path` from the client and require everyone to see it. Returns
 	/// what the watching client saw.
 	async fn publish(&mut self, path: &str) -> (moq_net::origin::Publication, Vec<Kind>) {
-		let broadcast = self.publisher.create_broadcast(moq_net::Path::new(path).unwrap()).unwrap();
+		let broadcast = self
+			.publisher
+			.create_broadcast(moq_net::Path::new(path).unwrap())
+			.unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sim::idle().await;
 		let client = drain(&mut self.client).remove(path).unwrap();
