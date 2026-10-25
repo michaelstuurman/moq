@@ -2198,12 +2198,7 @@ impl Gate {
 
 	/// A gate for a request under a namespace the peer announced, while `live` stays open:
 	/// the announce stands in for the scope, as its own token may have authorized it.
-	pub(crate) fn announced(
-		handle: Link,
-		path: crate::Path,
-		direction: Direction,
-		live: kio::Consumer<()>,
-	) -> Self {
+	pub(crate) fn announced(handle: Link, path: crate::Path, direction: Direction, live: kio::Consumer<()>) -> Self {
 		Self {
 			part: Part::Announced(live),
 			..Self::new(handle, path, direction)
@@ -2446,11 +2441,7 @@ mod tests {
 		let setup = handle.present(Bytes::new(), true).unwrap();
 		handle.granted(setup.presented.id, Grant::default());
 		let token = handle.present(Bytes::from_static(b"new"), false).unwrap();
-		let mut gate = Gate::new(
-			handle.clone(),
-			crate::Path::new("room"),
-			Direction::Subscribe,
-		);
+		let mut gate = Gate::new(handle.clone(), crate::Path::new("room"), Direction::Subscribe);
 		let waiter = kio::Waiter::noop();
 		assert!(
 			gate.poll_ready(&waiter).is_pending(),
@@ -2493,12 +2484,7 @@ mod tests {
 		handle.granted(setup.presented.id, Grant::default());
 		let _unanswered = handle.present(Bytes::from_static(b"new"), false).unwrap();
 		let route = kio::Producer::<()>::default();
-		let mut gate = Gate::announced(
-			handle,
-			crate::Path::new("room"),
-			Direction::Subscribe,
-			route.consume(),
-		);
+		let mut gate = Gate::announced(handle, crate::Path::new("room"), Direction::Subscribe, route.consume());
 		let waiter = kio::Waiter::noop();
 		assert!(gate.poll_ready(&waiter).is_pending(), "waits while the route stands");
 		drop(route);

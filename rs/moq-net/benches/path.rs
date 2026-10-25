@@ -119,7 +119,9 @@ fn decode() {
 			});
 		}
 		let data = encode_namespaces(&paths);
-		allocs(&format!("decode/announce_ietf/{name}"), 50, 1000, || decode_namespaces(&data));
+		allocs(&format!("decode/announce_ietf/{name}"), 50, 1000, || {
+			decode_namespaces(&data)
+		});
 	}
 }
 

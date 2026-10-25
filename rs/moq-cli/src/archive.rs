@@ -498,11 +498,7 @@ mod tests {
 	#[test]
 	fn keys_are_prefix_free() {
 		let epoch = moq_net::Epoch::mint();
-		let victim = key(
-			&Path::from("rec"),
-			&(moq_net::Path::new("live/a"), Some(epoch.clone())),
-		)
-		.unwrap();
+		let victim = key(&Path::from("rec"), &(moq_net::Path::new("live/a"), Some(epoch.clone()))).unwrap();
 		let hostile = format!("live/a/@{epoch}");
 		let nested = key(
 			&Path::from("rec"),
@@ -518,10 +514,7 @@ mod tests {
 		// `%` is escaped too, so an escaped-looking segment keys apart from the `@` one.
 		let literal = key(
 			&Path::from("rec"),
-			&(
-				moq_net::Path::new(&format!("live/a/%40{epoch}")),
-				Some(epoch),
-			),
+			&(moq_net::Path::new(&format!("live/a/%40{epoch}")), Some(epoch)),
 		)
 		.unwrap();
 		assert!(literal.as_ref().starts_with("rec/live/a/%2540"), "{literal}");

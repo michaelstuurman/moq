@@ -215,9 +215,7 @@ mod test {
 
 	fn soliciting(reference: &str) -> Catalog {
 		let (mut catalog, _) = catalog_payload("here");
-		catalog.echo = Some(hang::catalog::Echo::new(
-			moq_net::path::Relative::new(reference),
-		));
+		catalog.echo = Some(hang::catalog::Echo::new(moq_net::path::Relative::new(reference)));
 		catalog
 	}
 

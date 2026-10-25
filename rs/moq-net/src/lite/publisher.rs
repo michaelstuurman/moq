@@ -275,9 +275,8 @@ impl Publisher {
 		auth: Option<crate::auth::Link>,
 	) -> Result<(), Error> {
 		let mut run = AnnounceRun::new(crate::Path::default(), self_origin, version);
-		run.auth = auth.map(|handle| {
-			crate::auth::Gate::new(handle, crate::Path::empty(), crate::auth::Direction::Publish)
-		});
+		run.auth =
+			auth.map(|handle| crate::auth::Gate::new(handle, crate::Path::empty(), crate::auth::Direction::Publish));
 		kio::wait(|waiter| run.poll(stream, origin, announced, waiter)).await
 	}
 }

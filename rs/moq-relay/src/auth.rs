@@ -1455,10 +1455,7 @@ mod tests {
 		let mut mounted = Grant::new(patterns(&["**"]), patterns(&["**"]));
 		mounted.mounts.insert(".svc".into(), ".svc/room".into());
 		let mounted = Token::new("/room", &mounted);
-		assert_eq!(
-			mounted.mounts,
-			[(Path::new(".svc"), Path::new(".svc/room"))]
-		);
+		assert_eq!(mounted.mounts, [(Path::new(".svc"), Path::new(".svc/room"))]);
 		assert!(wide.covered_by(&wide));
 		assert!(narrow.covered_by(&wide));
 		assert!(!wide.covered_by(&narrow));

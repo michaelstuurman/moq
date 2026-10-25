@@ -377,11 +377,7 @@ mod tests {
 		epoch: true,
 	};
 
-	fn decode(
-		bytes: Vec<u8>,
-		version: Version,
-		negotiated: Negotiated,
-	) -> Result<(Namespace, bool), DecodeError> {
+	fn decode(bytes: Vec<u8>, version: Version, negotiated: Negotiated) -> Result<(Namespace, bool), DecodeError> {
 		let mut buf = bytes::Bytes::from(bytes);
 		let decoded = crate::coding::decode_buf(&mut buf, version, |r, v| Namespace::decode_body(r, v, negotiated))?;
 		Ok((decoded, buf.is_empty()))

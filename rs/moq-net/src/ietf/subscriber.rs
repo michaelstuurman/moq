@@ -5423,13 +5423,7 @@ impl Subscriber {
 
 	/// Serve a whole fill with one FETCH, as [`Self::serve_fill`] serves each run.
 	#[cfg(test)]
-	async fn run_group_fetch(
-		self,
-		broadcast: Path,
-		name: String,
-		fill: track::Fill,
-		timescale: Option<Timescale>,
-	) {
+	async fn run_group_fetch(self, broadcast: Path, name: String, fill: track::Fill, timescale: Option<Timescale>) {
 		let run = fill.start().group..fill.end();
 		self.run_range_fetch(broadcast, name, std::sync::Arc::new(fill), run, timescale)
 			.await;
@@ -6944,12 +6938,7 @@ mod tests {
 				.await
 				.unwrap();
 			let res = subscriber
-				.run_subscribe_namespace(
-					stream,
-					crate::Path::new(""),
-					crate::model::Snapshot::landed(),
-					live,
-				)
+				.run_subscribe_namespace(stream, crate::Path::new(""), crate::model::Snapshot::landed(), live)
 				.await;
 			assert!(
 				matches!(res, Err(Error::ProtocolViolation)),
@@ -7047,12 +7036,8 @@ mod tests {
 			let stream = Stream::open(&mut crate::driver::Transport::new(session.clone()), VERSION)
 				.await
 				.unwrap();
-			let mut run = std::pin::pin!(subscriber.run_subscribe_namespace(
-				stream,
-				crate::Path::new(""),
-				snapshot,
-				live
-			));
+			let mut run =
+				std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new(""), snapshot, live));
 			for _ in 0..10 {
 				assert!(futures::poll!(run.as_mut()).is_pending());
 				settle().await;
@@ -7076,8 +7061,7 @@ mod tests {
 		let stream = Stream::open(&mut crate::driver::Transport::new(session.clone()), VERSION)
 			.await
 			.unwrap();
-		let mut run =
-			std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new(""), snapshot, live));
+		let mut run = std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new(""), snapshot, live));
 		for _ in 0..10 {
 			assert!(futures::poll!(run.as_mut()).is_pending());
 			settle().await;
@@ -7939,11 +7923,7 @@ mod tests {
 		.with_auth(auth.clone());
 		let route = kio::Producer::new(());
 		subscriber.validity = crate::model::broadcast::RequestValidity::token(Some(route.consume()));
-		let mut gate = crate::auth::Gate::new(
-			auth.clone(),
-			Path::new("broadcast"),
-			crate::auth::Direction::Subscribe,
-		);
+		let mut gate = crate::auth::Gate::new(auth.clone(), Path::new("broadcast"), crate::auth::Direction::Subscribe);
 		let waiter = kio::Waiter::noop();
 		assert!(gate.poll_ready(&waiter).is_ready());
 		assert!(gate.poll_denied(&waiter).is_pending());
@@ -7987,12 +7967,11 @@ mod tests {
 				let request = dynamic.requested_fill().await.expect("group request");
 				group = Some(pending);
 				accepted = Some(track);
-				Box::pin(subscriber.clone().run_group_fetch(
-					Path::new("broadcast"),
-					"video".into(),
-					request,
-					None,
-				))
+				Box::pin(
+					subscriber
+						.clone()
+						.run_group_fetch(Path::new("broadcast"), "video".into(), request, None),
+				)
 			}
 		};
 		let mut work = work;
@@ -9329,11 +9308,7 @@ mod tests {
 
 		let mut subscriber = subscriber;
 		subscriber
-			.start_announce(
-				crate::Path::new("room/host"),
-				advertised,
-				Admit::Session(None),
-			)
+			.start_announce(crate::Path::new("room/host"), advertised, Admit::Session(None))
 			.unwrap();
 
 		let route = routed_now(&consumer, "room/host").expect("routed");
@@ -9432,12 +9407,7 @@ mod tests {
 			.await
 			.unwrap();
 		subscriber
-			.run_subscribe_namespace(
-				stream,
-				crate::Path::new(""),
-				crate::model::Snapshot::landed(),
-				live,
-			)
+			.run_subscribe_namespace(stream, crate::Path::new(""), crate::model::Snapshot::landed(), live)
 			.await
 			.expect("a clean FIN is not an error");
 		settle().await;

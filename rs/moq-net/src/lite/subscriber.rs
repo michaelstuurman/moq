@@ -437,12 +437,7 @@ impl Subscriber {
 
 	/// The full chain of a new or replacing advertisement, or `None` when it is
 	/// reflected or exceeds the origin's hop limit.
-	fn chain(
-		&self,
-		path: &Path,
-		mut hops: crate::Hops,
-		responder_origin: Option<crate::Hop>,
-	) -> Option<crate::Hops> {
+	fn chain(&self, path: &Path, mut hops: crate::Hops, responder_origin: Option<crate::Hop>) -> Option<crate::Hops> {
 		let reflected = match responder_origin {
 			// A chain already naming the sender came back through it. Zero names
 			// nobody and may repeat; every identified sender must be appended once.
@@ -5584,11 +5579,7 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let mut prefix = AnnouncePrefix::new(
-			subscriber.clone(),
-			Path::new(""),
-			subscriber.origin.snapshot(""),
-		);
+		let mut prefix = AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot(""));
 		let mut cursor = consumer.announced();
 
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
@@ -5653,11 +5644,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 		(
-			AnnouncePrefix::new(
-				subscriber.clone(),
-				Path::new(""),
-				subscriber.origin.snapshot(""),
-			),
+			AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot("")),
 			consumer,
 		)
 	}
@@ -5832,11 +5819,7 @@ mod tests {
 		});
 		let slots = crate::session::Slots::new(2);
 		subscriber.announces = slots.clone();
-		let mut prefix = AnnouncePrefix::new(
-			subscriber.clone(),
-			Path::new(""),
-			subscriber.origin.snapshot(""),
-		);
+		let mut prefix = AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot(""));
 
 		let err = kio::wait(|waiter| prefix.poll(waiter))
 			.await

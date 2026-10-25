@@ -42,7 +42,10 @@ impl Repr {
 				buf,
 			}
 		} else {
-			Repr::Shared { start: 0, buf: s.into() }
+			Repr::Shared {
+				start: 0,
+				buf: s.into(),
+			}
 		}
 	}
 
@@ -50,7 +53,10 @@ impl Repr {
 		if s.len() <= INLINE {
 			Self::copy(&s)
 		} else {
-			Repr::Shared { start: 0, buf: s.into() }
+			Repr::Shared {
+				start: 0,
+				buf: s.into(),
+			}
 		}
 	}
 }
@@ -127,7 +133,10 @@ impl Path {
 		match &self.0 {
 			Repr::Static(s) => Path(Repr::Static(&s[n..])),
 			Repr::Shared { buf, start } if rest.len() > INLINE => match u32::try_from(*start as usize + n) {
-				Ok(start) => Path(Repr::Shared { buf: buf.clone(), start }),
+				Ok(start) => Path(Repr::Shared {
+					buf: buf.clone(),
+					start,
+				}),
 				// An offset past 4 GiB doesn't fit, so copy the rest instead.
 				Err(_) => Path(Repr::copy(rest)),
 			},
@@ -997,7 +1006,10 @@ mod tests {
 		// Test that operations work correctly with normalized paths
 		let path_with_slashes = Path::new("foo//bar///baz");
 		assert!(path_with_slashes.has_prefix(&Path::new("foo/bar")));
-		assert_eq!(path_with_slashes.strip_prefix(&Path::new("foo")).unwrap().as_str(), "bar/baz");
+		assert_eq!(
+			path_with_slashes.strip_prefix(&Path::new("foo")).unwrap().as_str(),
+			"bar/baz"
+		);
 		assert_eq!(path_with_slashes.join(&Path::new("qux")).as_str(), "foo/bar/baz/qux");
 	}
 
@@ -1079,14 +1091,20 @@ mod tests {
 		let joined = half.join(&Path::new(&"c".repeat(INLINE / 2)));
 		assert_eq!(joined.len(), INLINE);
 		assert!(matches!(joined.0, Repr::Inline { .. }));
-		assert_eq!(joined.as_str(), format!("{}/{}", "b".repeat(INLINE / 2 - 1), "c".repeat(INLINE / 2)));
+		assert_eq!(
+			joined.as_str(),
+			format!("{}/{}", "b".repeat(INLINE / 2 - 1), "c".repeat(INLINE / 2))
+		);
 		assert!(matches!(joined.join(&Path::new("d")).0, Repr::Shared { .. }));
 
 		// Multi-byte characters survive the inline copy.
 		let wide = Path::new("caf\u{e9}/\u{1f3a5}");
 		assert!(matches!(wide.0, Repr::Inline { .. }));
 		assert_eq!(wide.as_str(), "caf\u{e9}/\u{1f3a5}");
-		assert_eq!(wide.strip_prefix(&Path::new("caf\u{e9}")).unwrap().as_str(), "\u{1f3a5}");
+		assert_eq!(
+			wide.strip_prefix(&Path::new("caf\u{e9}")).unwrap().as_str(),
+			"\u{1f3a5}"
+		);
 	}
 
 	#[test]

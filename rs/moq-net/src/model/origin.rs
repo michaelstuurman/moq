@@ -1837,10 +1837,7 @@ impl Default for OriginScope {
 /// The announce-interest prefixes that cover a pattern scope on a prefix-only
 /// wire: each member's literal head, minus heads another already covers.
 pub(crate) fn interest_prefixes(allowed: &Patterns) -> Vec<Path> {
-	let mut heads: Vec<Path> = allowed
-		.iter()
-		.map(|pattern| Path::new(pattern.head()))
-		.collect();
+	let mut heads: Vec<Path> = allowed.iter().map(|pattern| Path::new(pattern.head())).collect();
 	heads.sort();
 	heads.dedup();
 	let covered = heads.clone();
@@ -6178,24 +6175,22 @@ impl Consumer {
 	/// Drop the returned [`AnnounceConsumer`] to unregister.
 	pub fn announced(&self) -> AnnounceConsumer {
 		let state = kio::Producer::<OriginConsumerState>::default();
-		let cursor = |root: Path,
-		              allowed: Patterns,
-		              hidden: Hidden,
-		              mount: Option<&Mount>,
-		              under: Path,
-		              holes: Vec<Path>| TableCursor {
-			root,
-			heads: interest_prefixes(&allowed),
-			allowed,
-			horizon: self.horizon,
-			hidden,
-			state: state.clone(),
-			under,
-			holes,
-			named: mount.map(|mount| (mount.clone(), self.scope.allowed.clone())),
-			interested: self.interested,
-			current: HashMap::new(),
-		};
+		let cursor =
+			|root: Path, allowed: Patterns, hidden: Hidden, mount: Option<&Mount>, under: Path, holes: Vec<Path>| {
+				TableCursor {
+					root,
+					heads: interest_prefixes(&allowed),
+					allowed,
+					horizon: self.horizon,
+					hidden,
+					state: state.clone(),
+					under,
+					holes,
+					named: mount.map(|mount| (mount.clone(), self.scope.allowed.clone())),
+					interested: self.interested,
+					current: HashMap::new(),
+				}
+			};
 
 		// A root at or beneath a mount reads only the mount: one cursor, re-rooted
 		// onto the target.
@@ -6407,12 +6402,7 @@ impl Consumer {
 	) -> Result<AnnouncedBroadcast, Error> {
 		let path: Path = path.into();
 		let follow = self.follow(&path)?;
-		Ok(AnnouncedBroadcast::new(
-			self.clone(),
-			path,
-			epoch.into(),
-			follow,
-		))
+		Ok(AnnouncedBroadcast::new(self.clone(), path, epoch.into(), follow))
 	}
 
 	/// Returns a consumer rooted at `root` and restricted to matching `patterns`.
@@ -6980,11 +6970,7 @@ impl AnnounceConsumer {
 
 	// A wider wire grant must reuse pending slots, rather than bypass the initial queue.
 	#[cfg(feature = "async")]
-	pub(crate) fn replay<'a>(
-		&mut self,
-		advertised: impl IntoIterator<Item = &'a Path>,
-		revoked: &HashSet<Path>,
-	) {
+	pub(crate) fn replay<'a>(&mut self, advertised: impl IntoIterator<Item = &'a Path>, revoked: &HashSet<Path>) {
 		let advertised: HashSet<_> = advertised.into_iter().collect();
 		let table = self.shared.lock();
 		let Ok(mut state) = self.state.write() else {

@@ -313,7 +313,12 @@ impl<S: Stream> Client<S> {
 	/// ends cleanly: the finished broadcast stays up for the [linger](Self::with_linger), and
 	/// the future resolves after that. Dropping the future ends the linger early. A
 	/// connection that drops first closes the broadcast at once.
-	pub async fn pull(mut self, stream_key: &str, origin: &origin::Producer, path: impl Into<moq_net::Path>) -> Result<()> {
+	pub async fn pull(
+		mut self,
+		stream_key: &str,
+		origin: &origin::Producer,
+		path: impl Into<moq_net::Path>,
+	) -> Result<()> {
 		let path: moq_net::Path = path.into();
 		let request = self
 			.session

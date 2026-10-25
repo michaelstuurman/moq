@@ -3554,12 +3554,7 @@ impl Publisher {
 	/// already carries it**, since a second stream would leave two claiming one
 	/// namespace, and a withdrawal cancels the request (PUBLISH_NAMESPACE_DONE before
 	/// draft-17).
-	async fn sync_namespace(
-		&self,
-		ns: &mut Namespaces,
-		suffix: &crate::Path,
-		path: &crate::Path,
-	) -> Result<(), Error> {
+	async fn sync_namespace(&self, ns: &mut Namespaces, suffix: &crate::Path, path: &crate::Path) -> Result<(), Error> {
 		let Some((advert, auth)) = self.offer(ns, suffix, path) else {
 			return Ok(());
 		};
@@ -3692,9 +3687,7 @@ impl Publisher {
 							tracing::debug!(broadcast = %absolute, "namespace_done for an epoch gained or lost");
 							stream
 								.writer
-								.encode_message(&ietf::NamespaceDone {
-									suffix: suffix.clone(),
-								})
+								.encode_message(&ietf::NamespaceDone { suffix: suffix.clone() })
 								.await?;
 						}
 						tracing::debug!(broadcast = %absolute, "namespace");
@@ -3710,9 +3703,7 @@ impl Publisher {
 						tracing::debug!(broadcast = %absolute, "namespace_done");
 						stream
 							.writer
-							.encode_message(&ietf::NamespaceDone {
-								suffix: suffix.clone(),
-							})
+							.encode_message(&ietf::NamespaceDone { suffix: suffix.clone() })
 							.await?;
 					}
 					// Never advertised and still not advertisable: nothing to say.
@@ -3927,12 +3918,7 @@ impl Publisher {
 	/// peer set without reading it. A different original publisher is an update like any
 	/// other: the receiver drains what it already serves from the old one and never splices
 	/// the two.
-	async fn send_update(
-		&self,
-		ns: &mut Namespaces,
-		prefix: &crate::Path,
-		request_id: RequestId,
-	) -> Result<(), Error> {
+	async fn send_update(&self, ns: &mut Namespaces, prefix: &crate::Path, request_id: RequestId) -> Result<(), Error> {
 		let suffix = ns.updates.pop_front().expect("allocated for a queued update");
 		let Some((advert, auth)) = self.offer(ns, &suffix, &prefix.join(&suffix)) else {
 			return Ok(());
@@ -4251,9 +4237,7 @@ impl Publisher {
 			Target::Inline(stream) => {
 				stream
 					.writer
-					.encode_message(&ietf::NamespaceDone {
-						suffix: suffix.clone(),
-					})
+					.encode_message(&ietf::NamespaceDone { suffix: suffix.clone() })
 					.await?;
 			}
 		}
@@ -4261,12 +4245,7 @@ impl Publisher {
 	}
 
 	/// Withdraw one PUBLISH_NAMESPACE request, best effort: the peer may already be gone.
-	async fn end_request(
-		&self,
-		mut stream: Stream<Transport, Version>,
-		path: &crate::Path,
-		request_id: RequestId,
-	) {
+	async fn end_request(&self, mut stream: Stream<Transport, Version>, path: &crate::Path, request_id: RequestId) {
 		// Draft-17+ withdraws by cancelling the request in both directions; a FIN is only
 		// allowed to end SUBSCRIBE_NAMESPACE and SUBSCRIBE_TRACKS.
 		if !matches!(self.version, Version::Draft14 | Version::Draft15 | Version::Draft16) {

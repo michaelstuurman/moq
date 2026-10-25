@@ -334,7 +334,11 @@ impl Echo {
 			if prefix.is_none() {
 				tracing::warn!(path = %echo.path.as_str(), "the catalog solicits feedback above the connection root");
 			}
-			Some(prefix?.join(&hang::moq_net::Path::from(format!("{}{}", self.target.name.0, hang::echo::SUFFIX))))
+			Some(prefix?.join(&hang::moq_net::Path::from(format!(
+				"{}{}",
+				self.target.name.0,
+				hang::echo::SUFFIX
+			))))
 		});
 		if self.feedback.as_ref().map(|feedback| &feedback.path) == target.as_ref() {
 			return;
@@ -573,11 +577,7 @@ impl Readers {
 }
 
 /// Send a line for each feedback snapshot the broadcast at `path` publishes, until it ends.
-async fn read_echo(
-	origin: moq_net::origin::Consumer,
-	path: moq_net::Path,
-	lines: tokio::sync::mpsc::Sender<String>,
-) {
+async fn read_echo(origin: moq_net::origin::Consumer, path: moq_net::Path, lines: tokio::sync::mpsc::Sender<String>) {
 	let read = async {
 		let broadcast = origin.request_broadcast(&path, None).await?;
 		let subscriber = broadcast.track(hang::echo::TRACK)?.subscribe(None).await?;

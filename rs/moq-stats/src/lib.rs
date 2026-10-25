@@ -401,11 +401,7 @@ mod tests {
 		] {
 			for encoding in [Encoding::Plain, Encoding::Compressed] {
 				let name = prefix_track(path, encoding);
-				assert_eq!(
-					parse_prefix_track(&name),
-					Some((Path::from(path), encoding)),
-					"{name}"
-				);
+				assert_eq!(parse_prefix_track(&name), Some((Path::from(path), encoding)), "{name}");
 				assert_eq!(parse_presence_track(&name), None, "{name} is not a presence track");
 			}
 		}

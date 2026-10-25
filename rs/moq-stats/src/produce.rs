@@ -1941,11 +1941,7 @@ mod tests {
 
 	/// A producer on `origin` publishing as node `sjc` at depth 0.
 	fn node_producer(origin: &origin::Producer) -> Producer {
-		Producer::new(
-			Config::new()
-				.with_origin(origin.clone())
-				.with_node(Path::from("sjc")),
-		)
+		Producer::new(Config::new().with_origin(origin.clone()).with_node(Path::from("sjc")))
 	}
 
 	/// A producer restarted on the same origin ends its old epoch and announces
@@ -2852,13 +2848,9 @@ mod tests {
 				let _held = hold.then(|| {
 					let tick = drain.tick;
 					let stamp = drain.stamp(moq_clock::now());
-					drain.node.adopt_prefix(
-						&drain.report,
-						Path::from("room0"),
-						PendingPair::default(),
-						tick,
-						stamp,
-					);
+					drain
+						.node
+						.adopt_prefix(&drain.report, Path::from("room0"), PendingPair::default(), tick, stamp);
 					drain.node.prefixes["room0"].pair.plain.track.subscribe(None)
 				});
 				drain.collect();
