@@ -955,7 +955,6 @@ The track this specification defines as always compressed, `catalog.json.z` ({{c
 The `.z` suffix on that name is a naming convention, and a consumer MUST NOT treat it as a signal.
 
 Such a track is compressed per {{moqflate}}: each group is one raw DEFLATE stream, sync flushed at each frame boundary.
-The suffix is the declaration.
 
 
 # HLS Records {#hls}
@@ -1147,16 +1146,13 @@ This document has no IANA actions.
 {:numbered="false"}
 
 - Replaced the root `archive` section and its per-track timelines with an opt-in, per-rendition `hls` field on video and audio ({{hls}}). Each record is a segment's first `group` and `pts` in milliseconds, with an optional `duration` where zero marks a stop; frame positions, `end`, `keyframe`, `timescale`, `replay`, `replayEpoch`, `store`, and `version` are gone. Renditions that set it align their segments, so an edge maps record `n` to segment `n`. The record track is named `<track>.hls` and is not compressed.
-- The archive `version` is 3: the recording format stores a track's `priority` signed, -128 through 127 with 0 unset, instead of its moq-lite byte.
 - A reader refuses a JSON frame in which an object repeats a member name.
 - Added the root `version` ({{catalog-version}}): the oldest draft that reads the catalog, which a consumer refuses when above its own. A `track` other than the entry's ID or a video `warmup` needs 4. Consumers MUST ignore unknown fields.
 - A data track marks a discontinuity with a group of one object with no bytes, since its empty payload is data. An object with no bytes on an audio or video track, or sharing its group, is malformed.
-- Each archive timeline declares its own fixed nominal record duration, omitted for an untimed track; removed the broadcast-wide duration bound.
 - Removed the Recording section: the store layout is a moq-archive format, documented with that crate, not part of this draft.
 - Added the optional video `preference` field: a consumer selects automatically among the highest preference it can decode.
 - Added the optional video `reorder` field: the most frames that can precede one in decode order and follow it in presentation, fixed for the track once declared. A consumer that authors decode times derives them from it and the current group alone, refusing deeper reordering; without it, a consumer infers them from timestamps.
-- Added an optional `epoch` beside every rendition and data track `broadcast` reference, and `replayEpoch` beside the archive's `replay` ({{field-epoch}}). A consumer reads each referenced path from the first broadcast it resolves for a catalog instance; a present `epoch` fails a rendition proven to resolve another instance, and is best effort over a route without an Epoch.
-- Derived HLS and DASH exports hand disabled references to enabled renditions at the first record numbered past the advertised ones, keeping the record `sequence` as the HLS media sequence and starting a DASH period.
+- Added an optional `epoch` beside every rendition and data track `broadcast` reference ({{field-epoch}}). A consumer reads each referenced path from the first broadcast it resolves for a catalog instance; a present `epoch` fails a rendition proven to resolve another instance, and is best effort over a route without an Epoch.
 - Added optional `stats` and `echo` catalog sections, publisher/viewer snapshots keyed by rendition ID, and the `.echo` feedback broadcast convention.
 - An Opus frame timestamp counts the OpusHead pre-skip: a consumer presents each decoded sample the pre-skip earlier than its frame timestamp places it.
 
@@ -1167,22 +1163,12 @@ This document has no IANA actions.
 - Added optional audio and video `warmup` durations, rounded up to whole milliseconds, and allowed video groups to start at convergent random access pictures. A consumer also decoding from an earlier group start may present frames before `warmup`, switching to that decoder once it reaches the presented timestamp.
 - Defined `jitter` from media timestamps alone, the reorder delay and batch spans a publisher writes, replacing fixed frame-duration hints and wall-clock flush lateness.
 - Timed CMAF samples from the frame timestamp, which is the fragment's earliest presentation time; `tfdt` is only relative within the fragment, and places the samples of an untimed frame. A timed CMAF track counts in its `mdhd` ticks.
-- Allowed a DVR to delete timeline objects no checkpoint recovery needs, oldest first.
 - Replaced the live-edge floor with monotonic group starts: a group may overlap the previous group's content but not start before it.
 - Added optional `bitrate` and `jitter` fields to `json` and `binary` track entries.
 - Added the optional `delay` rendition field: how far a rendition's timestamps trail those other renditions already wrote, never lowered once advertised and never subtracted across renditions.
 - Recommended namespaced keys for application root sections.
 - Added the optional `delay` field to `json` and `binary` track entries, measured only from payloads stamped with their capture time on the broadcast clock.
 - Replaced the video `stalled` field with an optional `enabled` field on audio and video renditions. A consumer MUST NOT select a disabled rendition and ignores `stalled`. A consumer that predates `enabled` keeps selecting a disabled rendition.
-- Replaced the broadcast's one aligned timeline with one timeline per track: the catalog `archive` entry's `track` became a `timelines` map from each indexed track, the catalog included, to its timeline track.
-- Required consumers to ignore an undecodable `archive` entry without rejecting the catalog.
-- Replaced the segment record with a per-track record: `sequence`, `pts`, `duration`, and a `start`/`end` range of group and frame positions, dropping cross-track pacing and completeness.
-- One cutting rule for every track: a record ends at the first group boundary past a minimum (4 seconds RECOMMENDED, zero for sparse data such as a catalog) and splits a group between frames once it stays open several declared durations, so a group that never closes is indexed as it grows.
-- Recording format version 2: each track stores record N at `segments/N`, beside its timeline's `segments/N`, with a `Frame Start` field in the segment object. Tracks commit and expire independently, and a DVR keeps each track's newest record.
-- Described deriving HLS and DASH at the edge from a reference rendition's records.
-- An edge keeps its derived-format video reference rendition while that rendition stays in the catalog; an audio reference yields once video has a timeline.
-- Added an optional `epoch` to `.info`: the source route's Epoch, compared on resume so a restarted source fails enrollment.
-- Recorded untimed tracks untimed: `.info` omits `timescale`, segment frame entries omit `Timestamp`, and timeline records omit `pts` and `duration`, one record per group. A DVR refuses an untimed track.
 - Audio `sampleRate` and `numberOfChannels` describe the decoded output, so HE-AAC names its SBR rate and parametric stereo names two channels.
 - Added an optional `track` field to video, audio, text, `json`, and `binary` entries naming the track in its broadcast; the entry's key is its ID and names the track when `track` is absent. A consumer MUST reject a catalog using one ID for both a video and an audio rendition.
 - Defined video `displayAspectWidth` and `displayAspectHeight` as the whole picture's display aspect, not the sample aspect.

@@ -10,7 +10,7 @@ Each rendition reads the records its catalog `hls` field names, and segment `n` 
 `Error::TimelineFailed` is `Error::RecordsFailed { track, source }`.
 A segment that does not line up with the lead rendition's is listed as `EXT-X-GAP` and never fetched, instead of snapping to a nearby keyframe.
 The DASH manifest has one period, with `t` and `d` in milliseconds.
-Segment URL tags name each rendition's own record track, so every URL changes once.
+Segment URL tags hash each rendition's own record track and its config, so every URL changes once, and a reconfigured rendition lists its later segments under new URLs.
 
 ### The segment cursor yields gaps
 

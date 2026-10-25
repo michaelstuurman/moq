@@ -25,7 +25,8 @@
 //!
 //! HLS needs segment `n` to start at the same pts in every rendition. The first track enrolled
 //! paces the segments; every later track follows it, starting a segment at its first group at or
-//! after each of the pacer's segment starts, and stopping when the pacer stops. A follower records
+//! after each of the pacer's segment starts (even one it reported before the pacer did), and
+//! stopping when the pacer stops content. A follower records
 //! nothing before the pacer's first segment, so renditions that start together and share group
 //! boundaries (aligned GOPs, audio grouped on them) number the same segments alike. If the pacer's
 //! producer goes away, the next enrolled track still recording takes over.
@@ -144,6 +145,15 @@ pub(crate) struct Segmenter {
 	frontier: Option<Timestamp>,
 	/// Boundaries not yet reached, in order.
 	cuts: VecDeque<Timestamp>,
+	/// The newest boundary declared, so a repeat of it (several sources declaring the same ones)
+	/// is ignored.
+	cut: Option<Timestamp>,
+	/// A follower's group starts after every cut it knows of, oldest first: a pacer reporting later
+	/// may still cut at one. Empty whenever `cuts` holds a boundary past the open segment.
+	undecided: VecDeque<(u64, Timestamp)>,
+	/// The newest reported content time, whether or not a segment is open, so a segment a late cut
+	/// starts reaches it.
+	reported: Option<Timestamp>,
 	/// Whether boundaries come only from cuts: a follower, or a pacer whose source declares them.
 	manual: bool,
 	/// Whether this track follows a pacer, starting a segment only at one of its cuts.
@@ -169,6 +179,9 @@ impl Segmenter {
 			last: None,
 			frontier: None,
 			cuts: VecDeque::new(),
+			cut: None,
+			undecided: VecDeque::new(),
+			reported: None,
 			manual: false,
 			following: false,
 			ready: VecDeque::new(),
@@ -232,10 +245,21 @@ impl Segmenter {
 			self.open_at(group, pts);
 		}
 		self.last = Some(group);
+		self.report(pts);
+		Ok(())
+	}
+
+	/// Content reached `pts`.
+	fn report(&mut self, pts: Timestamp) {
+		if self
+			.reported
+			.is_none_or(|reported| pts.as_micros() > reported.as_micros())
+		{
+			self.reported = Some(pts);
+		}
 		if self.open.is_some() {
 			self.advance(pts);
 		}
-		Ok(())
 	}
 
 	/// Group `group` starts at `pts`, after group `last`.
@@ -256,6 +280,8 @@ impl Segmenter {
 		if ceiling || self.boundary(start, pts, elapsed) {
 			self.declared.get_or_insert(elapsed);
 			self.begin(group, pts);
+		} else if self.following && self.cuts.is_empty() {
+			self.undecided.push_back((group, pts));
 		}
 	}
 
@@ -270,6 +296,10 @@ impl Segmenter {
 				started = true;
 			}
 			if !started {
+				// With no cut ahead, the pacer may still report one at or before this group.
+				if self.cuts.is_empty() {
+					self.undecided.push_back((group, pts));
+				}
 				return;
 			}
 		}
@@ -308,8 +338,8 @@ impl Segmenter {
 	/// A frame report says where content starts; the stop after the last segment would otherwise
 	/// land at its last frame's start.
 	pub fn end(&mut self, pts: Timestamp) {
-		if !self.closed && self.open.is_some() {
-			self.advance(pts);
+		if !self.closed {
+			self.report(pts);
 		}
 	}
 
@@ -333,8 +363,30 @@ impl Segmenter {
 			return;
 		}
 		self.manual = true;
-		if self.cuts.back().is_none_or(|back| pts.as_micros() > back.as_micros()) {
-			self.cuts.push_back(pts);
+		if self.cut.is_some_and(|cut| pts.as_micros() <= cut.as_micros()) {
+			return;
+		}
+		self.cut = Some(pts);
+		// A follower that reported past this cut before hearing it decides those groups now: the
+		// ones before it are not boundaries, and its first group at or after it starts a segment.
+		while self
+			.undecided
+			.front()
+			.is_some_and(|(_, start)| start.as_micros() < pts.as_micros())
+		{
+			self.undecided.pop_front();
+		}
+		match self.undecided.pop_front() {
+			Some((group, start)) => {
+				if let Some(open) = self.open {
+					self.declared.get_or_insert(elapsed(open, start));
+				}
+				self.begin(group, start);
+				if let Some(reported) = self.reported {
+					self.advance(reported);
+				}
+			}
+			None => self.cuts.push_back(pts),
 		}
 	}
 
@@ -348,6 +400,8 @@ impl Segmenter {
 	}
 
 	fn stop_at(&mut self, group: u64) {
+		// What a follower reported past its last cut stops with it.
+		self.undecided.clear();
 		let Some(start) = self.open.take() else {
 			return;
 		};
@@ -385,6 +439,8 @@ impl Segmenter {
 		self.manual = false;
 		self.following = false;
 		self.cuts.clear();
+		// Groups no cut decided stay in the open segment, as a pacer's do until its target.
+		self.undecided.clear();
 	}
 }
 
@@ -403,6 +459,8 @@ impl Iterator for Segmenter {
 /// Records must be pushed in sequence order, starting at the window's next index.
 pub struct Producer {
 	sink: moq_json::window::Producer<Record>,
+	/// The record track, to abort.
+	track: moq_net::track::Producer,
 }
 
 impl Producer {
@@ -419,7 +477,8 @@ impl Producer {
 	pub fn new(track: moq_net::track::Producer) -> Self {
 		let config = moq_json::window::ProducerConfig::default().with_checkpoint_records(CHECKPOINT_RECORDS);
 		Self {
-			sink: moq_json::window::Producer::new(track, config),
+			sink: moq_json::window::Producer::new(track.clone(), config),
+			track,
 		}
 	}
 
@@ -441,6 +500,12 @@ impl Producer {
 	/// Finish the record track.
 	pub fn finish(&mut self) -> crate::Result<()> {
 		self.sink.finish().map_err(json)
+	}
+
+	/// Abort the record track with `err`, so readers see the cause rather than a complete record.
+	pub(crate) fn abort(self, err: moq_net::Error) {
+		// Idempotent: a track already closed keeps its first reason.
+		let _ = self.track.abort(err);
 	}
 
 	/// Restate the window in a fresh group if a joiner wants one.
@@ -518,6 +583,15 @@ impl Live {
 		Published {
 			marks: std::mem::take(&mut self.segmenter.marks),
 			declare,
+		}
+	}
+
+	/// Abort the record track with `err`, recording nothing more.
+	fn abort(&mut self, err: moq_net::Error) {
+		self.on_declare = None;
+		self.segmenter.closed = true;
+		if let Some(output) = self.output.take() {
+			output.abort(err);
 		}
 	}
 
@@ -687,6 +761,15 @@ impl Tracks {
 	#[cfg(test)]
 	pub fn len(&self) -> usize {
 		self.state.lock().unwrap().tracks.len()
+	}
+
+	/// Abort every record track with `err`. Later enrollments fail.
+	pub fn abort(&self, err: &moq_net::Error) {
+		let mut state = self.state.lock().unwrap();
+		state.finished = true;
+		for (_, live) in state.tracks.values() {
+			live.lock().unwrap().abort(err.clone());
+		}
 	}
 
 	/// Stop every open segment and finish every record track. Later enrollments fail.
@@ -1094,13 +1177,54 @@ mod test {
 		for (group, pts) in [(1, 90), (2, 110), (3, 2_000), (4, 4_090), (5, 4_110)] {
 			follower.frame(group, ms(pts)).unwrap();
 		}
+		// The pacer's second segment starts after the follower already reported group 5 past it,
+		// which still starts the follower's.
 		follower.follow(Mark::Start(ms(4_100)));
+		// The follower's own source declaring the same boundary again changes nothing.
+		follower.cut(ms(4_100));
 		follower.frame(6, ms(4_130)).unwrap();
+		follower.cut(ms(4_100));
 		follower.follow(Mark::Stop);
 		assert_eq!(
 			drain(&mut follower),
-			[(2, 110, None), (6, 4_130, None), (7, 4_130, Some(0))]
+			[(2, 110, None), (5, 4_110, None), (7, 4_130, Some(0))]
 		);
+	}
+
+	// Aligned GOPs whose follower frame is reported just before the pacer's: each group the
+	// follower reported ahead still starts its segment once the pacer's cut arrives.
+	#[tokio::test]
+	async fn a_follower_reporting_first_keeps_the_pacers_boundaries() {
+		let broadcast = moq_net::broadcast::Info::new().produce();
+		let tracks = Tracks::new(&broadcast);
+		let mut pacer = tracks.track("video0", hinted()).unwrap();
+		let mut follower = tracks.track("video1", hinted()).unwrap();
+		for group in 0..4 {
+			follower.frame(group, ms(group * 4_000));
+			pacer.frame(group, ms(group * 4_000));
+		}
+		let records = |name: &str| {
+			let state = tracks.state.lock().unwrap();
+			let live = state.tracks[name].1.lock().unwrap();
+			live.segmenter.sequence()
+		};
+		assert_eq!(records("video1"), records("video0"));
+		drop((pacer, follower));
+		tracks.finish();
+
+		let consumer = broadcast.consume();
+		let read = async |name: &str| {
+			let hls = tracks.hls(name).unwrap();
+			let mut consumer = Consumer::subscribe(&consumer, &hls).await.unwrap();
+			let mut out = Vec::new();
+			while let Some(Event::Push { entry, .. }) = consumer.next().await.unwrap() {
+				out.push((entry.sequence, entry.group, Duration::from(entry.pts).as_millis()));
+			}
+			out
+		};
+		let video0 = read("video0").await;
+		assert_eq!(&video0[..4], [(0, 0, 0), (1, 1, 4_000), (2, 2, 8_000), (3, 3, 12_000)]);
+		assert_eq!(read("video1").await, video0);
 	}
 
 	#[tokio::test]
@@ -1139,11 +1263,11 @@ mod test {
 			video,
 			[(0, 0, false), (1, 4_000, false), (2, 8_000, false), (3, 8_000, true)]
 		);
-		// Each audio segment starts at its first group after the video segment's. Audio's first
-		// group was reported before video's, so it waits for the next.
+		// Each audio segment starts at its first group at or after the video segment's, though
+		// audio reported that group before video reported its start.
 		assert_eq!(
 			audio,
-			[(0, 25, false), (1, 4_025, false), (2, 8_025, false), (3, 8_985, true)]
+			[(0, 5, false), (1, 4_005, false), (2, 8_005, false), (3, 8_985, true)]
 		);
 	}
 

@@ -1013,7 +1013,7 @@ impl<E: CatalogExt> Producer<E> {
 
 	/// Abort every catalog track with `err`, preventing further edits.
 	pub fn abort(mut self, err: moq_net::Error) {
-		let reason = crate::Error::from(err);
+		let reason = crate::Error::from(err.clone());
 		{
 			let mut state = take(&self.current);
 			if state.closed.is_some() {
@@ -1022,8 +1022,9 @@ impl<E: CatalogExt> Producer<E> {
 			state.closed = Some(reason.clone());
 		}
 		self.outputs.abort(&reason);
+		// The records fail too, rather than reading as a complete recording.
 		if let Some(hls) = &self.outputs.hls {
-			hls.finish();
+			hls.abort(&err);
 		}
 	}
 
@@ -1487,6 +1488,35 @@ mod test {
 			Some(crate::Error::Moq(moq_net::Error::Unauthorized))
 		));
 		copy.abort(moq_net::Error::Cancel);
+	}
+
+	/// An aborted catalog fails its HLS records with the cause, so an edge never ends the playlist
+	/// as a complete recording.
+	#[tokio::test(start_paused = true)]
+	async fn abort_fails_the_hls_records() {
+		let mut broadcast = moq_net::broadcast::Info::default().produce();
+		let catalog = Producer::<()>::new(&mut broadcast, hls()).unwrap();
+		let _recorder = catalog
+			.enroll("video0", Some(std::time::Duration::from_secs(4)))
+			.unwrap();
+		let mut reader = broadcast
+			.consume()
+			.track("video0.hls")
+			.unwrap()
+			.subscribe(None)
+			.await
+			.unwrap();
+		catalog.abort(moq_net::Error::Unauthorized);
+		loop {
+			match reader.recv_group().await {
+				Ok(Some(_)) => continue,
+				Ok(None) => panic!("the records ended as complete"),
+				Err(err) => {
+					assert!(matches!(err, moq_net::Error::Unauthorized), "{err:?}");
+					break;
+				}
+			}
+		}
 	}
 
 	#[tokio::test(start_paused = true)]

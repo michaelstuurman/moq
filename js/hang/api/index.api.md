@@ -19,22 +19,6 @@ import { Track as Track_2 } from '@moq/net';
 import * as z from '@zod/mini';
 import * as z_2 from 'zod/mini';
 
-type Archive = z.infer<typeof ArchiveSchema>;
-
-const ARCHIVE_VERSION = 3;
-
-const ArchiveSchema: z.ZodMiniObject<{
-    timelines: z.ZodMiniRecord<z.ZodMiniString<string>, z.ZodMiniObject<{
-        track: z.ZodMiniString<string>;
-        duration: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-    }, z.core.$strip>>;
-    timescale: z.ZodMiniDefault<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-    replay: z.ZodMiniOptional<z.ZodMiniType<RelativeBroadcast, string, z.core.$ZodTypeInternals<RelativeBroadcast, string>>>;
-    replayEpoch: z.ZodMiniOptional<z.ZodMiniType<ReferenceEpoch, string, z.core.$ZodTypeInternals<ReferenceEpoch, string>>>;
-    store: z.ZodMiniOptional<z.ZodMiniURL>;
-    version: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-}, z.core.$strip>;
-
 type Arrival = z.infer<typeof ArrivalSchema>;
 
 const ArrivalSchema: z.ZodMiniObject<{
@@ -94,6 +78,10 @@ const AudioConfigSchema: z.ZodMiniObject<{
     jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
     warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
     delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+    hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+        track: z.ZodMiniString<string>;
+        duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+    }, z.core.$strip>>>;
 }, z.core.$strip>;
 
 const AudioSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
@@ -131,6 +119,10 @@ const AudioSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
         warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
         delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+        hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+            track: z.ZodMiniString<string>;
+            duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+        }, z.core.$strip>>>;
     }, z.core.$strip>>;
 }, z.core.$strip>, z.ZodMiniPipe<z.ZodMiniObject<{
     track: z.ZodMiniObject<{
@@ -170,6 +162,10 @@ const AudioSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
         warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
         delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+        hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+            track: z.ZodMiniString<string>;
+            duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+        }, z.core.$strip>>>;
     }, z.core.$strip>;
 }, z.core.$strip>, z.ZodMiniTransform<{
     renditions: {
@@ -202,6 +198,10 @@ const AudioSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
             jitter?: (number & z.$brand<"u53">) | undefined;
             warmup?: (number & z.$brand<"u53">) | undefined;
             delay?: (number & z.$brand<"u53">) | undefined;
+            hls?: {
+                track: string;
+                duration: number & z.$brand<"u53">;
+            } | undefined;
         };
     };
 }, {
@@ -237,6 +237,10 @@ const AudioSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter?: (number & z.$brand<"u53">) | undefined;
         warmup?: (number & z.$brand<"u53">) | undefined;
         delay?: (number & z.$brand<"u53">) | undefined;
+        hls?: {
+            track: string;
+            duration: number & z.$brand<"u53">;
+        } | undefined;
     };
 }>>]>;
 
@@ -291,15 +295,12 @@ declare namespace Catalog {
         ProjectionSchema,
         VideoConfigSchema,
         VideoSchema,
-        MOQ_EPOCH_UNIX_MILLIS,
-        ARCHIVE_VERSION,
-        ArchiveSchema,
-        Archive,
         BinaryConfigSchema,
         BinarySchema,
         Binary,
         BinaryConfig,
         wallClockTime,
+        MOQ_EPOCH_UNIX_MILLIS,
         ClockSchema,
         Clock,
         compressionSupported,
@@ -321,6 +322,9 @@ declare namespace Catalog {
         DEFAULT_FORMAT,
         hexSchema,
         Hex,
+        HlsSchema,
+        Hls_2 as Hls,
+        HlsFieldSchema,
         u8,
         u53,
         u8Schema,
@@ -382,15 +386,12 @@ declare namespace Catalog_2 {
         ProjectionSchema,
         VideoConfigSchema,
         VideoSchema,
-        MOQ_EPOCH_UNIX_MILLIS,
-        ARCHIVE_VERSION,
-        ArchiveSchema,
-        Archive,
         BinaryConfigSchema,
         BinarySchema,
         Binary,
         BinaryConfig,
         wallClockTime,
+        MOQ_EPOCH_UNIX_MILLIS,
         ClockSchema,
         Clock,
         compressionSupported,
@@ -412,6 +413,9 @@ declare namespace Catalog_2 {
         DEFAULT_FORMAT,
         hexSchema,
         Hex,
+        HlsSchema,
+        Hls_2 as Hls,
+        HlsFieldSchema,
         u8,
         u53,
         u8Schema,
@@ -536,7 +540,7 @@ class Consumer_2 implements AsyncIterable<Event_2> {
     [Symbol.asyncIterator](): AsyncIterator<Event_2>;
     close(): void;
     next(): Promise<Event_2 | undefined>;
-    static subscribe(broadcast: Net.Broadcast.Consumer, archive: Catalog_2.Archive, track: string): Consumer_2;
+    static subscribe(broadcast: Net.Broadcast.Consumer, hls: Catalog_2.Hls): Consumer_2;
 }
 
 interface ConsumerProps {
@@ -638,7 +642,7 @@ function encodeFrame(source: Uint8Array | Source, timestamp: Micro): Uint8Array;
 
 type Entry = Omit<Record_2, "pts" | "duration"> & {
     pts: Micro;
-    duration: Micro;
+    duration?: Micro;
 };
 
 const EpochSchema: z.ZodMiniType<ReferenceEpoch, string>;
@@ -726,6 +730,28 @@ type Hex = z.infer<typeof hexSchema>;
 
 const hexSchema: z.ZodMiniString<string>;
 
+declare namespace Hls {
+    export {
+        SUFFIX_2 as SUFFIX,
+        Record_2 as Record,
+        Entry,
+        Event_2 as Event,
+        Consumer_2 as Consumer
+    }
+}
+
+type Hls_2 = z.infer<typeof HlsSchema>;
+
+const HlsFieldSchema: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+    track: z.ZodMiniString<string>;
+    duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+}, z.core.$strip>>>;
+
+const HlsSchema: z.ZodMiniObject<{
+    track: z.ZodMiniString<string>;
+    duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+}, z.core.$strip>;
+
 type Input = "rtt" | "loss" | "headroom" | "skipped" | "late" | "errors" | "stalled";
 
 function isEcho(path: Path.Valid): boolean;
@@ -800,11 +826,6 @@ const nonzeroU53Schema: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out"
 interface Observer {
     epoch?: Epoch.Valid;
     path: Path.Valid;
-}
-
-interface Position_2 {
-    frame?: number;
-    group: number;
 }
 
 const PRIORITY: {
@@ -885,11 +906,9 @@ interface ReceivedFrame extends Frame {
 
 interface Record_2 {
     duration?: number;
-    end: Position_2;
-    keyframe?: boolean;
-    pts?: number;
+    group: number;
+    pts: number;
     sequence: number;
-    start: Position_2;
 }
 
 type ReferenceEpoch = string & {
@@ -1049,6 +1068,10 @@ const RootSchema: z.ZodMiniObject<{
             jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
             warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
             delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+            hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+                track: z.ZodMiniString<string>;
+                duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+            }, z.core.$strip>>>;
         }, z.core.$strip>>;
         display: z.ZodMiniOptional<z.ZodMiniObject<{
             width: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
@@ -1151,6 +1174,10 @@ const RootSchema: z.ZodMiniObject<{
             jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
             warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
             delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+            hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+                track: z.ZodMiniString<string>;
+                duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+            }, z.core.$strip>>>;
         }, z.core.$strip>;
     }, z.core.$strip>>, z.ZodMiniTransform<{
         renditions: {
@@ -1232,6 +1259,10 @@ const RootSchema: z.ZodMiniObject<{
                 jitter?: (number & z.$brand<"u53">) | undefined;
                 warmup?: (number & z.$brand<"u53">) | undefined;
                 delay?: (number & z.$brand<"u53">) | undefined;
+                hls?: {
+                    track: string;
+                    duration: number & z.$brand<"u53">;
+                } | undefined;
             };
         };
         display: {
@@ -1322,6 +1353,10 @@ const RootSchema: z.ZodMiniObject<{
             jitter?: (number & z.$brand<"u53">) | undefined;
             warmup?: (number & z.$brand<"u53">) | undefined;
             delay?: (number & z.$brand<"u53">) | undefined;
+            hls?: {
+                track: string;
+                duration: number & z.$brand<"u53">;
+            } | undefined;
         };
     }[]>>]>>;
     audio: z.ZodMiniOptional<z.ZodMiniUnion<readonly [z.ZodMiniObject<{
@@ -1359,6 +1394,10 @@ const RootSchema: z.ZodMiniObject<{
             jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
             warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
             delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+            hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+                track: z.ZodMiniString<string>;
+                duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+            }, z.core.$strip>>>;
         }, z.core.$strip>>;
     }, z.core.$strip>, z.ZodMiniPipe<z.ZodMiniObject<{
         track: z.ZodMiniObject<{
@@ -1398,6 +1437,10 @@ const RootSchema: z.ZodMiniObject<{
             jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
             warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
             delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+            hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+                track: z.ZodMiniString<string>;
+                duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+            }, z.core.$strip>>>;
         }, z.core.$strip>;
     }, z.core.$strip>, z.ZodMiniTransform<{
         renditions: {
@@ -1430,6 +1473,10 @@ const RootSchema: z.ZodMiniObject<{
                 jitter?: (number & z.$brand<"u53">) | undefined;
                 warmup?: (number & z.$brand<"u53">) | undefined;
                 delay?: (number & z.$brand<"u53">) | undefined;
+                hls?: {
+                    track: string;
+                    duration: number & z.$brand<"u53">;
+                } | undefined;
             };
         };
     }, {
@@ -1465,19 +1512,12 @@ const RootSchema: z.ZodMiniObject<{
             jitter?: (number & z.$brand<"u53">) | undefined;
             warmup?: (number & z.$brand<"u53">) | undefined;
             delay?: (number & z.$brand<"u53">) | undefined;
+            hls?: {
+                track: string;
+                duration: number & z.$brand<"u53">;
+            } | undefined;
         };
     }>>]>>;
-    archive: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
-        timelines: z.ZodMiniRecord<z.ZodMiniString<string>, z.ZodMiniObject<{
-            track: z.ZodMiniString<string>;
-            duration: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-        }, z.core.$strip>>;
-        timescale: z.ZodMiniDefault<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-        replay: z.ZodMiniOptional<z.ZodMiniType<RelativeBroadcast, string, z.core.$ZodTypeInternals<RelativeBroadcast, string>>>;
-        replayEpoch: z.ZodMiniOptional<z.ZodMiniType<ReferenceEpoch, string, z.core.$ZodTypeInternals<ReferenceEpoch, string>>>;
-        store: z.ZodMiniOptional<z.ZodMiniURL>;
-        version: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
-    }, z.core.$strip>>>;
     clock: z.ZodMiniOptional<z.ZodMiniObject<{
         wall: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
         timescale: z.ZodMiniDefault<z.ZodMiniNumber<number>>;
@@ -1644,7 +1684,7 @@ const StatsSchema: z.ZodMiniObject<{
 
 const SUFFIX = ".echo";
 
-const SUFFIX_2 = ".timeline.z";
+const SUFFIX_2 = ".hls";
 
 type Text_2 = z_2.infer<typeof TextSchema>;
 
@@ -1735,17 +1775,6 @@ interface Thresholds {
         errors: Limits;
         stalled: Limits;
     };
-}
-
-declare namespace Timeline {
-    export {
-        Position_2 as Position,
-        Record_2 as Record,
-        SUFFIX_2 as SUFFIX,
-        Entry,
-        Event_2 as Event,
-        Consumer_2 as Consumer
-    }
 }
 
 class TooManyRenditions extends Error {
@@ -1933,6 +1962,10 @@ const VideoConfigSchema: z.ZodMiniObject<{
     jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
     warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
     delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+    hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+        track: z.ZodMiniString<string>;
+        duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+    }, z.core.$strip>>>;
 }, z.core.$strip>;
 
 const VideoSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
@@ -2027,6 +2060,10 @@ const VideoSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
         warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
         delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+        hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+            track: z.ZodMiniString<string>;
+            duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+        }, z.core.$strip>>>;
     }, z.core.$strip>>;
     display: z.ZodMiniOptional<z.ZodMiniObject<{
         width: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
@@ -2129,6 +2166,10 @@ const VideoSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
         warmup: z.ZodMiniOptional<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">>;
         delay: z.ZodMiniOptional<z.ZodMiniPipe<z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">, z.ZodMiniTransform<(number & z.$brand<"u53">) | undefined, number & z.$brand<"u53">>>>;
+        hls: z.ZodMiniCatch<z.ZodMiniOptional<z.ZodMiniObject<{
+            track: z.ZodMiniString<string>;
+            duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
+        }, z.core.$strip>>>;
     }, z.core.$strip>;
 }, z.core.$strip>>, z.ZodMiniTransform<{
     renditions: {
@@ -2210,6 +2251,10 @@ const VideoSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
             jitter?: (number & z.$brand<"u53">) | undefined;
             warmup?: (number & z.$brand<"u53">) | undefined;
             delay?: (number & z.$brand<"u53">) | undefined;
+            hls?: {
+                track: string;
+                duration: number & z.$brand<"u53">;
+            } | undefined;
         };
     };
     display: {
@@ -2300,6 +2345,10 @@ const VideoSchema: z.ZodMiniUnion<readonly [z.ZodMiniObject<{
         jitter?: (number & z.$brand<"u53">) | undefined;
         warmup?: (number & z.$brand<"u53">) | undefined;
         delay?: (number & z.$brand<"u53">) | undefined;
+        hls?: {
+            track: string;
+            duration: number & z.$brand<"u53">;
+        } | undefined;
     };
 }[]>>]>;
 

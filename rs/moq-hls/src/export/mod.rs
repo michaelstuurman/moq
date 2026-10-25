@@ -3259,6 +3259,29 @@ mod tests {
 		assert!(rendered.contains("#EXT-X-DISCONTINUITY\n"), "{rendered}");
 	}
 
+	// A record whose successor goes backwards can't be bounded, but keeps its number as a gap:
+	// a hole would renumber every later URI under a player.
+	#[tokio::test(start_paused = true)]
+	async fn a_record_its_successor_cannot_bound_is_a_gap() {
+		let test = Records::with(&["video0"], &[]);
+		let (_track, mut video0) = test.publish("video0");
+		video0.push(&gop(0)).unwrap();
+		// Record 2 starts at an earlier group than record 1.
+		video0.push(&hang::hls::Record::new(1, 2, 4_000)).unwrap();
+		video0.push(&hang::hls::Record::new(2, 1, 5_000)).unwrap();
+		video0.push(&hang::hls::Record::new(3, 3, 6_000)).unwrap();
+
+		let snapshot = test.listed("video0", 2).await;
+		assert_eq!(numbers(&snapshot), [0, 1, 2]);
+		assert_eq!(gaps(&snapshot), [1]);
+		let rendered = test
+			.rendition("video0")
+			.media_playlist(None)
+			.unwrap()
+			.expect("playable");
+		assert!(rendered.contains("#EXT-X-DISCONTINUITY\n"), "{rendered}");
+	}
+
 	// The lead stays put while it is listed and enabled, so a rendition added later (whose
 	// records are numbered from its own start) never makes the others' segments gaps.
 	#[tokio::test(start_paused = true)]

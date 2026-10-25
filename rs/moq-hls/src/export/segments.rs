@@ -390,13 +390,14 @@ impl Producer {
 
 	/// The number of the segment whose `pts` is exactly `time` milliseconds (DASH `$Time$`
 	/// addressing), or `None` when no listed row starts there. Exact match is safe because the
-	/// rendered `S@t` and this lookup convert the same [`Row::pts`] the same way.
+	/// rendered `S@t` and this lookup convert the same [`Row::pts`] the same way. A stop is never
+	/// rendered, so it never answers, even where content resumes at its pts.
 	pub fn segment_number_at(&self, tag: &str, time: u64) -> Option<u64> {
 		let state = self.state.read();
 		state
 			.rows
 			.iter()
-			.find(|row| row.pts.as_millis() == time as u128 && &*row.tag == tag)
+			.find(|row| !row.stop && row.pts.as_millis() == time as u128 && &*row.tag == tag)
 			.map(|row| row.segment)
 	}
 
@@ -664,6 +665,23 @@ mod tests {
 			discontinuity: 0,
 			stop: false,
 		}
+	}
+
+	// Content that resumes at the pts it stopped shares a `$Time$` with the stop, which the MPD
+	// omits, so the time names the resumed segment.
+	#[test]
+	fn a_time_names_the_resumed_segment_not_the_stop() {
+		let live = Producer::new(0);
+		let window = Duration::from_secs(30);
+		live.push(row(0, 0, 0, 4_000), window);
+		let mut stop = row(1, 1, 4_000, 0);
+		stop.groups = 1..1;
+		stop.stop = true;
+		live.push(stop, window);
+		live.push(row(2, 1, 4_000, 4_000), window);
+		let tag = tag("video.hls", b"");
+		assert_eq!(live.segment_number_at(&tag, 4_000), Some(2));
+		assert_eq!(live.segment_number_at(&tag, 0), Some(0));
 	}
 
 	#[test]

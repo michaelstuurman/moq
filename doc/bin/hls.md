@@ -81,7 +81,7 @@ after the recording completes.
 
 The recording starts at the oldest segment in the `--window` and gets
 `EXT-X-ENDLIST` only once the broadcast finishes cleanly. If the publisher drops
-out, the timeline restarts, or a segment can't be fetched, the export exits with
+out, the HLS records restart, or a segment can't be fetched, the export exits with
 an error and leaves the playlists unended. A rendition whose decoder is
 reconfigured keeps one playlist, switching to a new init at an
 `EXT-X-DISCONTINUITY` that every playlist marks at the same segment, so the whole
