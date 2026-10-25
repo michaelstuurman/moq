@@ -917,10 +917,10 @@ impl AnnounceServe {
 							| Error::Session(crate::SessionError::Cancel)
 							| Error::Transport(_)
 							| Error::IdleTimeout => {
-								tracing::debug!(prefix = %origin.absolute(""), "announcing cancelled");
+								tracing::debug!(prefix = %origin.absolute(crate::Path::empty()), "announcing cancelled");
 							}
 							err => {
-								tracing::warn!(%err, prefix = %origin.absolute(""), "announcing error");
+								tracing::warn!(%err, prefix = %origin.absolute(crate::Path::empty()), "announcing error");
 							}
 						}
 						self.stream.take().expect("stream present").writer.abort(&err);

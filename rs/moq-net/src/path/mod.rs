@@ -5,8 +5,7 @@
 //! wildcards, and [`Patterns`] is a union of them reduced by containment. The
 //! grammar and algebra live in [`moq-pattern`](moq_pattern); this module
 //! re-exports them beside [`Path`] so grants, origin scopes, and announce
-//! interests can share one dialect. Literal path construction and wire
-//! decoding retain their existing behavior.
+//! interests can share one dialect.
 
 pub use moq_pattern::{InvalidPattern, Pattern, Patterns, Segment, Specificity};
 
@@ -14,43 +13,31 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::sync::Arc;
 
+use crate::Error;
 use crate::coding::{Decode, DecodeError, Decoder, Encode, EncodeError, Encoder};
+
+// An empty segment would give one path several spellings, so it is refused rather than collapsed.
+fn validate(s: &str) -> Result<(), Error> {
+	if !s.is_empty() && (s.starts_with('/') || s.ends_with('/') || s.contains("//")) {
+		return Err(Error::EmptySegment);
+	}
+	Ok(())
+}
 
 /// An owned version of [`Path`] with a `'static` lifetime.
 pub type PathOwned = Path<'static>;
 
-/// A trait for types that can be converted to a `Path`.
+/// A trait for types that can be borrowed as a [`Path`].
 ///
-/// When providing a String/str, any leading/trailing slashes are trimmed and multiple consecutive slashes are collapsed.
-/// When already a Path, normalization is skipped and the underlying buffer is reused without copying.
+/// Only paths implement it, so a string goes through [`Path::new`] and its
+/// validation before it can name a broadcast.
 pub trait AsPath {
-	/// Borrow `self` as a [`Path`], normalizing slashes only when needed.
+	/// Borrow `self` as a [`Path`] without copying.
 	fn as_path(&self) -> Path<'_>;
-
-	/// Whether [`as_path`](Self::as_path) keeps the input as written, with no leading, trailing, or doubled `/` to drop.
-	fn is_normalized(&self) -> bool {
-		true
-	}
-}
-
-// Normalization only removes slashes, so a string without an empty segment is already normal.
-fn is_normalized(s: &str) -> bool {
-	!(s.starts_with('/') || s.ends_with('/') || s.contains("//"))
-}
-
-impl<'a> AsPath for &'a str {
-	fn as_path(&self) -> Path<'a> {
-		Path::new(self)
-	}
-
-	fn is_normalized(&self) -> bool {
-		is_normalized(self)
-	}
 }
 
 impl<'a> AsPath for &'a Path<'a> {
 	fn as_path(&self) -> Path<'a> {
-		// We don't normalize again nor do we copy the bytes.
 		self.borrow()
 	}
 }
@@ -58,26 +45,6 @@ impl<'a> AsPath for &'a Path<'a> {
 impl AsPath for Path<'_> {
 	fn as_path(&self) -> Path<'_> {
 		self.borrow()
-	}
-}
-
-impl AsPath for String {
-	fn as_path(&self) -> Path<'_> {
-		Path::new(self)
-	}
-
-	fn is_normalized(&self) -> bool {
-		is_normalized(self)
-	}
-}
-
-impl<'a> AsPath for &'a String {
-	fn as_path(&self) -> Path<'a> {
-		Path::new(self)
-	}
-
-	fn is_normalized(&self) -> bool {
-		is_normalized(self)
 	}
 }
 
@@ -97,11 +64,12 @@ enum Repr<'a> {
 /// This type wraps a string but provides path-aware operations that respect
 /// delimiter boundaries, preventing issues like "foo" matching "foobar".
 ///
-/// Paths are automatically trimmed of leading and trailing slashes on creation,
-/// making all slashes implicit at boundaries. A path names a point in the origin's
-/// tree from its root; a leading slash never escapes that root. The same type names
-/// an exact broadcast and the prefix a route or announcement covers, so a broadcast's
-/// own path is the prefix it announces. See [`Relative`] for `..`-style references.
+/// A path is a sequence of non-empty segments joined by `/`, so it has one spelling:
+/// [`Path::new`] refuses a leading, trailing, or doubled `/` rather than collapsing it.
+/// The empty path has no segments; it is the origin's root and prefixes every other
+/// path. The same type names an exact broadcast and the prefix a route or announcement
+/// covers, so a broadcast's own path is the prefix it announces, and a prefix needs no
+/// trailing `/`. See [`Relative`] for `..`-style references.
 ///
 /// Owned paths ([`PathOwned`]) share one reference-counted allocation: cloning, converting
 /// a shared path with [`Path::to_owned`], and suffix operations like [`Path::strip_prefix`]
@@ -111,18 +79,17 @@ enum Repr<'a> {
 /// ```
 /// use moq_net::{Path};
 ///
-/// // Creation automatically trims slashes
-/// let path1 = Path::new("/foo/bar/");
-/// let path2 = Path::new("foo/bar");
-/// assert_eq!(path1, path2);
+/// // An empty segment is refused, not collapsed.
+/// assert!(Path::new("/foo/bar/").is_err());
+/// assert!(Path::new("foo//bar").is_err());
 ///
-/// // Methods accept both &str and Path
-/// let base = Path::new("api/v1");
-/// assert!(base.has_prefix("api"));
-/// assert!(base.has_prefix(&Path::new("api/v1")));
+/// let base = Path::new("api/v1")?;
+/// assert!(base.has_prefix(Path::new("api")?));
+/// assert!(base.has_prefix(Path::empty()));
 ///
-/// let joined = base.join("users");
+/// let joined = base.join(Path::new("users")?);
 /// assert_eq!(joined.as_str(), "api/v1/users");
+/// # Ok::<(), moq_net::Error>(())
 /// ```
 #[derive(Clone)]
 pub struct Path<'a>(Repr<'a>);
@@ -135,29 +102,19 @@ impl<'a> Path<'a> {
 	/// and publishing one to an origin is rejected.
 	pub const MAX_PARTS: usize = 32;
 
-	/// Create a new Path from a string slice.
+	/// Borrow a string as a path, without copying.
 	///
-	/// Leading and trailing slashes are automatically trimmed.
-	/// Multiple consecutive internal slashes are collapsed to single slashes.
-	pub fn new(s: &'a str) -> Self {
-		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
+	/// The empty string is the root path. Anything else must be non-empty segments
+	/// joined by `/`: a leading, trailing, or doubled `/` returns [`Error::EmptySegment`].
+	pub fn new(s: &'a str) -> Result<Self, Error> {
+		validate(s)?;
+		Ok(Self(Repr::Borrowed(s)))
+	}
 
-		// Check if we need to normalize (has multiple consecutive slashes)
-		if trimmed.contains("//") {
-			// Only allocate if we actually need to normalize
-			let normalized = trimmed
-				.split('/')
-				.filter(|s| !s.is_empty())
-				.collect::<Vec<_>>()
-				.join("/");
-			Self(Repr::Shared {
-				buf: normalized.into(),
-				start: 0,
-			})
-		} else {
-			// No normalization needed - use borrowed string
-			Self(Repr::Borrowed(trimmed))
-		}
+	// A string the caller already knows is valid, such as a run of another path's segments.
+	pub(crate) fn from_valid(s: &'a str) -> Self {
+		debug_assert!(validate(s).is_ok(), "invalid path {s:?}");
+		Self(Repr::Borrowed(s))
 	}
 
 	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
@@ -195,14 +152,13 @@ impl<'a> Path<'a> {
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let path = Path::new("foo/bar");
-	/// assert!(path.has_prefix("foo"));
-	/// assert!(path.has_prefix(&Path::new("foo")));
-	/// assert!(path.has_prefix("foo/"));
-	/// assert!(!path.has_prefix("fo"));
+	/// let path = Path::new("foo/bar")?;
+	/// assert!(path.has_prefix(Path::new("foo")?));
+	/// assert!(!path.has_prefix(Path::new("fo")?));
 	///
-	/// let path = Path::new("foobar");
-	/// assert!(!path.has_prefix("foo"));
+	/// let path = Path::new("foobar")?;
+	/// assert!(!path.has_prefix(Path::new("foo")?));
+	/// # Ok::<(), moq_net::Error>(())
 	/// ```
 	pub fn has_prefix(&self, prefix: impl AsPath) -> bool {
 		let prefix = prefix.as_path();
@@ -262,14 +218,15 @@ impl<'a> Path<'a> {
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let path = Path::new("foo/bar/baz");
+	/// let path = Path::new("foo/bar/baz")?;
 	/// assert_eq!(path.parts().collect::<Vec<_>>(), ["foo", "bar", "baz"]);
 	/// assert_eq!(Path::empty().parts().count(), 0);
+	/// # Ok::<(), moq_net::Error>(())
 	/// ```
 	pub fn parts(&self) -> impl Iterator<Item = &str> {
-		// Paths are normalized on creation so there are no empty parts to filter,
-		// except that splitting the empty path yields one empty item.
-		self.as_str().split('/').filter(|part| !part.is_empty())
+		// Segments are never empty, but splitting the empty path would yield one.
+		let s = self.as_str();
+		(!s.is_empty()).then(|| s.split('/')).into_iter().flatten()
 	}
 
 	/// Strip the directory component of the path, if any, and return the rest of the path.
@@ -292,7 +249,7 @@ impl<'a> Path<'a> {
 		self.parts().any(|part| part.starts_with('.'))
 	}
 
-	/// The normalized path as a string, with no leading or trailing slash.
+	/// The path as a string, with no leading or trailing slash.
 	pub fn as_str(&self) -> &str {
 		match &self.0 {
 			Repr::Borrowed(s) => s,
@@ -353,12 +310,12 @@ impl<'a> Path<'a> {
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let base = Path::new("foo");
-	/// let joined = base.join("bar");
-	/// assert_eq!(joined.as_str(), "foo/bar");
+	/// let base = Path::new("foo")?;
+	/// assert_eq!(base.join(Path::new("bar")?).as_str(), "foo/bar");
 	///
-	/// let joined = base.join(&Path::new("bar"));
-	/// assert_eq!(joined.as_str(), "foo/bar");
+	/// // The empty path is the identity.
+	/// assert_eq!(base.join(Path::empty()).as_str(), "foo");
+	/// # Ok::<(), moq_net::Error>(())
 	/// ```
 	pub fn join(&self, other: impl AsPath) -> PathOwned {
 		let other = other.as_path();
@@ -368,7 +325,7 @@ impl<'a> Path<'a> {
 		} else if other.is_empty() {
 			self.to_owned()
 		} else {
-			// Since paths are trimmed, we always need to add a slash
+			// Neither side has a leading or trailing slash, so exactly one joins them.
 			Path(Repr::Shared {
 				buf: format!("{}/{}", self.as_str(), other.as_str()).into(),
 				start: 0,
@@ -390,10 +347,11 @@ impl<'a> Path<'a> {
 	/// ```
 	/// use moq_net::{Path, path::Relative};
 	///
-	/// let base = Path::new("a/b/c");
+	/// let base = Path::new("a/b/c")?;
 	/// assert_eq!(base.resolve(&Relative::new("./d")).as_str(), "a/b/d");
 	/// assert_eq!(base.resolve(&Relative::new(".")).as_str(), "a/b");
 	/// assert_eq!(base.resolve(&Relative::new("../d")).as_str(), "a/d");
+	/// # Ok::<(), moq_net::Error>(())
 	/// ```
 	pub fn resolve(&self, rel: &Relative<'_>) -> PathOwned {
 		if rel.is_empty() {
@@ -477,19 +435,20 @@ impl<'a> Path<'a> {
 	/// use moq_net::Path;
 	///
 	/// // The base names a broadcast, so its last segment is replaced, not descended into.
-	/// let base = Path::new("a/b");
-	/// assert_eq!(Path::new("a/b/c").relative(&base).unwrap().as_str(), "b/c");
-	/// assert_eq!(Path::new("a/c").relative(&base).unwrap().as_str(), "c");
-	/// assert_eq!(Path::new("c").relative(&base).unwrap().as_str(), "../c");
+	/// let base = Path::new("a/b")?;
+	/// assert_eq!(Path::new("a/b/c")?.relative(&base).unwrap().as_str(), "b/c");
+	/// assert_eq!(Path::new("a/c")?.relative(&base).unwrap().as_str(), "c");
+	/// assert_eq!(Path::new("c")?.relative(&base).unwrap().as_str(), "../c");
 	///
 	/// // The lone `.` names the base's parent, which the empty reference cannot.
-	/// assert_eq!(Path::new("a").relative(&base).unwrap().as_str(), ".");
+	/// assert_eq!(Path::new("a")?.relative(&base).unwrap().as_str(), ".");
 	///
 	/// // The base itself.
-	/// assert_eq!(Path::new("a/b").relative(&base).unwrap().as_str(), "");
+	/// assert_eq!(Path::new("a/b")?.relative(&base).unwrap().as_str(), "");
 	///
 	/// // A segment named `..` is a legal path component but an unnameable target.
-	/// assert!(Path::new("a/..").relative(&base).is_none());
+	/// assert!(Path::new("a/..")?.relative(&base).is_none());
+	/// # Ok::<(), moq_net::Error>(())
 	/// ```
 	pub fn relative(&self, base: impl AsPath) -> Option<RelativeOwned> {
 		let base = base.as_path();
@@ -565,28 +524,47 @@ impl serde::Serialize for Path<'_> {
 	}
 }
 
-impl<'a> From<&'a str> for Path<'a> {
-	fn from(s: &'a str) -> Self {
+impl<'a> TryFrom<&'a str> for Path<'a> {
+	type Error = Error;
+
+	fn try_from(s: &'a str) -> Result<Self, Error> {
 		Self::new(s)
 	}
 }
 
-impl<'a> From<&'a String> for Path<'a> {
-	fn from(s: &'a String) -> Self {
-		// TODO avoid making a copy here
+impl<'a> TryFrom<&'a String> for Path<'a> {
+	type Error = Error;
+
+	fn try_from(s: &'a String) -> Result<Self, Error> {
 		Self::new(s)
+	}
+}
+
+impl TryFrom<String> for Path<'_> {
+	type Error = Error;
+
+	/// Take ownership of the string as a path, refusing it like [`Path::new`].
+	fn try_from(s: String) -> Result<Self, Error> {
+		validate(&s)?;
+		Ok(if s.is_empty() {
+			Path::empty()
+		} else {
+			Path(Repr::Shared { buf: s.into(), start: 0 })
+		})
+	}
+}
+
+impl std::str::FromStr for PathOwned {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<Self, Error> {
+		Ok(Path::new(s)?.into_owned())
 	}
 }
 
 impl Default for Path<'_> {
 	fn default() -> Self {
 		Path::empty()
-	}
-}
-
-impl From<String> for Path<'_> {
-	fn from(s: String) -> Self {
-		Path::new(&s).into_owned()
 	}
 }
 
@@ -604,7 +582,7 @@ impl Display for Path<'_> {
 
 impl<V> Decode<V> for Path<'_> {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
-		let path: Path = r.string()?.into();
+		let path = Path::try_from(r.string()?).map_err(|_| DecodeError::InvalidValue)?;
 		if path.parts().count() > Path::MAX_PARTS {
 			return Err(DecodeError::BoundsExceeded);
 		}
@@ -677,11 +655,12 @@ pub type RelativeOwned = Relative<'static>;
 /// use moq_net::{Path, path::Relative};
 ///
 /// let rel = Relative::new("./source");
-/// assert_eq!(Path::new("a/b").resolve(&rel).as_str(), "a/source");
+/// assert_eq!(Path::new("a/b")?.resolve(&rel).as_str(), "a/source");
 ///
 /// // Redundant `.` segments are stripped on creation.
 /// assert_eq!(Relative::new("./a/./b").as_str(), "a/b");
 /// assert_eq!(Relative::new(".").as_str(), ".");
+/// # Ok::<(), moq_net::Error>(())
 /// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone, serde::Serialize)]
 pub struct Relative<'a>(Cow<'a, str>);
@@ -816,433 +795,100 @@ impl<'de> serde::Deserialize<'de> for Relative<'static> {
 mod tests {
 	use super::*;
 
+	fn p(s: &str) -> Path<'_> {
+		Path::new(s).unwrap()
+	}
+
+	#[test]
+	fn test_refuses_empty_segments() {
+		for s in ["/", "//", "/foo", "foo/", "/foo/", "foo//bar", "foo/bar/", "a///b"] {
+			assert!(matches!(Path::new(s), Err(Error::EmptySegment)), "accepted {s:?}");
+			assert!(Path::try_from(s.to_string()).is_err(), "accepted owned {s:?}");
+			assert!(s.parse::<PathOwned>().is_err(), "parsed {s:?}");
+		}
+
+		// The root has no segments, so none of them is empty.
+		assert!(Path::new("").unwrap().is_empty());
+		assert_eq!(Path::try_from(String::new()).unwrap(), Path::empty());
+
+		// Borrowed and owned construction agree on everything else.
+		for s in ["foo", "foo/bar", ".hidden/x", "a/../b"] {
+			assert_eq!(p(s), Path::try_from(s.to_string()).unwrap());
+			assert_eq!(p(s), s.parse::<PathOwned>().unwrap());
+		}
+	}
+
+	#[test]
+	fn test_decode_refuses_empty_segments() {
+		use crate::lite::Version;
+
+		for s in ["/foo", "foo/", "foo//bar"] {
+			let mut buf = Vec::new();
+			Encoder::new(&mut buf, Version::Lite04.into()).string(s).unwrap();
+			assert!(matches!(
+				crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode),
+				Err(DecodeError::InvalidValue)
+			));
+		}
+	}
+
 	#[test]
 	fn test_has_prefix() {
-		let path = Path::new("foo/bar/baz");
+		let path = p("foo/bar/baz");
 
-		// Valid prefixes - test with both &str and &Path
-		assert!(path.has_prefix(""));
-		assert!(path.has_prefix("foo"));
-		assert!(path.has_prefix(Path::new("foo")));
-		assert!(path.has_prefix("foo/"));
-		assert!(path.has_prefix("foo/bar"));
-		assert!(path.has_prefix(Path::new("foo/bar/")));
-		assert!(path.has_prefix("foo/bar/baz"));
+		assert!(path.has_prefix(Path::empty()));
+		assert!(path.has_prefix(p("foo")));
+		assert!(path.has_prefix(p("foo/bar")));
+		assert!(path.has_prefix(p("foo/bar/baz")));
 
-		// Invalid prefixes - should not match partial components
-		assert!(!path.has_prefix("f"));
-		assert!(!path.has_prefix(Path::new("fo")));
-		assert!(!path.has_prefix("foo/b"));
-		assert!(!path.has_prefix("foo/ba"));
-		assert!(!path.has_prefix(Path::new("foo/bar/ba")));
+		// Only whole segments match.
+		assert!(!path.has_prefix(p("f")));
+		assert!(!path.has_prefix(p("fo")));
+		assert!(!path.has_prefix(p("foo/b")));
+		assert!(!path.has_prefix(p("foo/ba")));
+		assert!(!path.has_prefix(p("foo/bar/ba")));
+		assert!(!p("foobar").has_prefix(p("foo")));
+		assert!(p("foobar").has_prefix(p("foobar")));
 
-		// Edge case: "foobar" should not match "foo"
-		let path = Path::new("foobar");
-		assert!(!path.has_prefix("foo"));
-		assert!(path.has_prefix(Path::new("foobar")));
+		// The root prefixes everything, and is prefixed only by itself.
+		assert!(Path::empty().has_prefix(Path::empty()));
+		assert!(!Path::empty().has_prefix(p("foo")));
 	}
 
 	#[test]
 	fn test_strip_prefix() {
-		let path = Path::new("foo/bar/baz");
+		let path = p("foo/bar/baz");
 
-		// Test with both &str and &Path
-		assert_eq!(path.strip_prefix("").unwrap().as_str(), "foo/bar/baz");
-		assert_eq!(path.strip_prefix("foo").unwrap().as_str(), "bar/baz");
-		assert_eq!(path.strip_prefix(Path::new("foo/")).unwrap().as_str(), "bar/baz");
-		assert_eq!(path.strip_prefix("foo/bar").unwrap().as_str(), "baz");
-		assert_eq!(path.strip_prefix(Path::new("foo/bar/")).unwrap().as_str(), "baz");
-		assert_eq!(path.strip_prefix("foo/bar/baz").unwrap().as_str(), "");
+		assert_eq!(path.strip_prefix(Path::empty()).unwrap().as_str(), "foo/bar/baz");
+		assert_eq!(path.strip_prefix(p("foo")).unwrap().as_str(), "bar/baz");
+		assert_eq!(path.strip_prefix(p("foo/bar")).unwrap().as_str(), "baz");
+		assert_eq!(path.strip_prefix(p("foo/bar/baz")).unwrap().as_str(), "");
 
-		// Should fail for invalid prefixes
-		assert!(path.strip_prefix("fo").is_none());
-		assert!(path.strip_prefix(Path::new("bar")).is_none());
+		assert!(path.strip_prefix(p("fo")).is_none());
+		assert!(path.strip_prefix(p("bar")).is_none());
+		assert!(path.strip_prefix(p("foo/ba")).is_none());
+		assert!(p("foobar").strip_prefix(p("foo")).is_none());
+
+		assert_eq!(Path::empty().strip_prefix(Path::empty()).unwrap().as_str(), "");
+		assert!(Path::empty().strip_prefix(p("foo")).is_none());
 	}
 
 	#[test]
 	fn test_join() {
-		// Test with both &str and &Path
-		assert_eq!(Path::new("foo").join("bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo/").join(Path::new("bar")).as_str(), "foo/bar");
-		assert_eq!(Path::new("").join("bar").as_str(), "bar");
-		assert_eq!(Path::new("foo/bar").join(Path::new("baz")).as_str(), "foo/bar/baz");
-	}
-
-	#[test]
-	fn test_from_conversions() {
-		let path1 = Path::from("foo/bar");
-		let path2 = Path::from("foo/bar");
-		let s = String::from("foo/bar");
-		let path3 = Path::from(&s);
-
-		assert_eq!(path1.as_str(), "foo/bar");
-		assert_eq!(path2.as_str(), "foo/bar");
-		assert_eq!(path3.as_str(), "foo/bar");
-	}
-
-	#[test]
-	fn test_path_prefix_join() {
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
-		assert_eq!(path.as_str(), "foo/bar/baz");
-
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
-		assert_eq!(path.as_str(), "foo/bar/baz");
-
-		let prefix = Path::new("foo");
-		let suffix = Path::new("/bar/baz");
-		let path = prefix.join(&suffix);
-		assert_eq!(path.as_str(), "foo/bar/baz");
-
-		let prefix = Path::new("");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
-		assert_eq!(path.as_str(), "bar/baz");
-	}
-
-	#[test]
-	fn test_path_prefix_conversions() {
-		let prefix1 = Path::from("foo/bar");
-		let prefix2 = Path::from(String::from("foo/bar"));
-		let s = String::from("foo/bar");
-		let prefix3 = Path::from(&s);
-
-		assert_eq!(prefix1.as_str(), "foo/bar");
-		assert_eq!(prefix2.as_str(), "foo/bar");
-		assert_eq!(prefix3.as_str(), "foo/bar");
-	}
-
-	#[test]
-	fn test_path_suffix_conversions() {
-		let suffix1 = Path::from("foo/bar");
-		let suffix2 = Path::from(String::from("foo/bar"));
-		let s = String::from("foo/bar");
-		let suffix3 = Path::from(&s);
-
-		assert_eq!(suffix1.as_str(), "foo/bar");
-		assert_eq!(suffix2.as_str(), "foo/bar");
-		assert_eq!(suffix3.as_str(), "foo/bar");
-	}
-
-	#[test]
-	fn test_path_types_basic_operations() {
-		let prefix = Path::new("foo/bar");
-		assert_eq!(prefix.as_str(), "foo/bar");
-		assert!(!prefix.is_empty());
-		assert_eq!(prefix.len(), 7);
-
-		let suffix = Path::new("baz/qux");
-		assert_eq!(suffix.as_str(), "baz/qux");
-		assert!(!suffix.is_empty());
-		assert_eq!(suffix.len(), 7);
-
-		let empty_prefix = Path::new("");
-		assert!(empty_prefix.is_empty());
-		assert_eq!(empty_prefix.len(), 0);
-
-		let empty_suffix = Path::new("");
-		assert!(empty_suffix.is_empty());
-		assert_eq!(empty_suffix.len(), 0);
-	}
-
-	#[test]
-	fn test_prefix_has_prefix() {
-		// Test empty prefix (should match everything)
-		let prefix = Path::new("foo/bar");
-		assert!(prefix.has_prefix(""));
-
-		// Test exact matches
-		let prefix = Path::new("foo/bar");
-		assert!(prefix.has_prefix("foo/bar"));
-
-		// Test valid prefixes
-		assert!(prefix.has_prefix("foo"));
-		assert!(prefix.has_prefix("foo/"));
-
-		// Test invalid prefixes - partial matches should fail
-		assert!(!prefix.has_prefix("f"));
-		assert!(!prefix.has_prefix("fo"));
-		assert!(!prefix.has_prefix("foo/b"));
-		assert!(!prefix.has_prefix("foo/ba"));
-
-		// Test edge cases
-		let prefix = Path::new("foobar");
-		assert!(!prefix.has_prefix("foo"));
-		assert!(prefix.has_prefix("foobar"));
-
-		// Test trailing slash handling
-		let prefix = Path::new("foo/bar/");
-		assert!(prefix.has_prefix("foo"));
-		assert!(prefix.has_prefix("foo/"));
-		assert!(prefix.has_prefix("foo/bar"));
-		assert!(prefix.has_prefix("foo/bar/"));
-
-		// Test single component
-		let prefix = Path::new("foo");
-		assert!(prefix.has_prefix(""));
-		assert!(prefix.has_prefix("foo"));
-		assert!(prefix.has_prefix("foo/")); // "foo/" becomes "foo" after trimming
-		assert!(!prefix.has_prefix("f"));
-
-		// Test empty prefix
-		let prefix = Path::new("");
-		assert!(prefix.has_prefix(""));
-		assert!(!prefix.has_prefix("foo"));
-	}
-
-	#[test]
-	fn test_prefix_join() {
-		// Basic joining
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar");
-
-		// Trailing slash on prefix
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar");
-
-		// Leading slash on suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("/bar");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar");
-
-		// Trailing slash on suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar/");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar"); // trailing slash is trimmed
-
-		// Both have slashes
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("/bar");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar");
-
-		// Empty suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("");
-		assert_eq!(prefix.join(suffix).as_str(), "foo");
-
-		// Empty prefix
-		let prefix = Path::new("");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(suffix).as_str(), "bar");
-
-		// Both empty
-		let prefix = Path::new("");
-		let suffix = Path::new("");
-		assert_eq!(prefix.join(suffix).as_str(), "");
-
-		// Complex paths
-		let prefix = Path::new("foo/bar");
-		let suffix = Path::new("baz/qux");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar/baz/qux");
-
-		// Complex paths with slashes
-		let prefix = Path::new("foo/bar/");
-		let suffix = Path::new("/baz/qux/");
-		assert_eq!(prefix.join(suffix).as_str(), "foo/bar/baz/qux"); // all slashes are trimmed
-	}
-
-	#[test]
-	fn test_path_ref() {
-		// Test PathRef creation and normalization
-		let ref1 = Path::new("/foo/bar/");
-		assert_eq!(ref1.as_str(), "foo/bar");
-
-		let ref2 = Path::from("///foo///");
-		assert_eq!(ref2.as_str(), "foo");
-
-		// Test PathRef normalizes multiple slashes
-		let ref3 = Path::new("foo//bar///baz");
-		assert_eq!(ref3.as_str(), "foo/bar/baz");
-
-		// Test conversions
-		let path = Path::new("foo/bar");
-		let path_ref = path;
-		assert_eq!(path_ref.as_str(), "foo/bar");
-
-		// Test that Path methods work with PathRef
-		let path2 = Path::new("foo/bar/baz");
-		assert!(path2.has_prefix(&path_ref));
-		assert_eq!(path2.strip_prefix(path_ref).unwrap().as_str(), "baz");
-
-		// Test empty PathRef
-		let empty = Path::new("");
-		assert!(empty.is_empty());
-		assert_eq!(empty.len(), 0);
-	}
-
-	#[test]
-	fn test_multiple_consecutive_slashes() {
-		let path = Path::new("foo//bar///baz");
-		// Multiple consecutive slashes are collapsed to single slashes
-		assert_eq!(path.as_str(), "foo/bar/baz");
-
-		// Test with leading and trailing slashes too
-		let path2 = Path::new("//foo//bar///baz//");
-		assert_eq!(path2.as_str(), "foo/bar/baz");
-
-		// Test empty segments are handled correctly
-		let path3 = Path::new("foo///bar");
-		assert_eq!(path3.as_str(), "foo/bar");
-	}
-
-	#[test]
-	fn test_removes_multiple_slashes_comprehensively() {
-		// Test various multiple slash scenarios
-		assert_eq!(Path::new("foo//bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo///bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo////bar").as_str(), "foo/bar");
-
-		// Multiple occurrences of double slashes
-		assert_eq!(Path::new("foo//bar//baz").as_str(), "foo/bar/baz");
-		assert_eq!(Path::new("a//b//c//d").as_str(), "a/b/c/d");
-
-		// Mixed slash counts
-		assert_eq!(Path::new("foo//bar///baz////qux").as_str(), "foo/bar/baz/qux");
-
-		// With leading and trailing slashes
-		assert_eq!(Path::new("//foo//bar//").as_str(), "foo/bar");
-		assert_eq!(Path::new("///foo///bar///").as_str(), "foo/bar");
-
-		// Edge case: only slashes
-		assert_eq!(Path::new("//").as_str(), "");
-		assert_eq!(Path::new("////").as_str(), "");
-
-		// Test that operations work correctly with normalized paths
-		let path_with_slashes = Path::new("foo//bar///baz");
-		assert!(path_with_slashes.has_prefix("foo/bar"));
-		assert_eq!(path_with_slashes.strip_prefix("foo").unwrap().as_str(), "bar/baz");
-		assert_eq!(path_with_slashes.join("qux").as_str(), "foo/bar/baz/qux");
-
-		// Test PathRef to Path conversion
-		let path_ref = Path::new("foo//bar///baz");
-		assert_eq!(path_ref.as_str(), "foo/bar/baz"); // PathRef now normalizes too
-		let path_from_ref = path_ref.to_owned();
-		assert_eq!(path_from_ref.as_str(), "foo/bar/baz"); // Both are normalized
-	}
-
-	#[test]
-	fn test_path_ref_multiple_slashes() {
-		// PathRef now normalizes multiple slashes using Cow
-		let path_ref = Path::new("//foo//bar///baz//");
-		assert_eq!(path_ref.as_str(), "foo/bar/baz"); // Fully normalized
-
-		// Various multiple slash scenarios are normalized in PathRef
-		assert_eq!(Path::new("foo//bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo///bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("a//b//c//d").as_str(), "a/b/c/d");
-
-		// Conversion to Path maintains normalized form
-		assert_eq!(Path::new("foo//bar").to_owned().as_str(), "foo/bar");
-		assert_eq!(Path::new("foo///bar").to_owned().as_str(), "foo/bar");
-		assert_eq!(Path::new("a//b//c//d").to_owned().as_str(), "a/b/c/d");
-
-		// Edge cases
-		assert_eq!(Path::new("//").as_str(), "");
-		assert_eq!(Path::new("////").as_str(), "");
-		assert_eq!(Path::new("//").to_owned().as_str(), "");
-		assert_eq!(Path::new("////").to_owned().as_str(), "");
-
-		// Test that PathRef avoids allocation when no normalization needed
-		let normal_path = Path::new("foo/bar/baz");
-		assert_eq!(normal_path.as_str(), "foo/bar/baz");
-		// This should use Cow::Borrowed internally (no allocation)
-
-		let needs_norm = Path::new("foo//bar");
-		assert_eq!(needs_norm.as_str(), "foo/bar");
-		// This should use Cow::Owned internally (allocation only when needed)
-	}
-
-	#[test]
-	fn test_ergonomic_conversions() {
-		// Test that all these work ergonomically in function calls
-		fn takes_path_ref<'a>(p: impl Into<Path<'a>>) -> String {
-			p.into().as_str().to_string()
-		}
-
-		// Alternative API using the trait alias for better error messages
-		fn takes_path_ref_with_trait<'a>(p: impl Into<Path<'a>>) -> String {
-			p.into().as_str().to_string()
-		}
-
-		// String literal
-		assert_eq!(takes_path_ref("foo//bar"), "foo/bar");
-
-		// String (owned) - this should now work without &
-		let owned_string = String::from("foo//bar///baz");
-		assert_eq!(takes_path_ref(owned_string), "foo/bar/baz");
-
-		// &String
-		let string_ref = String::from("foo//bar");
-		assert_eq!(takes_path_ref(string_ref), "foo/bar");
-
-		// PathRef
-		let path_ref = Path::new("foo//bar");
-		assert_eq!(takes_path_ref(path_ref), "foo/bar");
-
-		// Path
-		let path = Path::new("foo//bar");
-		assert_eq!(takes_path_ref(path), "foo/bar");
-
-		// Test that Path::new works with all these types
-		let _path1 = Path::new("foo/bar"); // &str
-		let _path2 = Path::new("foo/bar"); // String - should now work
-		let _path3 = Path::new("foo/bar"); // &String
-		let _path4 = Path::new("foo/bar"); // PathRef
-
-		// Test the trait alias version works the same
-		assert_eq!(takes_path_ref_with_trait("foo//bar"), "foo/bar");
-		assert_eq!(takes_path_ref_with_trait(String::from("foo//bar")), "foo/bar");
-	}
-
-	#[test]
-	fn test_prefix_strip_prefix() {
-		// Test basic stripping
-		let prefix = Path::new("foo/bar/baz");
-		assert_eq!(prefix.strip_prefix("").unwrap().as_str(), "foo/bar/baz");
-		assert_eq!(prefix.strip_prefix("foo").unwrap().as_str(), "bar/baz");
-		assert_eq!(prefix.strip_prefix("foo/").unwrap().as_str(), "bar/baz");
-		assert_eq!(prefix.strip_prefix("foo/bar").unwrap().as_str(), "baz");
-		assert_eq!(prefix.strip_prefix("foo/bar/").unwrap().as_str(), "baz");
-		assert_eq!(prefix.strip_prefix("foo/bar/baz").unwrap().as_str(), "");
-
-		// Test invalid prefixes
-		assert!(prefix.strip_prefix("fo").is_none());
-		assert!(prefix.strip_prefix("bar").is_none());
-		assert!(prefix.strip_prefix("foo/ba").is_none());
-
-		// Test edge cases
-		let prefix = Path::new("foobar");
-		assert!(prefix.strip_prefix("foo").is_none());
-		assert_eq!(prefix.strip_prefix("foobar").unwrap().as_str(), "");
-
-		// Test empty prefix
-		let prefix = Path::new("");
-		assert_eq!(prefix.strip_prefix("").unwrap().as_str(), "");
-		assert!(prefix.strip_prefix("foo").is_none());
-
-		// Test single component
-		let prefix = Path::new("foo");
-		assert_eq!(prefix.strip_prefix("foo").unwrap().as_str(), "");
-		assert_eq!(prefix.strip_prefix("foo/").unwrap().as_str(), ""); // "foo/" becomes "foo" after trimming
-
-		// Test trailing slash handling
-		let prefix = Path::new("foo/bar/");
-		assert_eq!(prefix.strip_prefix("foo").unwrap().as_str(), "bar");
-		assert_eq!(prefix.strip_prefix("foo/").unwrap().as_str(), "bar");
-		assert_eq!(prefix.strip_prefix("foo/bar").unwrap().as_str(), "");
-		assert_eq!(prefix.strip_prefix("foo/bar/").unwrap().as_str(), "");
+		assert_eq!(p("foo").join(p("bar")).as_str(), "foo/bar");
+		assert_eq!(p("foo/bar").join(p("baz/qux")).as_str(), "foo/bar/baz/qux");
+
+		// The root is the identity on either side.
+		assert_eq!(p("foo").join(Path::empty()).as_str(), "foo");
+		assert_eq!(Path::empty().join(p("bar")).as_str(), "bar");
+		assert_eq!(Path::empty().join(Path::empty()).as_str(), "");
 	}
 
 	// Pointer-equality checks that owned paths share one allocation through the
 	// clone / to_owned / strip_prefix flow used by origin announce fan-out.
 	#[test]
 	fn test_owned_paths_share_allocation() {
-		let path = Path::new("customer/room/broadcast").to_owned();
+		let path = p("customer/room/broadcast").to_owned();
 
 		// Cloning an owned path shares the buffer.
 		let cloned = path.clone();
@@ -1253,7 +899,7 @@ mod tests {
 		assert_eq!(path.as_str().as_ptr(), requeued.as_str().as_ptr());
 
 		// Stripping a prefix from an owned path is offset arithmetic, not a copy.
-		let stripped = path.strip_prefix("customer").unwrap().to_owned();
+		let stripped = path.strip_prefix(p("customer")).unwrap().to_owned();
 		assert_eq!(stripped.as_str(), "room/broadcast");
 		assert_eq!(stripped.as_str().as_ptr(), path.as_str()["customer/".len()..].as_ptr());
 
@@ -1264,7 +910,7 @@ mod tests {
 		assert_eq!(rest.as_str().as_ptr(), stripped.as_str().as_ptr());
 
 		// join produces an owned path whose clones share.
-		let joined = path.join("alice");
+		let joined = path.join(p("alice"));
 		let joined2 = joined.clone();
 		assert_eq!(joined.as_str(), "customer/room/broadcast/alice");
 		assert_eq!(joined.as_str().as_ptr(), joined2.as_str().as_ptr());
@@ -1273,8 +919,7 @@ mod tests {
 	#[test]
 	fn test_parts() {
 		assert_eq!(Path::empty().parts().count(), 0);
-		assert_eq!(Path::new("foo").parts().collect::<Vec<_>>(), ["foo"]);
-		assert_eq!(Path::new("/foo//bar/").parts().collect::<Vec<_>>(), ["foo", "bar"]);
+		assert_eq!(p("foo").parts().collect::<Vec<_>>(), ["foo"]);
 	}
 
 	#[test]
@@ -1289,11 +934,11 @@ mod tests {
 
 		// Encode enforces the limit.
 		let mut buf = Vec::new();
-		Path::new(&ok)
+		p(&ok)
 			.encode(&mut Encoder::new(&mut buf, Version::Lite04.into()), Version::Lite04)
 			.unwrap();
 		assert!(matches!(
-			Path::new(&too_deep).encode_bytes(Version::Lite04),
+			p(&too_deep).encode_bytes(Version::Lite04),
 			Err(EncodeError::BoundsExceeded)
 		));
 
@@ -1315,12 +960,12 @@ mod tests {
 	#[test]
 	fn test_owned_empty_paths() {
 		// Empty paths never allocate and stay well-behaved.
-		let empty = Path::new("").to_owned();
+		let empty = p("").to_owned();
 		assert!(empty.is_empty());
 		assert_eq!(empty, Path::empty());
 
-		let path = Path::new("foo").to_owned();
-		let rest = path.strip_prefix("foo").unwrap().to_owned();
+		let path = p("foo").to_owned();
+		let rest = path.strip_prefix(p("foo")).unwrap().to_owned();
 		assert!(rest.is_empty());
 	}
 
@@ -1348,11 +993,11 @@ mod tests {
 
 	#[test]
 	fn test_resolve_replaces_base_name() {
-		let base = Path::new("a/b");
+		let base = p("a/b");
 		assert_eq!(base.resolve(&Relative::new("c")).as_str(), "a/c");
 		assert_eq!(base.resolve(&Relative::new("c/d")).as_str(), "a/c/d");
 		assert_eq!(
-			Path::new("foo.hang/catalog.pro")
+			p("foo.hang/catalog.pro")
 				.resolve(&Relative::new("./transcode.pro"))
 				.as_str(),
 			"foo.hang/transcode.pro"
@@ -1361,27 +1006,27 @@ mod tests {
 
 	#[test]
 	fn test_resolve_empty_rel_returns_base() {
-		let base = Path::new("a/b");
+		let base = p("a/b");
 		assert_eq!(base.resolve(&Relative::new("")).as_str(), "a/b");
 	}
 
 	#[test]
 	fn test_resolve_single_dotdot() {
-		let base = Path::new("a/b/c");
+		let base = p("a/b/c");
 		assert_eq!(base.resolve(&Relative::new("../d")).as_str(), "a/d");
 		assert_eq!(base.resolve(&Relative::new("..")).as_str(), "a");
 	}
 
 	#[test]
 	fn test_resolve_multiple_dotdot() {
-		let base = Path::new("a/b/c");
+		let base = p("a/b/c");
 		assert_eq!(base.resolve(&Relative::new("../../x")).as_str(), "x");
 		assert_eq!(base.resolve(&Relative::new("../../../x")).as_str(), "x");
 	}
 
 	#[test]
 	fn test_resolve_dotdot_clamps_at_root() {
-		let base = Path::new("a");
+		let base = p("a");
 		// Excess `..` clamps at the root instead of escaping it.
 		assert_eq!(base.resolve(&Relative::new("../../../foo")).as_str(), "foo");
 		assert_eq!(base.resolve(&Relative::new("..")).as_str(), "");
@@ -1396,7 +1041,7 @@ mod tests {
 
 	#[test]
 	fn test_resolve_dot_names_parent() {
-		let base = Path::new("a/b");
+		let base = p("a/b");
 		assert_eq!(base.resolve(&Relative::new(".")).as_str(), "a");
 		assert_eq!(base.resolve(&Relative::new("./c")).as_str(), "a/c");
 		assert_eq!(base.resolve(&Relative::new("./../c")).as_str(), "c");
@@ -1406,24 +1051,24 @@ mod tests {
 	fn test_resolve_self_reference_via_sibling_name() {
 		// Naming the base within its parent yields the base unchanged, which lets the
 		// caller compare resolved == base to detect a self-reference.
-		let base = Path::new("a/b");
+		let base = p("a/b");
 		assert_eq!(base.resolve(&Relative::new("./b")).as_str(), "a/b");
 	}
 
 	#[test]
 	fn test_try_resolve_distinguishes_root_from_escape() {
-		let base = Path::new("top");
+		let base = p("top");
 		assert_eq!(base.try_resolve(&Relative::new(".")).unwrap().as_str(), "");
 		assert!(base.try_resolve(&Relative::new("..")).is_none());
 
-		let nested = Path::new("a/b");
+		let nested = p("a/b");
 		assert_eq!(nested.try_resolve(&Relative::new("..")).unwrap().as_str(), "");
 		assert!(nested.try_resolve(&Relative::new("../..")).is_none());
 	}
 
 	#[test]
 	fn test_relative() {
-		let rel = |target: &str, base: &str| Path::new(target).relative(base).unwrap();
+		let rel = |target: &str, base: &str| p(target).relative(p(base)).unwrap();
 
 		// Nested under the base: the base's own last segment is replaced, so it repeats.
 		assert_eq!(rel("foo/bar/baz", "foo/bar").as_str(), "bar/baz");
@@ -1440,25 +1085,23 @@ mod tests {
 		// The base itself, which only the empty reference names.
 		assert_eq!(rel("a/b", "a/b").as_str(), "");
 		assert_eq!(rel("", "").as_str(), "");
-		// Slashes are normalized first.
-		assert_eq!(rel("/a//b/", "//a/b/dir//").as_str(), ".");
 	}
 
 	#[test]
 	fn test_relative_rejects_unnameable_targets() {
 		// A segment literally named `.` or `..` is a legal path component, but resolution
 		// would walk on it instead of naming it.
-		assert!(Path::new("a/../b").relative("").is_none());
-		assert!(Path::new("x/./y").relative("x/z").is_none());
-		assert!(Path::new("a/..").relative("a/b").is_none());
+		assert!(p("a/../b").relative(p("")).is_none());
+		assert!(p("x/./y").relative(p("x/z")).is_none());
+		assert!(p("a/..").relative(p("a/b")).is_none());
 
 		// A base is always nameable by itself, however its last segment is spelled.
-		assert_eq!(Path::new("a/..").relative("a/..").unwrap().as_str(), "");
+		assert_eq!(p("a/..").relative(p("a/..")).unwrap().as_str(), "");
 
 		// Dot segments inside the shared prefix are never emitted, so they are fine.
-		let rel = Path::new("a/../b/x").relative("a/../b/c").unwrap();
+		let rel = p("a/../b/x").relative(p("a/../b/c")).unwrap();
 		assert_eq!(rel.as_str(), "x");
-		assert_eq!(Path::new("a/../b/c").resolve(&rel).as_str(), "a/../b/x");
+		assert_eq!(p("a/../b/c").resolve(&rel).as_str(), "a/../b/x");
 	}
 
 	#[test]
@@ -1469,8 +1112,8 @@ mod tests {
 
 		for base in paths {
 			for target in paths {
-				let base = Path::new(base);
-				let target = Path::new(target);
+				let base = p(base);
+				let target = p(target);
 				let Some(rel) = target.relative(&base) else {
 					// Only an unnameable target may be refused, and never the base itself.
 					assert!(

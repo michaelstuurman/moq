@@ -73,7 +73,7 @@ fn decode_fields(r: &mut Decoder<'_>) -> Result<(Path<'static>, usize), DecodeEr
 	let count = r.varint()?;
 
 	if count == 0 {
-		return Ok((Path::from(String::new()), 0));
+		return Ok((Path::empty(), 0));
 	}
 
 	if count > Path::MAX_PARTS as u64 {

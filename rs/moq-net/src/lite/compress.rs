@@ -83,7 +83,7 @@ fn head<'a>(path: &'a Path<'_>, keep: usize) -> Option<Path<'a>> {
 		.match_indices('/')
 		.map(|(i, _)| i)
 		.chain((!s.is_empty()).then_some(s.len()));
-	ends.nth(keep - 1).map(|end| Path::new(&s[..end]))
+	ends.nth(keep - 1).map(|end| Path::from_valid(&s[..end]))
 }
 
 /// Resolves the bases on a received announce stream. Only used on versions with

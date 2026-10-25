@@ -1350,14 +1350,6 @@ fn publish_path(path: &Path) -> Result<(), Error> {
 	Ok(())
 }
 
-// Checked before normalization, which would otherwise give one name several spellings.
-fn publish_input(path: &impl AsPath) -> Result<(), Error> {
-	if !path.is_normalized() {
-		return Err(Error::EmptySegment);
-	}
-	Ok(())
-}
-
 /// What `scope` lets a route at `claim` serve: see [`RouteEntry::reach`].
 fn reach(scope: &Patterns, claim: &Pattern) -> Vec<Pattern> {
 	scope
@@ -1847,7 +1839,7 @@ impl Default for OriginScope {
 pub(crate) fn interest_prefixes(allowed: &Patterns) -> Vec<PathOwned> {
 	let mut heads: Vec<PathOwned> = allowed
 		.iter()
-		.map(|pattern| Path::new(pattern.head()).to_owned())
+		.map(|pattern| Path::from_valid(pattern.head()).to_owned())
 		.collect();
 	heads.sort();
 	heads.dedup();
@@ -2166,11 +2158,9 @@ impl Producer {
 	/// [`Error::BoundsExceeded`] if the full rooted path exceeds
 	/// [`Path::MAX_PARTS`], [`Error::InvalidPath`] if it holds a segment no
 	/// pattern can spell (`*` or `**`), [`Error::NavigationSegment`] for a literal `.` or `..`,
-	/// [`Error::EmptySegment`] for a string with a leading, trailing, or doubled `/`,
 	/// or [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
 	pub fn create_broadcast(&self, path: impl AsPath) -> Result<broadcast::Producer, Error> {
-		publish_input(&path)?;
 		let full = self.root.join(path.as_path()).to_owned();
 		let (broadcast, announcer) = self.create_withheld(full)?;
 		Ok(broadcast.with_announcer(announcer))
@@ -2535,7 +2525,6 @@ struct Announcing {
 impl Announcing {
 	/// The requested prefix as-is, refused when its subtree does not overlap the scope.
 	fn new(producer: &Producer, prefix: impl AsPath) -> Result<Self, Error> {
-		publish_input(&prefix)?;
 		let requested = producer.root.join(prefix.as_path()).to_owned();
 		publish_path(&requested)?;
 		if requested.parts().count() > Path::MAX_PARTS {
@@ -4540,7 +4529,7 @@ impl RouteNode {
 			if child.interests_below == 0 {
 				continue;
 			}
-			let path = at.join(part.as_str());
+			let path = at.join(Path::from_valid(part));
 			match child.interests > 0 {
 				true => out.push(path),
 				false => child.collect_interests(&path, out),
@@ -6285,7 +6274,7 @@ impl Consumer {
 		// the rest of the origin never wakes it, and a route claiming only paths beneath it
 		// (a scoped dynamic at the same prefix) never masks the one that serves it, just as a
 		// request skips it.
-		let consumer = self.scope("", &Patterns::from(Pattern::literal(path.as_str())?))?;
+		let consumer = self.scope(Path::empty(), &Patterns::from(Pattern::literal(path.as_str())?))?;
 
 		// `scope` keeps narrower permissions intact: on a consumer limited to
 		// `foo/specific`, no route can ever cover `foo`.
@@ -12939,30 +12928,6 @@ mod tests {
 		for path in ["room/.pro/cam", "room/a..b", "room/cam"] {
 			producer.create_broadcast(path).unwrap();
 		}
-	}
-
-	#[moq_clock::test]
-	async fn published_names_refuse_empty_segments() {
-		let producer = origin(1).produce();
-		for path in ["/room/cam", "room/cam/", "room//cam", "/"] {
-			assert!(
-				matches!(producer.create_broadcast(path), Err(Error::EmptySegment)),
-				"created {path}"
-			);
-			assert!(
-				matches!(producer.create_broadcast(path.to_string()), Err(Error::EmptySegment)),
-				"created owned {path}"
-			);
-			assert!(
-				matches!(producer.dynamic(path), Err(Error::EmptySegment)),
-				"served {path}"
-			);
-		}
-		// A scope root is a prefix, normalized like a subscription, so it never refuses a name below it.
-		let scoped = producer.scope("room/", &Patterns::from_iter([Pattern::all()])).unwrap();
-		scoped.create_broadcast("cam").unwrap();
-		// The root path has no segments, so none of them is empty.
-		producer.create_broadcast("").unwrap();
 	}
 
 	#[moq_clock::test]

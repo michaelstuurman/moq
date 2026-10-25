@@ -309,6 +309,6 @@ fn covering(path: &Path) -> Vec<PathOwned> {
 	std::iter::successors(Some(path.as_str()), |path| {
 		(!path.is_empty()).then(|| path.rfind('/').map_or("", |slash| &path[..slash]))
 	})
-	.map(|path| Path::new(path).to_owned())
+	.map(|path| Path::from_valid(path).to_owned())
 	.collect()
 }

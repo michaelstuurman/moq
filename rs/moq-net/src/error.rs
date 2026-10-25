@@ -372,8 +372,8 @@ pub enum Error {
 	#[error("broadcast path contains a navigation segment")]
 	NavigationSegment,
 
-	/// A published broadcast or route was given with a leading, trailing, or doubled `/`.
-	#[error("broadcast path contains an empty segment")]
+	/// A path was spelled with a leading, trailing, or doubled `/`.
+	#[error("path contains an empty segment")]
 	EmptySegment,
 
 	/// A duplicate ID was used
