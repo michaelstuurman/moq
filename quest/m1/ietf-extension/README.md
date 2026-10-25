@@ -59,9 +59,8 @@ cannot answer unambiguously is refused.
   its ingress moq-transport version, including across relay hops. Every
   supported draft shares the delta-key, leading-ones-varint layout, so the
   bytes forward unchanged between them.
-- **Crate-private on purpose.** These fields never become public API
-  ([moq-transport stays private](/quest/m1/api-audit/ietf-private.md)); a
-  relay that is not moq-relay drops them, as plain lite does.
+- **Crate-private on purpose.** These carried fields never become public
+  API. A relay that is not moq-relay drops them, as plain lite does.
 - **Verification:** Rust integration tests per feature in each child, plus
   the nightly moxygen job owned here.
 
@@ -129,4 +128,3 @@ gate passing before deleting this README.
 ## Related
 
 - [#4926](https://github.com/moq-dev/moq/issues/4926) - the declined request for an object-level API; this carries the fields for relays only
-- [moq-transport stays private](/quest/m1/api-audit/ietf-private.md) - no public moq-net item exists only for moq-transport

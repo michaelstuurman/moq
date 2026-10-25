@@ -831,6 +831,7 @@ type ReloadDelay = {
     initial?: Milli;
     multiplier?: number;
     max?: Milli;
+    healthy?: Milli;
     timeout?: Milli;
 };
 

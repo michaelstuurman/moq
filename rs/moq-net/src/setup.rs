@@ -82,7 +82,7 @@ pub struct Extensions {
 	/// The MoQ Auth extension: tokens presented and granted on their own stream.
 	pub auth: bool,
 	/// The MoQ Solicit extension: the peer answers our SUBSCRIBE_NAMESPACE rather than
-	/// announcing unasked.
+	/// announcing unasked (moq-transport only).
 	pub solicit: bool,
 	/// The MoQ Epoch extension: announcements and requests carry the publisher's
 	/// [`Epoch`](crate::Epoch), as moq-lite 07 does.
