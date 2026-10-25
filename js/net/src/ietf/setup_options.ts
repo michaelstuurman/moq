@@ -73,20 +73,6 @@ export class SetupOptions {
 		return this.vars.get(id);
 	}
 
-	removeBytes(id: bigint): boolean {
-		if (id % 2n !== 1n) {
-			throw new Error(`invalid parameter id: ${id.toString()}, must be odd`);
-		}
-		return this.bytes.delete(id);
-	}
-
-	removeVarint(id: bigint): boolean {
-		if (id % 2n !== 0n) {
-			throw new Error(`invalid parameter id: ${id.toString()}, must be even`);
-		}
-		return this.vars.delete(id);
-	}
-
 	async encode(w: Writer) {
 		// Delta encoding: collect all keys, sort, encode deltas
 		const all: { key: bigint; isVar: boolean }[] = [];

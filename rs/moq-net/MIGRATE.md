@@ -10,6 +10,21 @@ How to update your code for each breaking change, newest first.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
 The moql SETUP (no ALPN, or `moql`) now negotiates only lite-01 and lite-02.
 `session::Limits::requests` is removed: stream credit bounds every peer request, so drop the field and keep `announces`.
+### Exports without a consumer are gone
+
+These had no caller outside tests; replace them as follows.
+
+- `broadcast::Demand` and both `broadcast::{Producer, Consumer}::demand()`: watch each track's `track::Demand` instead.
+- `goaway::Consumer::{peek, recv}`: poll it, `goaway.poll(&kio::Waiter::noop())` to peek or `kio::wait(|waiter| goaway.poll(waiter)).await` to wait.
+- `bandwidth::Producer::{abort, closed}`: drop the last producer to close it.
+- `Version::{names, from_alpn, is_ietf}`: use `Versions::all().iter()` or `Version::from_code`, match `alpn()` yourself, and `!is_lite()`.
+- `Server::with_origin(origin)`: call `with_publisher(&origin).with_subscriber(origin)`.
+- `stats::Handle::{parent, tier}`, `stats::Registry::exclude`, `stats::Traffic::{is_announced, total_bytes}`, `stats::Tier::is_default`: read the public fields, such as `announces_started > announces_ended` or `tier.label().is_empty()`.
+- `frame::Consumer::poll_read_all`: use `read_all`, or poll `poll_read_chunk` until the frame ends.
+- `frame::Buffer::{is_full, filled_mut}`: compare `len()` with `capacity()`, and read `filled()`.
+- `Path::next_part`: split `as_str()` on the first `/`.
+- `setup::Token::CAT`: compare `kind` with `1`.
+- `Error::TooManyParameters` and `DecodeError::{ExpectedData, Missing, Unsupported}` were never produced; drop their match arms.
 
 ### `Client::with_url` replaces `with_path` and `with_authority`
 
@@ -480,7 +495,7 @@ A publisher that restarts its group numbering must publish under a new broadcast
 ### No `VarInt`
 
 Varints are plain `u64`s.
-Use `moq_net::varint::decode_quic(buf)` and `moq_net::varint::encode_quic(v, buf)`, which fails past `varint::MAX_QUIC`.
+Use `moq_net::varint::decode_quic(buf)` and `moq_net::varint::encode_quic(v, buf)`, which fails past `2^62 - 1`.
 
 ## 0.2 -> 0.3
 

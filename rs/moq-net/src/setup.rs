@@ -117,8 +117,6 @@ pub struct Token {
 impl Token {
 	/// Token Type 0: a format the endpoints agreed on out of band, such as a JWT.
 	pub const OUT_OF_BAND: u64 = 0x0;
-	/// Token Type 1: a Common Access Token (draft-ietf-moq-c4m).
-	pub const CAT: u64 = 0x1;
 }
 
 /// The unified SETUP message, with the same encoding for both client and server.
@@ -130,7 +128,7 @@ pub(crate) struct Setup {
 impl Encode<Version> for Setup {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
 		w.control = Some(crate::stats::Control::Session);
-		if !v.is_ietf() {
+		if v.is_lite() {
 			return Err(EncodeError::Version);
 		}
 		w.varint(SETUP)?;
@@ -143,7 +141,7 @@ impl Encode<Version> for Setup {
 impl Decode<Version> for Setup {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
 		r.control = Some(crate::stats::Control::Session);
-		if !v.is_ietf() {
+		if v.is_lite() {
 			return Err(DecodeError::Version);
 		}
 		let kind = r.varint()?;

@@ -503,7 +503,7 @@ pub struct Route {
 	pub cost: Cost,
 
 	/// The credential the request advertising this route carries, from
-	/// [`auth::Handle`](crate::auth::Handle)'s `add`, or `None` for the session's scope.
+	/// `auth::Handle::add`, or `None` for the session's scope.
 	///
 	/// Only a session built on the handle that issued it carries it, as the token on its
 	/// moq-transport PUBLISH_NAMESPACE: any other session, the inline NAMESPACE answering a
@@ -2350,6 +2350,7 @@ impl Producer {
 	}
 
 	/// Land a peer's claim with its wire route metadata.
+	#[cfg(any(feature = "async", test))]
 	pub(crate) fn dynamic_route(&self, prefix: impl AsPath, route: Route) -> Result<Dynamic, Error> {
 		self.dynamic_inner(prefix, route, false)
 	}
@@ -2711,6 +2712,7 @@ impl AnnounceProducer {
 	/// The prefix is fixed at announce time and a [`Route`] cannot name one: to
 	/// move an advertisement, drop this and announce again. Fails with
 	/// [`Error::Closed`] once the origin's [`Driver`] has been dropped.
+	#[cfg(any(feature = "async", test))]
 	pub fn update(&self, route: Route) -> Result<(), Error> {
 		self.update_if(route, || true).map(|_| ())
 	}
@@ -5450,6 +5452,7 @@ impl Dynamic {
 	/// The prefix is fixed at announce time: to move a route, drop this and call
 	/// [`Producer::dynamic`] again. Fails with [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
+	#[cfg(any(feature = "async", test))]
 	pub(crate) fn update_route(&self, route: Route) -> Result<(), Error> {
 		self.announcement.update(route)
 	}
@@ -5634,6 +5637,7 @@ impl Request {
 	}
 
 	/// Resolve a session-forwarded claim with its peer's already-routed broadcast.
+	#[cfg(any(feature = "async", test))]
 	pub(crate) fn accept(self, broadcast: impl Consume<broadcast::Consumer>) {
 		let broadcast = broadcast.consume();
 		let _ = ServeState::resolve(&self.home, &self.path, &self.producer, Ok(broadcast));
@@ -6907,7 +6911,8 @@ impl AnnounceConsumer {
 	}
 
 	/// Whether this consumer has synced; see [`Self::poll_synced`].
-	pub fn is_synced(&self) -> bool {
+	#[cfg(test)]
+	pub(crate) fn is_synced(&self) -> bool {
 		let state = self.state.read();
 		state.is_closed() || state.synced()
 	}
@@ -6934,12 +6939,6 @@ impl AnnounceConsumer {
 				false => Poll::Pending,
 			})
 			.map(|_| ())
-	}
-
-	/// Wait until this consumer has synced; see [`Self::poll_synced`].
-	#[cfg(feature = "async")]
-	pub async fn synced(&self) {
-		kio::wait(|waiter| self.poll_synced(waiter)).await
 	}
 
 	// The wire sender uses this only to bound its initial replay.
