@@ -163,8 +163,8 @@ fn negotiated(v: Version) -> bool {
 
 /// The client half of the `moql` bidi SETUP exchange, offering moq-lite 01/02.
 ///
-/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed with a
-/// varint size: the size, the offered versions, then parameters.
+/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed: a
+/// u16 size, the offered versions, then parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct Client {
 	/// The list of supported versions in preferred order.
@@ -185,7 +185,8 @@ impl Decode<Version> for Client {
 			return Err(DecodeError::InvalidValue);
 		}
 
-		let mut msg = decode_body(r)?;
+		let size = r.u16()? as usize;
+		let mut msg = r.sub(size)?;
 		let versions = coding::Versions::decode(&mut msg, v).map_err(DecodeError::complete)?;
 
 		Ok(Self {
@@ -202,23 +203,11 @@ impl Encode<Version> for Client {
 			return Err(EncodeError::Version);
 		}
 		w.u8(CLIENT_SETUP);
-		let prefix = w.prefix_varint();
+		let prefix = w.prefix_u16();
 		self.versions.encode(w, v)?;
 		w.slice(&self.parameters);
 		fill_body(w, prefix)
 	}
-}
-
-/// Read a SETUP body's varint size, refusing one past [`MAX_SETUP_SIZE`] before buffering it.
-fn decode_body<'a>(r: &mut Decoder<'a>) -> Result<Decoder<'a>, DecodeError> {
-	let size = usize::try_from(r.varint()?).map_err(|_| DecodeError::BoundsExceeded)?;
-	if size > MAX_SETUP_SIZE {
-		return Err(DecodeError::MessageTooLarge {
-			size,
-			max: MAX_SETUP_SIZE,
-		});
-	}
-	r.sub(size)
 }
 
 /// Size a SETUP body, refusing one our own receiver would refuse.
@@ -232,8 +221,8 @@ fn fill_body(w: &mut Encoder<'_>, prefix: coding::Prefix) -> Result<(), EncodeEr
 
 /// The server half of the `moql` bidi SETUP exchange, selecting moq-lite 01 or 02.
 ///
-/// The framing is moq-transport draft-14's SERVER_SETUP with a varint size: the size, the
-/// selected version, then parameters.
+/// The framing is moq-transport draft-14's SERVER_SETUP: a u16 size, the selected version,
+/// then parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct Server {
 	/// The selected version.
@@ -250,7 +239,7 @@ impl Encode<Version> for Server {
 			return Err(EncodeError::Version);
 		}
 		w.u8(SERVER_SETUP);
-		let prefix = w.prefix_varint();
+		let prefix = w.prefix_u16();
 		self.version.encode(w, v)?;
 		w.slice(&self.parameters);
 		fill_body(w, prefix)
@@ -268,7 +257,8 @@ impl Decode<Version> for Server {
 			return Err(DecodeError::InvalidValue);
 		}
 
-		let mut msg = decode_body(r)?;
+		let size = r.u16()? as usize;
+		let mut msg = r.sub(size)?;
 		let version = coding::Version::decode(&mut msg, v).map_err(DecodeError::complete)?;
 
 		Ok(Self {
@@ -281,6 +271,29 @@ impl Decode<Version> for Server {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	/// Deployed lite-01/02 peers frame both halves with draft-14's u16 size, not a varint.
+	#[test]
+	fn the_moql_setup_has_a_u16_size() {
+		for v in [lite::Version::Lite01, lite::Version::Lite02] {
+			let v = Version::Lite(v);
+			let client = Client {
+				versions: coding::Versions::from([v.into()]),
+				parameters: Bytes::from_static(&[0]),
+			};
+			let buf = client.encode_bytes(v).unwrap();
+			assert_eq!(buf[..3], [CLIENT_SETUP, 0, (buf.len() - 3) as u8], "{v}");
+			assert_eq!(Client::decode_slice(&buf, v).unwrap().0.versions, client.versions);
+
+			let server = Server {
+				version: v.into(),
+				parameters: Bytes::from_static(&[0]),
+			};
+			let buf = server.encode_bytes(v).unwrap();
+			assert_eq!(buf[..3], [SERVER_SETUP, 0, (buf.len() - 3) as u8], "{v}");
+			assert_eq!(Server::decode_slice(&buf, v).unwrap().0.version, server.version);
+		}
+	}
 
 	/// Never emit a legacy SETUP our own receiver would refuse.
 	#[test]
