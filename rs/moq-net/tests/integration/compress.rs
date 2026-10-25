@@ -117,11 +117,7 @@ async fn relay(published: Published, hops: [&str; 2], subscription: moq_net::tra
 
 /// Hops that carry a start group and negotiate compression: lite-07, and moq-transport
 /// draft-17 and later.
-const RANGED: &[&str] = &[
-	"moq-lite-07-wip",
-	"moq-transport-18",
-	"moq-transport-22",
-];
+const RANGED: &[&str] = &["moq-lite-07-wip", "moq-transport-18", "moq-transport-22"];
 
 /// A subscription starting at a group delivers it whole from its first frame across every
 /// pair of hops, compressed or not, whether the group began before it subscribed or after.
@@ -193,10 +189,7 @@ async fn relay_serves_every_version() {
 			let mut fixture = connect("moq-lite-07-wip", version).await;
 			assert_eq!(
 				fixture.subscriber.info().compress,
-				!matches!(
-					version,
-					"moq-lite-06" | "moq-lite-03"
-				),
+				!matches!(version, "moq-lite-06" | "moq-lite-03"),
 				"{version}: compression declared"
 			);
 
@@ -241,12 +234,7 @@ async fn relay_serves_every_version() {
 /// compressed or inflated.
 #[moq_clock::test]
 async fn datagrams_serve_every_version() {
-	for &version in &[
-		"moq-lite-07-wip",
-		"moq-lite-06",
-		"moq-transport-18",
-		"moq-transport-22",
-	] {
+	for &version in &["moq-lite-07-wip", "moq-lite-06", "moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let mut fixture = connect("moq-lite-07-wip", version).await;
 			fixture
@@ -338,17 +326,10 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 #[moq_clock::test]
 async fn ietf_ingress_stays_compressed_across_protocols() {
 	for upstream in ["moq-transport-18", "moq-transport-22"] {
-		for downstream in [
-			"moq-lite-07-wip",
-			"moq-transport-22",
-		] {
+		for downstream in ["moq-lite-07-wip", "moq-transport-22"] {
 			moq_clock::timeout(TIMEOUT, async {
 				let mut fixture = connect(upstream, downstream).await;
-				assert_eq!(
-					fixture.subscriber.info().compress,
-					true,
-					"{upstream} -> {downstream}"
-				);
+				assert_eq!(fixture.subscriber.info().compress, true, "{upstream} -> {downstream}");
 				let mut group = fixture.track.append_group().unwrap();
 				for index in 0..3 {
 					group
@@ -389,7 +370,7 @@ async fn ietf_ingress_stays_compressed_across_protocols() {
 /// A finished compressed track remains fetchable without subscribing to its live feed.
 #[moq_clock::test]
 async fn ietf_fetch_keeps_the_stored_form() {
-	for version in [ "moq-transport-18", "moq-transport-22"] {
+	for version in ["moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
 			let broadcast = publisher.create_broadcast("bcast").unwrap();

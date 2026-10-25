@@ -9,10 +9,7 @@ use crate::{
 };
 
 pub(super) fn fin_cancels(version: Version) -> bool {
-	matches!(
-		version,
-		Version::Draft18
-	)
+	matches!(version, Version::Draft18)
 }
 
 /// Watch abrupt cancellation after the requester has finished sending messages.

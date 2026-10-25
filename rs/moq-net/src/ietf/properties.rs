@@ -109,7 +109,6 @@ impl Properties {
 	/// A property the publisher sealed inside Immutable Properties travels there, so it is
 	/// not restated in the mutable list.
 	pub fn encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-
 		let int = |id, value| Property {
 			id,
 			value: Value::Int(value),

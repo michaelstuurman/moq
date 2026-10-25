@@ -536,12 +536,7 @@ async fn retired_fetch_explicit_epoch_control() {
 
 #[moq_clock::test]
 async fn withdrawal_refuses_new_fetches_but_keeps_open_reads() {
-	for version in [
-		"moq-lite-05",
-		"moq-lite-06",
-		"moq-lite-07-wip",
-		"moq-transport-22",
-	] {
+	for version in ["moq-lite-05", "moq-lite-06", "moq-lite-07-wip", "moq-transport-22"] {
 		let version: Version = version.parse().unwrap();
 		let publisher = produce_origin(1);
 		let viewer = produce_origin(2);
@@ -564,12 +559,7 @@ async fn withdrawal_refuses_new_fetches_but_keeps_open_reads() {
 
 #[moq_clock::test]
 async fn a_more_specific_source_cannot_fill_a_held_covering_track() {
-	for name in [
-		"moq-lite-05",
-		"moq-lite-06",
-		"moq-lite-07-wip",
-		"moq-transport-22",
-	] {
+	for name in ["moq-lite-05", "moq-lite-06", "moq-lite-07-wip", "moq-transport-22"] {
 		let version: Version = name.parse().unwrap();
 		let publisher = produce_origin(1);
 		let viewer = produce_origin(2);

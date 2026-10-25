@@ -44,11 +44,7 @@ impl Decode<Version> for ObjectExtensionsLength {
 /// timescale on every object would cost bytes per frame to restate something fixed for
 /// the track's lifetime. `timescale` is what the track advertised, and the timestamp is
 /// converted into it so the value on the wire matches the declared units.
-pub fn encode_object_time(
-	w: &mut Encoder<'_>,
-	timestamp: Timestamp,
-	timescale: Timescale,
-) -> Result<(), EncodeError> {
+pub fn encode_object_time(w: &mut Encoder<'_>, timestamp: Timestamp, timescale: Timescale) -> Result<(), EncodeError> {
 	let timestamp = timestamp.convert(timescale).map_err(|_| EncodeError::BoundsExceeded)?;
 	// The first property's type is a delta from zero, so it is written as is.
 	w.varint(PROP_TIMESTAMP)?;

@@ -32,12 +32,7 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Every version with GOAWAY support, across both wires and their distinct
 /// channels: the lite Goaway control stream, the IETF draft-14-16 shared
 /// control stream, and the IETF draft-17+ SETUP uni streams.
-const GOAWAY_VERSIONS: &[&str] = &[
-	"moq-lite-04",
-	"moq-lite-05",
-	"moq-transport-18",
-	"moq-transport-19",
-];
+const GOAWAY_VERSIONS: &[&str] = &["moq-lite-04", "moq-lite-05", "moq-transport-18", "moq-transport-19"];
 
 /// A full receive window or missing FIN ACK cannot hold a drain beyond its local deadline.
 async fn closes_stalled_goaway(version: Version, writes: bool) {

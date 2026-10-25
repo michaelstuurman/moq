@@ -110,7 +110,7 @@ async fn busy_viewer_sees_the_estimate_move() {
 /// A transport estimate demanded locally still costs one poll per sampling deadline.
 #[moq_clock::test]
 async fn ietf_stats_refresh_costs_one_driver_poll() {
-	for version in [ "moq-transport-22"] {
+	for version in ["moq-transport-22"] {
 		let polls = Arc::new(AtomicUsize::new(0));
 		let mut options = MockConnectOptions::new(version.parse::<Version>().unwrap());
 		options.stats = STATS;

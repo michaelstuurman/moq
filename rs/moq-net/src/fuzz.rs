@@ -1069,6 +1069,31 @@ pub fn seeds() -> Vec<Seed> {
 		}
 	}
 
+	// The `moql` SETUP pair, which only lite-01/02 negotiate, also has its own type prefix.
+	for (index, version) in LITE_VERSIONS.iter().enumerate() {
+		let outer = crate::Version::Lite(*version);
+		let client = crate::setup::Client {
+			versions: coding::Versions::from([outer.into()]),
+			parameters: Default::default(),
+		};
+		let server = crate::setup::Server {
+			version: outer.into(),
+			parameters: Default::default(),
+		};
+		let (Ok(client), Ok(server)) = (client.encode_bytes(outer), server.encode_bytes(outer)) else {
+			continue;
+		};
+		for (kind, message) in [(22, client), (23, server)] {
+			let mut data = vec![index as u8, kind];
+			data.extend(message);
+			seeds.push(Seed {
+				target: "lite",
+				kind,
+				data,
+			});
+		}
+	}
+
 	// FETCH is the one arm the sweep above cannot reach: its body ends in a parameter
 	// count, and a uniform fill never lands a zero there. Build it from the encoder
 	// instead, which also means a field change breaks the build rather than the seed.

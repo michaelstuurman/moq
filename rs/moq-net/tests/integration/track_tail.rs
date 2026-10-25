@@ -259,11 +259,7 @@ async fn lite07_empty_track_ends_without_the_grace() {
 
 /// IETF drafts over the control stream adapter (14), on their own streams (17), and with
 /// subscription fills (20+).
-const IETF: &[&str] = &[
-	"moq-transport-18",
-	"moq-transport-20",
-	"moq-transport-22",
-];
+const IETF: &[&str] = &["moq-transport-18", "moq-transport-20", "moq-transport-22"];
 
 /// A subscriber that leaves while END_OF_TRACK waits for stream credit ends the publisher's
 /// request, instead of parking it until credit that may never come.

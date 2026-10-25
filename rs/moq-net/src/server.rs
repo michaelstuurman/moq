@@ -6,8 +6,8 @@ use crate::origin;
 use crate::time::{Deadlines, Instant};
 use crate::transport::poll::Session as _;
 use crate::{
-	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06, ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, SessionError,
-	Version, Versions,
+	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06,
+	ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, SessionError, Version, Versions,
 	coding::{Encode, Stream},
 	ietf, lite,
 	setup::{self, Role},
@@ -1226,7 +1226,9 @@ mod tests {
 	async fn a_reply_the_peer_never_takes_fails_at_the_deadline() {
 		let registry = stats::Registry::new(Default::default());
 		let version = Version::Lite(lite::Version::Lite02);
-		let session = FakeSession::new(ALPN_LITE, []).with_bi(moql_setup()).withholding_credit();
+		let session = FakeSession::new(ALPN_LITE, [])
+			.with_bi(moql_setup())
+			.withholding_credit();
 		let start = moq_clock::now();
 		let deadline = start + std::time::Duration::from_secs(10);
 		let request = Server::new()
@@ -1240,10 +1242,7 @@ mod tests {
 		};
 		assert!(matches!(err, Error::Timeout), "{err:?}");
 		assert_eq!(moq_clock::now(), deadline);
-		assert_eq!(
-			session.close_code(),
-			Some(version.session_code(&SessionError::Timeout))
-		);
+		assert_eq!(session.close_code(), Some(version.session_code(&SessionError::Timeout)));
 		let failed = registry.snapshot().sessions()[0].1.sessions_failed;
 		assert_eq!(failed.count(stats::Failure::Application), 1, "{failed:?}");
 	}
@@ -1254,7 +1253,9 @@ mod tests {
 	async fn an_abandoned_reply_fails_like_the_deadline() {
 		let registry = stats::Registry::new(Default::default());
 		let version = Version::Lite(lite::Version::Lite02);
-		let session = FakeSession::new(ALPN_LITE, []).with_bi(moql_setup()).withholding_credit();
+		let session = FakeSession::new(ALPN_LITE, [])
+			.with_bi(moql_setup())
+			.withholding_credit();
 		let request = Server::new()
 			.accept_request(moq_clock::now(), session.clone())
 			.await
@@ -1262,10 +1263,7 @@ mod tests {
 			.with_stats(registry.tier(Default::default()).session("room"));
 		let abandoned = moq_clock::timeout(std::time::Duration::from_secs(1), request.ok()).await;
 		assert!(abandoned.is_err(), "a reply the peer never took completed");
-		assert_eq!(
-			session.close_code(),
-			Some(version.session_code(&SessionError::Timeout))
-		);
+		assert_eq!(session.close_code(), Some(version.session_code(&SessionError::Timeout)));
 		let failed = registry.snapshot().sessions()[0].1.sessions_failed;
 		assert_eq!(failed.count(stats::Failure::Application), 1, "{failed:?}");
 	}
@@ -1341,10 +1339,7 @@ mod tests {
 	async fn accept_request_reads_ietf_path() {
 		// Every draft gates on the SETUP stream before starting, so the
 		// path is known at authorization time just like lite-05.
-		for (alpn, version) in [
-			(ALPN_18, ietf::Version::Draft18),
-			(ALPN_19, ietf::Version::Draft19),
-		] {
+		for (alpn, version) in [(ALPN_18, ietf::Version::Draft18), (ALPN_19, ietf::Version::Draft19)] {
 			let session = FakeSession::new(alpn, [ietf_setup(version, Some("/team/room"))]);
 			let request = Server::new().accept_request(moq_clock::now(), session).await.unwrap();
 			assert_eq!(request.path(), "/team/room", "{alpn}");

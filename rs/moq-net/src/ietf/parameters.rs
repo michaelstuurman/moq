@@ -565,9 +565,7 @@ mod tests {
 
 	#[test]
 	fn test_param_u8_all_versions() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -607,9 +605,7 @@ mod tests {
 
 	#[test]
 	fn test_param_bool_all_versions() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -628,9 +624,7 @@ mod tests {
 	#[test]
 	fn test_param_location_all_versions() {
 		let loc = Location { group: 5, object: 3 };
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -676,9 +670,7 @@ mod tests {
 
 	#[test]
 	fn test_param_filter_all_versions() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -696,9 +688,7 @@ mod tests {
 
 	#[test]
 	fn test_param_multiple_delta_encoding() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -729,9 +719,7 @@ mod tests {
 
 	#[test]
 	fn test_param_empty_set() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -748,9 +736,7 @@ mod tests {
 
 	#[test]
 	fn test_param_option_skip_none() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -776,9 +762,7 @@ mod tests {
 
 	#[test]
 	fn test_param_option_encode_some() {
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -805,9 +789,7 @@ mod tests {
 	#[test]
 	fn test_param_bare_type_defaults() {
 		// Bare types use T::default() when the parameter is absent
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			round_trip_params(
 				version,
 				|w, v| {
@@ -831,9 +813,7 @@ mod tests {
 	#[test]
 	fn test_param_unknown_rejected() {
 		// 0x3E is not a message parameter, which closes the session.
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			let mut buf = Vec::new();
 			let mut w = Encoder::new(&mut buf, version.into());
 			w.varint(1).unwrap();
@@ -877,9 +857,7 @@ mod tests {
 	#[test]
 	fn test_param_duplicate_rejected() {
 		// Manually construct a buffer with duplicate key 0x20
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			let mut buf = Vec::new();
 			let mut w = Encoder::new(&mut buf, version.into());
 			// Encode count = 2

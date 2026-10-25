@@ -75,11 +75,7 @@ impl Filter {
 	/// Draft-22 names the meaning with a Location Filter Type instead, but keeps those
 	/// parameters, so this still gates them.
 	pub(crate) fn is_draft20(version: Version) -> bool {
-		!matches!(
-			version,
-			Version::Draft18
-				| Version::Draft19
-		)
+		!matches!(version, Version::Draft18 | Version::Draft19)
 	}
 
 	/// The absolute end group, given the start, or an error when the range runs backwards.
@@ -294,8 +290,7 @@ impl Param for Filter {
 		let mut buf = Vec::new();
 		let mut inner = Encoder::new(&mut buf, sv.into());
 		match version {
-			Version::Draft18
-			| Version::Draft19 => self.encode_tag(&mut inner, sv)?,
+			Version::Draft18 | Version::Draft19 => self.encode_tag(&mut inner, sv)?,
 			Version::Draft20 | Version::Draft21 => self.encode_fields(&mut inner)?,
 			// Draft-22 drops the Length, since the Location Filter Type says which fields follow.
 			_ => return self.encode_typed(w),

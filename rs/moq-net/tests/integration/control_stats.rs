@@ -19,12 +19,7 @@ fn origin() -> origin::Producer {
 
 #[moq_clock::test]
 async fn control_classes_cross_lite_and_ietf_sessions_without_counting_payload() {
-	for version in [
-		"moq-lite-03",
-		"moq-lite-06",
-		"moq-lite-07-wip",
-		"moq-transport-22",
-	] {
+	for version in ["moq-lite-03", "moq-lite-06", "moq-lite-07-wip", "moq-transport-22"] {
 		let publisher = origin();
 		let subscriber = origin();
 		let registry = Registry::new(Default::default());

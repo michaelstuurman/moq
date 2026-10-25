@@ -3,7 +3,8 @@ use crate::origin;
 use crate::time::{Deadlines, Instant};
 use crate::transport::poll::Session as _;
 use crate::{
-	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06, ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, Version, Versions,
+	ALPN_18, ALPN_19, ALPN_20, ALPN_21, ALPN_22, ALPN_LITE, ALPN_LITE_03, ALPN_LITE_04, ALPN_LITE_05, ALPN_LITE_06,
+	ALPN_LITE_07_WIP, Consume, Error, NEGOTIATED, Session, Version, Versions,
 	coding::{self, Encode, Stream},
 	ietf, lite, setup, stats,
 };
@@ -740,7 +741,10 @@ mod tests {
 			parameters: Bytes::new(),
 		};
 		server
-			.encode(&mut crate::coding::Encoder::new(&mut encoded, negotiated.into()), negotiated)
+			.encode(
+				&mut crate::coding::Encoder::new(&mut encoded, negotiated.into()),
+				negotiated,
+			)
 			.unwrap();
 
 		// Add a setup-stream SessionInfo frame using the negotiated Lite version.

@@ -18,11 +18,7 @@ fn timed() -> moq_net::track::Info {
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
-const VERSIONS: &[&str] = &[
-	"moq-lite-06",
-	"moq-transport-18",
-	"moq-transport-22",
-];
+const VERSIONS: &[&str] = &["moq-lite-06", "moq-transport-18", "moq-transport-22"];
 
 fn produce_origin(hop: u64) -> origin::Producer {
 	let (producer, driver) = origin::Producer::new(origin::Config::new(Hop::new(hop).unwrap()));

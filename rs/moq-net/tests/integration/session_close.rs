@@ -332,7 +332,7 @@ async fn earlier_lite_peer_close_reads_buffered_tail() {
 
 #[moq_clock::test]
 async fn ietf_peer_close_reads_buffered_tail() {
-	for version in [ "moq-transport-18", "moq-transport-22"] {
+	for version in ["moq-transport-18", "moq-transport-22"] {
 		peer_close_reads_buffered_tail(version).await;
 	}
 }

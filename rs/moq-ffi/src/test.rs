@@ -7624,7 +7624,7 @@ fn grant(publish: &[&str], subscribe: &[&str]) -> crate::auth::MoqGrant {
 /// unsupported.
 #[tokio::test]
 async fn auth_reads_the_peer_grant() {
-	for version in ["moq-lite-07-wip", "moq-transport-17"] {
+	for version in ["moq-lite-07-wip", "moq-transport-18"] {
 		auth_reads_the_peer_grant_on(version).await;
 	}
 }
@@ -7649,28 +7649,6 @@ async fn auth_reads_the_peer_grant_on(version: &str) {
 		Some(grant(&["**"], &["**"])),
 		"a refusal leaves the union"
 	);
-
-	client.cancel(0);
-	accepted.cancel(0);
-	server.cancel();
-}
-
-/// moq-transport without the Auth extension carries a token only on a request that names it,
-/// which no binding can, so both sides refuse one rather than report a token nothing sends.
-#[tokio::test]
-async fn auth_refuses_a_token_nothing_carries() {
-	let (server, client, accepted) = tokio::time::timeout(TIMEOUT, session_pair("moq-transport-14"))
-		.await
-		.expect("pair");
-	for session in [&client, &accepted] {
-		let err = tokio::time::timeout(TIMEOUT, session.auth().add("extra".into()))
-			.await
-			.expect("add timed out")
-			.err()
-			.expect("a token nothing carries is refused");
-		assert!(matches!(err, MoqError::Unsupported), "refusal: {err:?}");
-		assert_eq!(session.auth().grant(), None, "no AUTH, no grant");
-	}
 
 	client.cancel(0);
 	accepted.cancel(0);

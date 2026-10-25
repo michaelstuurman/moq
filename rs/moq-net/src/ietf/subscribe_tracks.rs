@@ -278,17 +278,6 @@ mod tests {
 	}
 
 	#[test]
-	fn subscribe_tracks_starts_at_draft_18() {
-		let mut buf = Vec::new();
-		let version = Version::Draft18;
-		assert!(
-			paused()
-				.encode_msg(&mut Encoder::new(&mut buf, version.into()), version)
-				.is_err()
-		);
-	}
-
-	#[test]
 	fn publish_skipped_round_trips() {
 		for version in [Version::Draft18, Version::Draft22] {
 			let msg = PublishSkipped {

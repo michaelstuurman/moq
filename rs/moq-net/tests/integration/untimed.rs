@@ -152,23 +152,18 @@ async fn a_relay_forwards_an_untimed_track_untimed() {
 		assert_eq!(info.timescale, None, "{hops:?}: the relay must not claim a timeline");
 	}
 
-	for hops in [
-		&["moq-lite-03", "moq-transport-18"][..],
-		&[ "moq-transport-20"][..],
-	] {
-		let (frame, info) = frame_through(hops, timed()).await;
-		assert_eq!(frame, None, "{hops:?}: the first hop has no timestamps to forward");
-		assert_eq!(info.timescale, None, "{hops:?}: the relay must not claim a timeline");
-	}
+	let hops = ["moq-lite-03", "moq-transport-18"];
+	let (frame, info) = frame_through(&hops, timed()).await;
+	assert_eq!(frame, None, "{hops:?}: the first hop has no timestamps to forward");
+	assert_eq!(info.timescale, None, "{hops:?}: the relay must not claim a timeline");
 }
 
 /// An explicit start on an untimed track is honored the same way on lite and
 /// moq-transport: only an unfloored subscriber jumps to the latest group.
 ///
 /// The subscription asks for history the way a resume does, with a budget covering it.
-/// moq-transport before draft
-/// 20 can only join a past group through a joining FETCH, which our publisher refuses for
-/// groups before the live one, so draft 20 stands in for it.
+/// moq-transport before draft 20 can only join a past group through a joining FETCH,
+/// which our publisher refuses for groups before the live one, so draft 20 stands in for it.
 #[moq_clock::test]
 async fn an_explicit_start_holds_on_an_untimed_track() {
 	for version in ["moq-lite-03", "moq-lite-06", "moq-lite-07-wip", "moq-transport-20"] {

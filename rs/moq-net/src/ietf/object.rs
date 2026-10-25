@@ -9,10 +9,7 @@ use crate::{
 
 /// Draft-19 assigns property 0x06 to SUBGROUP_DELIVERY_TIMEOUT.
 pub(crate) fn has_delivery_timeout(version: Version) -> bool {
-	!matches!(
-		version,
-		Version::Draft18
-	)
+	!matches!(version, Version::Draft18)
 }
 
 /// Object status: no object at or past this location in the group exists.

@@ -10,8 +10,8 @@ use crate::{
 };
 
 use super::{
-	Control, Message, Publisher, Subscriber, Version, active_count, auth, cluster,
-	epoch, hidden, max_age, peer, request_update, solicit, subscriber::is_protocol_violation,
+	Control, Message, Publisher, Subscriber, Version, active_count, auth, cluster, epoch, hidden, max_age, peer,
+	request_update, solicit, subscriber::is_protocol_violation,
 };
 
 /// Keep the session's SUBSCRIBE_NAMESPACE requests open as `discovery` decides, each on
@@ -318,8 +318,7 @@ pub fn start(config: Config) -> Result<(Driver, crate::goaway::Handle), Error> {
 				async move {
 					match peer_setup_stream {
 						Some(reader) => {
-							run_goaway(reader.with_stats(&stats).with_version(version), version, client, goaway)
-								.await
+							run_goaway(reader.with_stats(&stats).with_version(version), version, client, goaway).await
 						}
 						None => std::future::pending().await,
 					}
@@ -1895,11 +1894,7 @@ mod tests {
 	/// reset: a peer that never closes it never sees the two overlap.
 	#[moq_clock::test]
 	async fn a_broader_watch_waits_for_the_narrower_to_leave_the_wire() {
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft22,
-		] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft22] {
 			let subscribe = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
 			let _front = watch(&subscribe, "cam/front");
 			let (log, _driver) = client(version, subscribe.clone(), None).await;
@@ -2769,6 +2764,7 @@ mod tests {
 		let session = crate::lite::test_transport::ScriptedSession::new(Vec::new()).with_incoming_unis(vec![
 			uni_stream(VERSION, PADDING),
 			subgroup_header(VERSION, 7, 0).await,
+			setup,
 		]);
 		let accepted = accept_setup(&mut crate::driver::Transport::new(session.clone()), VERSION)
 			.await
@@ -2790,7 +2786,6 @@ mod tests {
 	async fn an_unknown_uni_type_closes_the_session() {
 		for (version, kind) in [
 			(Version::Draft19, 0),
-			// Padding and uni SETUP arrived in later drafts,
 			// SUBGROUP_HEADER types with the reserved SUBGROUP_ID_MODE (0b11).
 			(Version::Draft19, 0x56),
 		] {

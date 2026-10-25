@@ -357,4 +357,3 @@ async fn transport_secondary_is_refused() {
 async fn transport_17_secondary_is_refused() {
 	refused_across_protocols("moq-transport-18").await;
 }
-

@@ -255,9 +255,7 @@ mod tests {
 			kind: 300,
 			value: vec![0x00, 0xff],
 		};
-		for (version, expected) in [
-			(Version::Draft18, [0x03, 0x81, 0x2c, 0x00, 0xff]),
-		] {
+		for (version, expected) in [(Version::Draft18, [0x03, 0x81, 0x2c, 0x00, 0xff])] {
 			let mut params = Parameters::default();
 			into_setup(&mut params, &token, version).unwrap();
 			assert_eq!(

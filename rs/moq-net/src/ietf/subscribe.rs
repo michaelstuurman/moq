@@ -54,10 +54,7 @@ pub struct Subscribe<'a> {
 
 /// The Range Filters (0x25-0x29) arrived in draft-19.
 pub(super) fn has_range_filters(version: Version) -> bool {
-	!matches!(
-		version,
-		Version::Draft18
-	)
+	!matches!(version, Version::Draft18)
 }
 
 impl Message for Subscribe<'_> {
@@ -68,65 +65,65 @@ impl Message for Subscribe<'_> {
 		let (track_namespace, track_name) = decode_track(r)?;
 		let track_name = Cow::Owned(track_name);
 
-			decode_params!(r, version,
-				0x02 => _object_delivery_timeout: Option<u64>,
-				0x03 => authorization_token: Vec<super::token::RequestToken>,
-				0x04 => rendezvous_timeout: Option<u64>,
-				0x06 => _subgroup_delivery_timeout: Option<u64>,
-				0x10 => forward: Option<bool>,
-				0x20 => subscriber_priority: Option<u8>,
-				0x21 => filter: Option<Filter>,
-				0x22 => group_order: Option<GroupOrder>,
-				0x23 => fill: Option<Fill> where Filter::is_draft20(version),
-				0x25 => subgroup_filter: Vec<Opaque> where has_range_filters(version),
-				0x26 => object_id_filter: Vec<Opaque> where has_range_filters(version),
-				0x27 => priority_filter: Vec<Opaque> where has_range_filters(version),
-				0x28 => object_property_filter: Vec<Opaque> where has_range_filters(version),
-				0x32 => new_group: Option<u64>,
-				0x35 => include_properties: Option<bool> where Filter::is_draft20(version),
-				epoch::EPOCH_PARAM => epoch: Option<crate::Epoch>,
-				super::max_age::PARAMETER => max_age: Option<u64>,
-			);
-			let authorization_token = super::token::single(authorization_token)?;
+		decode_params!(r, version,
+			0x02 => _object_delivery_timeout: Option<u64>,
+			0x03 => authorization_token: Vec<super::token::RequestToken>,
+			0x04 => rendezvous_timeout: Option<u64>,
+			0x06 => _subgroup_delivery_timeout: Option<u64>,
+			0x10 => forward: Option<bool>,
+			0x20 => subscriber_priority: Option<u8>,
+			0x21 => filter: Option<Filter>,
+			0x22 => group_order: Option<GroupOrder>,
+			0x23 => fill: Option<Fill> where Filter::is_draft20(version),
+			0x25 => subgroup_filter: Vec<Opaque> where has_range_filters(version),
+			0x26 => object_id_filter: Vec<Opaque> where has_range_filters(version),
+			0x27 => priority_filter: Vec<Opaque> where has_range_filters(version),
+			0x28 => object_property_filter: Vec<Opaque> where has_range_filters(version),
+			0x32 => new_group: Option<u64>,
+			0x35 => include_properties: Option<bool> where Filter::is_draft20(version),
+			epoch::EPOCH_PARAM => epoch: Option<crate::Epoch>,
+			super::max_age::PARAMETER => max_age: Option<u64>,
+		);
+		let authorization_token = super::token::single(authorization_token)?;
 
-			let range_filters = [
-				subgroup_filter,
-				object_id_filter,
-				priority_filter,
-				object_property_filter,
-			]
-			.iter()
-			.any(|filter| !filter.is_empty());
+		let range_filters = [
+			subgroup_filter,
+			object_id_filter,
+			priority_filter,
+			object_property_filter,
+		]
+		.iter()
+		.any(|filter| !filter.is_empty());
 
-			// Defaults to 1, so an absent parameter means the subscriber wants them.
-			let properties_wanted = include_properties.unwrap_or(true);
+		// Defaults to 1, so an absent parameter means the subscriber wants them.
+		let properties_wanted = include_properties.unwrap_or(true);
 
-			// A zero cap still distinguishes a requested wait from an immediate miss.
-			let rendezvous = rendezvous_timeout.is_some_and(|millis| millis > 0);
+		// A zero cap still distinguishes a requested wait from an immediate miss.
+		let rendezvous = rendezvous_timeout.is_some_and(|millis| millis > 0);
 
-			let subscriber_priority = subscriber_priority.unwrap_or(super::priority::DEFAULT_WIRE);
-			let group_order = group_order.unwrap_or(GroupOrder::Descending);
-			// An absent LOCATION_FILTER means the subscription is unfiltered.
-			let filter = filter.unwrap_or(Filter::Unfiltered);
+		let subscriber_priority = subscriber_priority.unwrap_or(super::priority::DEFAULT_WIRE);
+		let group_order = group_order.unwrap_or(GroupOrder::Descending);
+		// An absent LOCATION_FILTER means the subscription is unfiltered.
+		let filter = filter.unwrap_or(Filter::Unfiltered);
 
-			Ok(Self {
-				request_id,
-				track_namespace,
-				track_name,
-				subscriber_priority,
-				group_order,
-				filter,
-				fill,
-				properties_wanted,
-				// Absent means 1.
-				forward: forward.unwrap_or(true),
-				rendezvous,
-				range_filters,
-				authorization_token,
-				new_group,
-				max_age: super::max_age::validate(max_age)?,
-				epoch,
-			})
+		Ok(Self {
+			request_id,
+			track_namespace,
+			track_name,
+			subscriber_priority,
+			group_order,
+			filter,
+			fill,
+			properties_wanted,
+			// Absent means 1.
+			forward: forward.unwrap_or(true),
+			rendezvous,
+			range_filters,
+			authorization_token,
+			new_group,
+			max_age: super::max_age::validate(max_age)?,
+			epoch,
+		})
 	}
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
@@ -134,30 +131,30 @@ impl Message for Subscribe<'_> {
 		encode_namespace(w, &self.track_namespace)?;
 		w.string(&self.track_name)?;
 
-			// FILL_PARAMETERS arrived in draft-20. Sending it to an older peer would be an
-			// unknown parameter, which is a protocol violation, so it is dropped instead.
-			// A subscriber there simply joins mid-group, which is what it did all along.
-			let fill = self.fill.filter(|_| Filter::is_draft20(version));
+		// FILL_PARAMETERS arrived in draft-20. Sending it to an older peer would be an
+		// unknown parameter, which is a protocol violation, so it is dropped instead.
+		// A subscriber there simply joins mid-group, which is what it did all along.
+		let fill = self.fill.filter(|_| Filter::is_draft20(version));
 
-			// INCLUDE_PROPERTIES defaults to 1, so only the opt-out is worth bytes. It
-			// arrived in draft-20, and an older peer would read it as an unknown
-			// parameter, which is a protocol violation.
-			let include_properties = (!self.properties_wanted && Filter::is_draft20(version)).then_some(false);
-			// Only a session that negotiated MoQ Epoch names one.
-			let epoch = self.epoch.clone();
+		// INCLUDE_PROPERTIES defaults to 1, so only the opt-out is worth bytes. It
+		// arrived in draft-20, and an older peer would read it as an unknown
+		// parameter, which is a protocol violation.
+		let include_properties = (!self.properties_wanted && Filter::is_draft20(version)).then_some(false);
+		// Only a session that negotiated MoQ Epoch names one.
+		let epoch = self.epoch.clone();
 
-			encode_params!(w, version,
-				0x03 => self.authorization_token.clone(),
-				0x10 => self.forward,
-				0x20 => self.subscriber_priority,
-				0x21 => self.filter,
-				0x22 => self.group_order,
-				0x23 => fill,
-				0x32 => self.new_group,
-				0x35 => include_properties,
-				epoch::EPOCH_PARAM => epoch,
-				super::max_age::PARAMETER => self.max_age,
-			);
+		encode_params!(w, version,
+			0x03 => self.authorization_token.clone(),
+			0x10 => self.forward,
+			0x20 => self.subscriber_priority,
+			0x21 => self.filter,
+			0x22 => self.group_order,
+			0x23 => fill,
+			0x32 => self.new_group,
+			0x35 => include_properties,
+			epoch::EPOCH_PARAM => epoch,
+			super::max_age::PARAMETER => self.max_age,
+		);
 
 		Ok(())
 	}
@@ -257,37 +254,37 @@ impl Message for SubscribeUpdate {
 	}
 
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-			// REQUEST_UPDATE
-			let request_id = RequestId::decode(r, version)?;
-			// Nothing reads an update's Range Filters yet; they are
-			// consumed so a legal update does not fail the session.
-			decode_params!(r, version,
-				0x02 => _object_delivery_timeout: Option<u64>,
-				0x03 => authorization_token: Vec<RequestToken>,
-				0x06 => _subgroup_delivery_timeout: Option<u64>,
-				0x10 => forward: Option<bool>,
-				0x20 => subscriber_priority: Option<u8>,
-				0x21 => filter: Option<Filter>,
-				0x23 => fill: Option<Fill> where Filter::is_draft20(version),
-				0x25 => _subgroup_filter: Vec<Opaque> where has_range_filters(version),
-				0x26 => _object_id_filter: Vec<Opaque> where has_range_filters(version),
-				0x27 => _priority_filter: Vec<Opaque> where has_range_filters(version),
-				0x28 => _object_property_filter: Vec<Opaque> where has_range_filters(version),
-				0x29 => _track_property_filter: Vec<Opaque> where has_range_filters(version),
-				0x32 => new_group: Option<u64>,
-				super::max_age::PARAMETER => max_age: Option<u64>,
-			);
+		// REQUEST_UPDATE
+		let request_id = RequestId::decode(r, version)?;
+		// Nothing reads an update's Range Filters yet; they are
+		// consumed so a legal update does not fail the session.
+		decode_params!(r, version,
+			0x02 => _object_delivery_timeout: Option<u64>,
+			0x03 => authorization_token: Vec<RequestToken>,
+			0x06 => _subgroup_delivery_timeout: Option<u64>,
+			0x10 => forward: Option<bool>,
+			0x20 => subscriber_priority: Option<u8>,
+			0x21 => filter: Option<Filter>,
+			0x23 => fill: Option<Fill> where Filter::is_draft20(version),
+			0x25 => _subgroup_filter: Vec<Opaque> where has_range_filters(version),
+			0x26 => _object_id_filter: Vec<Opaque> where has_range_filters(version),
+			0x27 => _priority_filter: Vec<Opaque> where has_range_filters(version),
+			0x28 => _object_property_filter: Vec<Opaque> where has_range_filters(version),
+			0x29 => _track_property_filter: Vec<Opaque> where has_range_filters(version),
+			0x32 => new_group: Option<u64>,
+			super::max_age::PARAMETER => max_age: Option<u64>,
+		);
 
-			Ok(Self {
-				request_id,
-				subscriber_priority,
-				forward,
-				filter,
-				authorization_token: super::token::single(authorization_token)?,
-				new_group,
-				max_age: super::max_age::validate(max_age)?,
-				fill,
-			})
+		Ok(Self {
+			request_id,
+			subscriber_priority,
+			forward,
+			filter,
+			authorization_token: super::token::single(authorization_token)?,
+			new_group,
+			max_age: super::max_age::validate(max_age)?,
+			fill,
+		})
 	}
 }
 
@@ -463,17 +460,6 @@ mod tests {
 		}
 	}
 
-	/// 0x04 is MAX_CACHE_DURATION in draft-15, defined for other messages, so a SUBSCRIBE
-	/// that carries it is ignored. Draft-16 dropped the id, which makes it unknown.
-	#[test]
-	fn cache_duration_on_subscribe_follows_the_draft() {
-		let draft15 = subscribe_with_rendezvous(0, Version::Draft18);
-		decode_message::<Subscribe>(&draft15, Version::Draft18).expect("draft-15 ignores MAX_CACHE_DURATION");
-
-		let draft16 = subscribe_with_rendezvous(0, Version::Draft18);
-		decode_message::<Subscribe>(&draft16, Version::Draft18).expect_err("draft-16 rejects unknown parameter 0x04");
-	}
-
 	/// The first message parameter key on an encoded SUBSCRIBE, or `None` when it carries no
 	/// parameters.
 	///
@@ -487,7 +473,7 @@ mod tests {
 		RequestId::decode(r, version).unwrap();
 		decode_track(r).unwrap();
 
-		// draft-14/15 write absolute keys, draft-16+ deltas, but the first is absolute either way.
+		// Keys are delta coded, but the first is absolute.
 		let count = r.varint().unwrap();
 		(count > 0).then(|| r.varint().unwrap())
 	}
@@ -974,11 +960,7 @@ mod tests {
 	/// FORWARD=0 is legal on every draft, a paused request rather than a session error.
 	#[test]
 	fn subscribe_decodes_forward_zero() {
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft20,
-		] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			let msg = Subscribe {
 				new_group: None,
 				max_age: None,
@@ -1010,11 +992,7 @@ mod tests {
 			0x01, // Number of Parameters
 			0x03, 0x03, 0x03, 0x00, 0xAA, // AUTHORIZATION TOKEN
 		]);
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-			Version::Draft20,
-		] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			let wire = body.clone();
 			let mut buf = Decoder::new(&wire, version.into());
 			Subscribe::decode_msg(&mut buf, version).unwrap_or_else(|e| panic!("{version}: {e}"));
@@ -1124,11 +1102,7 @@ mod cache_duration_tests {
 				ok.encode_msg(&mut Encoder::new(&mut payload, version.into()), version)
 					.unwrap();
 				let got = crate::coding::decode_buf(&mut payload.as_slice(), version, SubscribeOk::decode_msg).unwrap();
-				assert_eq!(
-					got.properties.max_cache_duration,
-					age,
-					"{version}"
-				);
+				assert_eq!(got.properties.max_cache_duration, age, "{version}");
 			}
 		}
 	}

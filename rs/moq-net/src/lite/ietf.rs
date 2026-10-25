@@ -778,39 +778,6 @@ mod tests {
 		}
 	}
 
-	/// Dropping an understood property can widen the delta that spans it, so a list that
-	/// could not cross is refused where it arrives rather than where it would be sent.
-	#[test]
-	fn track_properties_that_cannot_cross_are_refused_at_ingress() {
-		let version = Draft::Draft18;
-		// The most a draft-16 answer holds beside a Request ID and an empty parameter count.
-		let size = super::super::message::MAX_MESSAGE_SIZE - 2;
-		// DYNAMIC_GROUPS, then the last ID whose delta from it fits four bytes.
-		let id = 0x30 + (1 << 30) - 1;
-		let mut list = Vec::new();
-		let e = &mut Encoder::new(&mut list, version.into());
-		for value in [0x30, 1, id - 0x30] {
-			e.varint(value).unwrap();
-		}
-		let fill = size - list.len() - 4;
-		let e = &mut Encoder::new(&mut list, version.into());
-		e.bytes(&vec![0; fill]).unwrap();
-		assert_eq!(list.len(), size);
-
-		// The delta from zero takes eight bytes once DYNAMIC_GROUPS leaves the list.
-		let ingress = crate::ietf::Properties::decode(&mut Decoder::new(&list, version.into()), version).unwrap();
-		assert!(ingress.dynamic_groups);
-		let forwarded = crate::model::object::TrackProperties {
-			version,
-			values: ingress.unknown,
-		};
-		assert!(!fits(&forwarded));
-		assert!(matches!(
-			forwarded.refused(&crate::track::Info::default()),
-			Some(crate::Error::Unsupported)
-		));
-	}
-
 	fn datagram(wire: &crate::model::datagram::Wire) -> Vec<u8> {
 		let mut buf = Vec::new();
 		encode_datagram(&mut Encoder::new(&mut buf, V.into()), Some(wire)).unwrap();
@@ -821,8 +788,7 @@ mod tests {
 	/// would close the session it reached: it is refused where it arrives.
 	#[test]
 	fn datagram_statuses_are_ones_moq_transport_defines() {
-		for (status, ok) in [(0, true), (1, true), (2, false), (3, true), (4, true), (5, false)] {
-			// Draft 14 sends a status datagram's Object ID and priority.
+		for (status, ok) in [(0, true), (1, false), (2, false), (3, true), (4, true), (5, false)] {
 			let wire = crate::model::datagram::Wire {
 				object_id: Some(3),
 				priority: Some(9),

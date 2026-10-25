@@ -260,7 +260,6 @@ fn ietf_datagram_interop() {
 		ietf::Version::Draft22,
 	];
 	for (draft, version) in (18..).zip(all) {
-		let legacy = false;
 		let mut properties = Vec::new();
 		let mut w = Encoder::new(&mut properties, version.into());
 		ietf::encode_object_time(&mut w, Timestamp::from_millis(1234).unwrap(), Timescale::MILLI).unwrap();
@@ -293,17 +292,6 @@ fn ietf_datagram_interop() {
 			properties: None,
 			body: ietf::DatagramBody::Payload(bytes::Bytes::new()),
 		});
-		if legacy {
-			datagrams.push(ietf::ObjectDatagram {
-				track_alias: 1,
-				group_id: 2,
-				object_id: Some(0),
-				publisher_priority: Some(0),
-				end_of_group: false,
-				properties: Some(properties.clone()),
-				body: ietf::DatagramBody::Status(3),
-			});
-		}
 		let encoded: Vec<Vec<u8>> = datagrams
 			.iter()
 			.map(|datagram| datagram.encode_bytes(version).unwrap().to_vec())
@@ -468,7 +456,11 @@ fn ietf_track_status_interop() {
 
 		for (index, wanted) in [true, false].into_iter().enumerate() {
 			let mut r = Decoder::new(&responses[index], version.into());
-			assert_eq!(r.varint().unwrap(), <ietf::TrackStatusOk as ietf::Message>::ID, "{version}");
+			assert_eq!(
+				r.varint().unwrap(),
+				<ietf::TrackStatusOk as ietf::Message>::ID,
+				"{version}"
+			);
 			let ok = ietf::TrackStatusOk::decode(&mut r, version).unwrap();
 			assert!(r.is_empty(), "{version}: trailing bytes");
 

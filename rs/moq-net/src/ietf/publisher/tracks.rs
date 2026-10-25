@@ -1090,8 +1090,7 @@ impl Publisher {
 				None => None,
 			};
 			if let Some((reason, err)) = refusal {
-				self.write_subscribe_error(&mut stream.writer, &err, reason)
-					.await?;
+				self.write_subscribe_error(&mut stream.writer, &err, reason).await?;
 				break Served::UpdateFailed(Error::Unsupported);
 			}
 			if let Some(priority) = update.priority {
@@ -1204,9 +1203,7 @@ impl Publisher {
 			Some(Ok(subscriber)) => subscriber,
 			Some(Err(err)) => return self.resume_failed(stream, how.answer, err).await,
 			None => {
-				return self
-					.resume_failed(stream, how.answer, Error::NotFound)
-					.await;
+				return self.resume_failed(stream, how.answer, Error::NotFound).await;
 			}
 		};
 		let live = kio::wait(|waiter| {
@@ -1220,19 +1217,14 @@ impl Publisher {
 		})
 		.await?;
 		if !live {
-			return self
-				.resume_failed(stream, how.answer, Error::NotFound)
-				.await;
+			return self.resume_failed(stream, how.answer, Error::NotFound).await;
 		}
 
 		let edge = live_edge(track);
 		let range = subscribe_range(params.filter, edge, self.version);
 		range.apply(&mut subscription);
 		let _ = subscriber.update(subscription);
-		let timescale = subscriber
-			.info()
-			.timescale
-;
+		let timescale = subscriber.info().timescale;
 		let mut serve = TrackServe::new(
 			self.session.clone(),
 			subscriber,
@@ -1270,12 +1262,7 @@ impl Publisher {
 			.filter(|_| Filter::is_draft20(self.version))
 			.map(|fill| fill_range(fill, params.filter, edge.largest));
 
-		if how.answer
-			&& self
-				.write_request_ok(&mut stream.writer, edge.largest)
-				.await
-				.is_err()
-		{
+		if how.answer && self.write_request_ok(&mut stream.writer, edge.largest).await.is_err() {
 			return Err(());
 		}
 

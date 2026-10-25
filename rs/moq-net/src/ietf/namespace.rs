@@ -117,9 +117,7 @@ pub fn decode_track(r: &mut Decoder<'_>) -> Result<(Path<'static>, String), Deco
 pub(super) fn refusal(namespace: &Path, version: super::Version) -> Option<super::RequestError<'static>> {
 	if matches!(
 		version,
-		super::Version::Draft18
-			| super::Version::Draft19
-			| super::Version::Draft20
+		super::Version::Draft18 | super::Version::Draft19 | super::Version::Draft20
 	) {
 		return None;
 	}

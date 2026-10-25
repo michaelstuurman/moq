@@ -2398,15 +2398,15 @@ mod tests {
 		);
 	}
 
-	/// Answering SETUP is part of the handshake: a moq-transport peer that sends
-	/// its SETUP but never grants credit for the reply is refused at the same
+	/// Answering SETUP is part of the handshake: a peer that sends its SETUP but
+	/// never grants credit for the reply is refused at the same
 	/// deadline, rather than held open by keep-alives, and the session counts it.
 	#[cfg(feature = "websocket")]
 	#[tokio::test(start_paused = true)]
 	async fn stalled_setup_reply_is_closed_at_the_deadline() {
-		// Record a real moq-transport-14 CLIENT_SETUP. The client then waits on a
-		// reply that never comes.
-		let recorder = Scripted::new("moq-00");
+		// Record a real CLIENT_SETUP. The client then waits on a reply that never
+		// comes.
+		let recorder = Scripted::new("moql");
 		let client = tokio::spawn({
 			let recorder = crate::transport::Session::new(recorder.clone(), moq_net::transport::Binding::Uri);
 			async move {
@@ -2420,7 +2420,7 @@ mod tests {
 		let bytes = std::mem::take(&mut *recorder.written.lock().unwrap());
 		assert!(!bytes.is_empty(), "the client never wrote its SETUP");
 
-		let mut peer = Scripted::new("moq-00");
+		let mut peer = Scripted::new("moql");
 		peer.setup = Some(bytes.into());
 		let timeout = std::time::Duration::from_secs(10);
 		let setup = Setup {

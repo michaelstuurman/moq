@@ -40,10 +40,7 @@ pub const UNNEGOTIATED_GUARD: usize = 64;
 /// Whether this version defines MAX_REQUEST_UPDATES. Draft-19 section 10.3.1.7 added it; the
 /// drafts below carry no such Setup Option.
 pub fn supported(version: Version) -> bool {
-	!matches!(
-		version,
-		Version::Draft18
-	)
+	!matches!(version, Version::Draft18)
 }
 
 /// A request's in-band renewal: the verdict on the token being verified, and the updates that
@@ -163,9 +160,7 @@ mod tests {
 			);
 		}
 
-		for version in [
-			Version::Draft18,
-		] {
+		for version in [Version::Draft18] {
 			let mut params = super::super::Parameters::default();
 			into_setup(&mut params, version);
 			assert_eq!(

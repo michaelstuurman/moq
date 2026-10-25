@@ -532,5 +532,4 @@ mod tests {
 		let peer = peer_from_setup(&decoded).unwrap();
 		assert!(!peer.negotiated());
 	}
-
 }

@@ -8,7 +8,8 @@ use bytes::Bytes;
 
 use crate::{
 	Version,
-	coding::{self, Decode, DecodeError, Decoder, Encode, EncodeError, Encoder}, lite,
+	coding::{self, Decode, DecodeError, Decoder, Encode, EncodeError, Encoder},
+	lite,
 };
 
 /// The session direction a client advertises in its SETUP (moq-lite-05+).
@@ -162,8 +163,8 @@ fn negotiated(v: Version) -> bool {
 
 /// The client half of the `moql` bidi SETUP exchange, offering moq-lite 01/02.
 ///
-/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed:
-/// a u16 size, the offered versions, then parameters.
+/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed with a
+/// varint size: the size, the offered versions, then parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct Client {
 	/// The list of supported versions in preferred order.
@@ -184,8 +185,7 @@ impl Decode<Version> for Client {
 			return Err(DecodeError::InvalidValue);
 		}
 
-		let size = r.u16()? as usize;
-		let mut msg = r.sub(size)?;
+		let mut msg = decode_body(r)?;
 		let versions = coding::Versions::decode(&mut msg, v).map_err(DecodeError::complete)?;
 
 		Ok(Self {
@@ -202,11 +202,23 @@ impl Encode<Version> for Client {
 			return Err(EncodeError::Version);
 		}
 		w.u8(CLIENT_SETUP);
-		let prefix = w.prefix_u16();
+		let prefix = w.prefix_varint();
 		self.versions.encode(w, v)?;
 		w.slice(&self.parameters);
 		fill_body(w, prefix)
 	}
+}
+
+/// Read a SETUP body's varint size, refusing one past [`MAX_SETUP_SIZE`] before buffering it.
+fn decode_body<'a>(r: &mut Decoder<'a>) -> Result<Decoder<'a>, DecodeError> {
+	let size = usize::try_from(r.varint()?).map_err(|_| DecodeError::BoundsExceeded)?;
+	if size > MAX_SETUP_SIZE {
+		return Err(DecodeError::MessageTooLarge {
+			size,
+			max: MAX_SETUP_SIZE,
+		});
+	}
+	r.sub(size)
 }
 
 /// Size a SETUP body, refusing one our own receiver would refuse.
@@ -220,8 +232,8 @@ fn fill_body(w: &mut Encoder<'_>, prefix: coding::Prefix) -> Result<(), EncodeEr
 
 /// The server half of the `moql` bidi SETUP exchange, selecting moq-lite 01 or 02.
 ///
-/// The framing is moq-transport draft-14's SERVER_SETUP: a u16 size, the selected version,
-/// then parameters.
+/// The framing is moq-transport draft-14's SERVER_SETUP with a varint size: the size, the
+/// selected version, then parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct Server {
 	/// The selected version.
@@ -238,7 +250,7 @@ impl Encode<Version> for Server {
 			return Err(EncodeError::Version);
 		}
 		w.u8(SERVER_SETUP);
-		let prefix = w.prefix_u16();
+		let prefix = w.prefix_varint();
 		self.version.encode(w, v)?;
 		w.slice(&self.parameters);
 		fill_body(w, prefix)
@@ -256,8 +268,7 @@ impl Decode<Version> for Server {
 			return Err(DecodeError::InvalidValue);
 		}
 
-		let size = r.u16()? as usize;
-		let mut msg = r.sub(size)?;
+		let mut msg = decode_body(r)?;
 		let version = coding::Version::decode(&mut msg, v).map_err(DecodeError::complete)?;
 
 		Ok(Self {

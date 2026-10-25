@@ -301,7 +301,7 @@ async fn lite_partial_frame_gives_way() {
 
 #[tokio::test]
 async fn ietf_partial_frame_gives_way() {
-	the_less_urgent_partial_frame_gives_way("moq-transport-16", None).await;
+	the_less_urgent_partial_frame_gives_way("moq-transport-18", None).await;
 }
 
 /// The same recovery when a slow link with a deep queue sits between them.
@@ -589,7 +589,7 @@ async fn lite_largest_unit_completes_under_pressure() {
 
 #[tokio::test]
 async fn ietf_largest_unit_completes_under_pressure() {
-	the_largest_unit_completes_under_pressure("moq-transport-16").await;
+	the_largest_unit_completes_under_pressure("moq-transport-18").await;
 }
 
 /// A Bun publisher (`test/receive-credit/sender.ts`) dials a WebTransport server whose
@@ -691,7 +691,7 @@ async fn javascript_partial_frame_gives_way(version: &str) {
 #[tokio::test]
 #[ignore = "requires Bun; run by just test receive-credit in the interop workflow"]
 async fn javascript_partial_frame_gives_way_tokio() {
-	for version in ["moq-lite-06", "moq-transport-16"] {
+	for version in ["moq-lite-06", "moq-transport-18"] {
 		javascript_partial_frame_gives_way(version).await;
 	}
 }

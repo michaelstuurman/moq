@@ -278,17 +278,8 @@ mod tests {
 			body: DatagramBody::Status(3),
 		};
 		for version in ALL {
-			let legacy = false;
-			match datagram.encode_bytes(version) {
-				Ok(buf) => {
-					assert!(legacy, "{version}");
-					assert_eq!(decode(&buf, version).unwrap(), datagram);
-				}
-				Err(err) => {
-					assert!(!legacy, "{version}");
-					assert!(matches!(err, EncodeError::InvalidState));
-				}
-			}
+			let err = datagram.encode_bytes(version).unwrap_err();
+			assert!(matches!(err, EncodeError::InvalidState), "{version}");
 		}
 	}
 

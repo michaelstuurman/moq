@@ -101,11 +101,11 @@ run_suite() {
     fi
 }
 
-# The pinned MoQVersions.h supports drafts 16 and 18; this relay supports both.
+# The pinned MoQVersions.h supports drafts 16 and 18; this relay supports only 18.
 failed=0
 # A two-relay cell waits on a test publisher that answers TRACK_STATUS; see the
 # passthrough quest.
-for version in 16 18; do
+for version in 18; do
     label="single-$version"
     start_relay "$label-origin" "$version"
     relay_port="$HARNESS_PORT"

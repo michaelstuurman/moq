@@ -179,9 +179,7 @@ pub(crate) mod request {
 			return None;
 		}
 		match version {
-			Version::Draft18 | Version::Draft19 => {
-				Some(INVALID_JOINING_REQUEST_ID)
-			}
+			Version::Draft18 | Version::Draft19 => Some(INVALID_JOINING_REQUEST_ID),
 			_ => None,
 		}
 	}
@@ -434,7 +432,6 @@ pub(crate) mod request {
 				]
 			}
 
-
 			// Sent but never read back as itself: a peer's MALFORMED_AUTH_TOKEN stays remote.
 			let malformed = Error::Decode(DecodeError::MalformedAuthToken);
 			for version in ALL {
@@ -641,7 +638,10 @@ mod tests {
 		const REGISTERED: &[u32] = &[0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x9, 0x12];
 		for err in EVERY_ERROR {
 			let code = to_stream_code(&err);
-			assert!(REGISTERED.contains(&code), "{err:?} sends {code:#x}, which is not registered");
+			assert!(
+				REGISTERED.contains(&code),
+				"{err:?} sends {code:#x}, which is not registered"
+			);
 		}
 	}
 

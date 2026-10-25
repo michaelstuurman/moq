@@ -328,10 +328,6 @@ mod tests {
 	async fn raw_payload_stop_uses_the_negotiated_registry() {
 		for (version, expected) in [
 			(
-				crate::Version::Ietf(crate::ietf::Version::Draft18),
-				Error::Stream(crate::StreamError::Unknown(0x4)),
-			),
-			(
 				crate::Version::Ietf(crate::ietf::Version::Draft20),
 				Error::Stream(crate::StreamError::GoingAway),
 			),

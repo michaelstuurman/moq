@@ -1,6 +1,5 @@
 //! IETF moq-transport subscribe namespace messages
 
-
 use crate::{Path, coding::*, ietf::RequestId};
 
 use super::Message;
@@ -416,7 +415,6 @@ mod tests {
 					.hidden,
 				hidden
 			);
-
 		}
 	}
 }

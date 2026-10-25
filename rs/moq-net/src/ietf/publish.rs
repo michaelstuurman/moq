@@ -160,14 +160,7 @@ impl PublishDone<'_> {
 			code if code == PublishDoneStatus::Unauthorized.code() => Err(crate::Error::Unauthorized),
 			// SUBSCRIPTION_ENDED: the subscription reached the end its filter asked for.
 			// Draft-20 removed it and left 0x3 unassigned.
-			0x3 if matches!(
-				version,
-				Version::Draft18
-					| Version::Draft19
-			) =>
-			{
-				Ok(())
-			}
+			0x3 if matches!(version, Version::Draft18 | Version::Draft19) => Ok(()),
 			code => Err(crate::Error::Remote(u32::try_from(code).unwrap_or(u32::MAX))),
 		}
 	}
@@ -310,18 +303,12 @@ impl Message for PublishOk {
 			_ => {
 				// GROUP_ORDER left PUBLISH_OK in draft-19. Sending it there is a parameter
 				// on the wrong message, which closes the session.
-				let group_order = matches!(
-					version,
-					Version::Draft18
-				)
-				.then_some(self.group_order)
-				.flatten();
-				let new_group = matches!(
-					version,
-					Version::Draft18 | Version::Draft19
-				)
-				.then_some(self.new_group)
-				.flatten();
+				let group_order = matches!(version, Version::Draft18)
+					.then_some(self.group_order)
+					.flatten();
+				let new_group = matches!(version, Version::Draft18 | Version::Draft19)
+					.then_some(self.new_group)
+					.flatten();
 				encode_params!(w, version,
 					0x10 => self.forward,
 					0x20 => self.subscriber_priority,
@@ -465,10 +452,7 @@ mod tests {
 
 	#[test]
 	fn test_publish_done_registered_statuses_all_versions() {
-		for version in [
-			Version::Draft18,
-			Version::Draft19,
-		] {
+		for version in [Version::Draft18, Version::Draft19] {
 			for (status, expected) in [
 				(PublishDoneStatus::InternalError, 0x0),
 				(PublishDoneStatus::TrackEnded, 0x2),
