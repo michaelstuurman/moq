@@ -51,7 +51,11 @@ impl Live {
 		};
 		let keep = usize::try_from(path.keep).map_err(|_| Error::ProtocolViolation)?;
 		let head = head(&base.suffix, keep).ok_or(Error::ProtocolViolation)?;
-		let suffix = head.join(&path.rest);
+		let suffix = match (head.is_empty(), path.rest.is_empty()) {
+			(true, _) => path.rest,
+			(false, true) => Path::new(head),
+			(false, false) => Path::concat(head, path.rest.as_str()),
+		};
 		if suffix.parts().count() > Path::MAX_PARTS {
 			return Err(Error::ProtocolViolation);
 		}
@@ -74,16 +78,16 @@ impl Live {
 }
 
 /// The first `keep` segments of `path`, or `None` if it has fewer.
-fn head(path: &Path, keep: usize) -> Option<Path> {
+fn head(path: &Path, keep: usize) -> Option<&str> {
 	if keep == 0 {
-		return Some(Path::empty());
+		return Some("");
 	}
 	let s = path.as_str();
 	let mut ends = s
 		.match_indices('/')
 		.map(|(i, _)| i)
 		.chain((!s.is_empty()).then_some(s.len()));
-	ends.nth(keep - 1).map(|end| Path::new(&s[..end]))
+	ends.nth(keep - 1).map(|end| &s[..end])
 }
 
 /// Resolves the bases on a received announce stream. Only used on versions with
