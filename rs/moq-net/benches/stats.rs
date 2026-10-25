@@ -4,6 +4,7 @@
 //!
 //! Run with `cargo bench -p moq-net --bench stats`.
 
+use moq_net::Path;
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use futures::FutureExt;
 use moq_net::{announce, broadcast, fuzz, origin, stats, transport};
@@ -24,11 +25,11 @@ fn registry(broadcasts: usize, tiers: usize) -> Registry {
 	let registry = stats::Registry::new(stats::Config::new());
 	let (producer, driver) = origin::Producer::new(origin::Config::default());
 	let publishers = (0..broadcasts)
-		.map(|i| producer.publish(format!("room/{i}"), origin::Route::default()).unwrap())
+		.map(|i| producer.publish(Path::try_from(format!("room/{i}")).unwrap(), origin::Route::default()).unwrap())
 		.collect();
 	let cursors = (0..tiers)
 		.map(|t| {
-			let session = registry.tier(stats::Tier::new(format!("tier{t}"))).session("root");
+			let session = registry.tier(stats::Tier::new(Path::try_from(format!("tier{t}")).unwrap())).session(Path::new("root").unwrap());
 			let mut cursor = producer.consume().with_stats(session).announced();
 			// Each announce the cursor replays records under its tier.
 			while cursor.next().now_or_never().flatten().is_some() {}
@@ -71,15 +72,15 @@ fn request(c: &mut Criterion) {
 			let registry = stats::Registry::new(stats::Config::new());
 			let mut contexts = Vec::new();
 			for tier in 0..tiers {
-				let handle = registry.tier(stats::Tier::new(format!("tier{tier}")));
+				let handle = registry.tier(stats::Tier::new(Path::try_from(format!("tier{tier}")).unwrap()));
 				for root in 0..roots {
-					contexts.push(handle.request(format!("room/{root}")));
+					contexts.push(handle.request(Path::try_from(format!("room/{root}")).unwrap()));
 				}
 			}
-			let handle = registry.tier(stats::Tier::new(format!("tier{}", tiers - 1)));
+			let handle = registry.tier(stats::Tier::new(Path::try_from(format!("tier{}", tiers - 1)).unwrap()));
 			let root = format!("room/{}", roots - 1);
 			group.bench_function(BenchmarkId::from_parameter(format!("{roots}x{tiers}")), |b| {
-				b.iter(|| std::hint::black_box(handle.request(&root)));
+				b.iter(|| std::hint::black_box(handle.request(Path::new(&root).unwrap())));
 			});
 			std::hint::black_box(contexts);
 		}
@@ -90,8 +91,9 @@ fn request(c: &mut Criterion) {
 fn write(c: &mut Criterion) {
 	let registry = stats::Registry::new(stats::Config::new());
 	let tier = stats::Tier::default();
-	let path = fuzz::path_meter(&registry, &tier, "room/live");
-	let session = fuzz::session_meter(&registry, tier, "root", "room/live");
+	let live = Path::new("room/live").unwrap();
+	let path = fuzz::path_meter(&registry, &tier, &live);
+	let session = fuzz::session_meter(&registry, tier, &Path::new("root").unwrap(), &live);
 	c.bench_function("stats/write/path-bytes", |b| b.iter(|| path.bytes(1)));
 	c.bench_function("stats/write/session-bytes", |b| b.iter(|| session.bytes(1)));
 }
@@ -107,7 +109,7 @@ fn session_report(c: &mut Criterion) {
 				let contexts: Vec<_> = (0..labels)
 					.flat_map(|label| {
 						let handle = handle.clone();
-						(0..sessions).map(move |_| handle.session(format!("project/key/{label}")))
+						(0..sessions).map(move |_| handle.session(Path::try_from(format!("project/key/{label}")).unwrap()))
 					})
 					.collect();
 				let wires: Vec<_> = contexts
@@ -153,7 +155,7 @@ fn retag(c: &mut Criterion) {
 			let mut contexts: Vec<_> = (0..labels)
 				.flat_map(|label| {
 					let handle = handle.clone();
-					(0..sessions).map(move |_| handle.session(format!("project/key/{label}")))
+					(0..sessions).map(move |_| handle.session(Path::try_from(format!("project/key/{label}")).unwrap()))
 				})
 				.collect();
 			let moving = contexts.split_off(contexts.len() - sessions);
@@ -161,10 +163,10 @@ fn retag(c: &mut Criterion) {
 			group.bench_function(BenchmarkId::from_parameter(format!("{labels}x{sessions}")), |b| {
 				b.iter(|| {
 					for session in moving.iter().rev() {
-						session.retag(tier.clone(), "project/moved");
+						session.retag(tier.clone(), Path::new("project/moved").unwrap());
 					}
 					for session in moving.iter().rev() {
-						session.retag(tier.clone(), format!("project/key/{}", labels - 1));
+						session.retag(tier.clone(), Path::try_from(format!("project/key/{}", labels - 1)).unwrap());
 					}
 				});
 			});

@@ -6,6 +6,7 @@
 //! fetchable, and a relay's fetch-only demand puts no live subscription upstream to race
 //! the fetches that report where the track ends.
 
+use moq_net::Path;
 use crate::support;
 
 use std::sync::Arc;
@@ -30,11 +31,11 @@ fn produce_origin(hop: u64) -> moq_net::origin::Producer {
 
 async fn resolve(origin: &moq_net::origin::Producer) -> moq_net::broadcast::Consumer {
 	let consumer = origin.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves")
@@ -42,7 +43,7 @@ async fn resolve(origin: &moq_net::origin::Producer) -> moq_net::broadcast::Cons
 
 /// Publish a finished track of three groups, and flag any subscription it ever gets.
 fn publish_finished(origin: &moq_net::origin::Producer) -> (moq_net::broadcast::Producer, Arc<AtomicBool>) {
-	let broadcast = origin.create_broadcast("bcast").unwrap();
+	let broadcast = origin.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let mut track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	for sequence in 0..3u64 {
@@ -169,7 +170,7 @@ async fn a_subscribe_after_track_status_keeps_timestamps() {
 	for version in ["moq-transport-18", "moq-transport-19", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
-			let broadcast = publisher.create_broadcast("bcast").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 

@@ -4,6 +4,7 @@
 //! to 17 its stream is a bare header with no FIRST_OBJECT bit, which must not read as a
 //! group missing its head.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -39,13 +40,13 @@ async fn an_empty_group_arrives_empty() {
 		let subscriber = produce_origin(2);
 		let _pair = peer(version.parse::<Version>().unwrap(), &publisher, &subscriber).await;
 
-		let broadcast = publisher.create_broadcast("room").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 		let track = broadcast.create_track("data", timed()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 
 		let consumer = subscriber.consume();
-		consumer.routed("room").await.unwrap();
-		let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("room", None))
+		consumer.routed(Path::new("room").unwrap()).await.unwrap();
+		let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("room").unwrap(), None))
 			.await
 			.expect("resolve timeout")
 			.expect("broadcast resolves");

@@ -4,6 +4,7 @@
 //! no transport stats reads while nothing moves. A server holds thousands of these,
 //! so a fixed-interval timer per session adds up to whole cores.
 
+use moq_net::Path;
 use crate::support;
 
 use std::{
@@ -95,7 +96,7 @@ async fn busy_viewer_sees_the_estimate_move() {
 			..STATS
 		});
 		// Server work for this session: announcing a broadcast to the viewer.
-		let broadcast = origin.create_broadcast("live").unwrap();
+		let broadcast = origin.create_broadcast(Path::new("live").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 
 		let moved = moq_clock::timeout(Duration::from_millis(1), probe.changed()).await;
@@ -179,7 +180,7 @@ async fn wire_collection_never_arms_the_idle_sampler() {
 		let registry = moq_net::stats::Registry::new(Default::default());
 		let polls = Arc::new(AtomicUsize::new(0));
 		let mut options = MockConnectOptions::new(version.parse().unwrap());
-		options.server_stats = registry.tier(Default::default()).session("room");
+		options.server_stats = registry.tier(Default::default()).session(Path::new("room").unwrap());
 		options.server_polls = Some(polls.clone());
 		let pair = connect_mock(options).await;
 		moq_clock::sleep(Duration::from_secs(1)).await;

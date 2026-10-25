@@ -7,6 +7,7 @@
 //! withdrawn; a relay that selects them in turn re-advertises each stale path, and
 //! the cluster walks all of them before it converges (path hunting).
 
+use moq_net::Path;
 use crate::support;
 
 use std::{collections::HashMap, time::Duration};
@@ -102,7 +103,7 @@ impl Mesh {
 		let broadcasts = (0..count)
 			.map(|i| {
 				let broadcast = self.nodes[(i + offset) % relays]
-					.create_broadcast(format!("room/{i}"))
+					.create_broadcast(Path::try_from(format!("room/{i}")).unwrap())
 					.unwrap();
 				broadcast.announce(Default::default()).unwrap();
 				broadcast
@@ -224,7 +225,7 @@ async fn partial_mesh_withdraw_retracts_once() {
 	let mut watched: Vec<_> = nodes.iter().map(|node| watch(node.consume().announced())).collect();
 
 	for publisher in [5, 13, 22, 26, 32] {
-		let broadcast = nodes[publisher].create_broadcast(format!("room/{publisher}")).unwrap();
+		let broadcast = nodes[publisher].create_broadcast(Path::try_from(format!("room/{publisher}")).unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sim::idle().await;
 		for (relay, watched) in watched.iter_mut().enumerate() {
@@ -278,7 +279,7 @@ async fn retracted_relay_ignores_a_stale_path() {
 	}
 	let mut watched: Vec<_> = nodes.iter().map(|node| watch(node.consume().announced())).collect();
 
-	let broadcast = nodes[7].create_broadcast("room/7").unwrap();
+	let broadcast = nodes[7].create_broadcast(Path::new("room/7").unwrap()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sim::idle().await;
 	for watched in watched.iter_mut() {
@@ -360,7 +361,7 @@ impl Cluster {
 	/// Publish `path` from the client and require everyone to see it. Returns
 	/// what the watching client saw.
 	async fn publish(&mut self, path: &str) -> (broadcast::Producer, Vec<Kind>) {
-		let broadcast = self.publisher.create_broadcast(path).unwrap();
+		let broadcast = self.publisher.create_broadcast(Path::new(path).unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sim::idle().await;
 		let client = drain(&mut self.client).remove(path).unwrap();
@@ -657,9 +658,9 @@ async fn hop_limit_bounds_receive_and_send() {
 					.unwrap(),
 			)
 		};
-		let _long = source.dynamic_route("long", route(2)).unwrap();
-		let _boundary = source.dynamic_route("boundary", route(1)).unwrap();
-		let short = source.dynamic_route("short", route(0)).unwrap();
+		let _long = source.dynamic_route(Path::new("long").unwrap(), route(2)).unwrap();
+		let _boundary = source.dynamic_route(Path::new("boundary").unwrap(), route(1)).unwrap();
+		let short = source.dynamic_route(Path::new("short").unwrap(), route(0)).unwrap();
 		moq_clock::sim::idle().await;
 		let received = drain(&mut received);
 		assert!(!received.contains_key("long"), "{name}: accepted over-limit path");
@@ -678,7 +679,7 @@ async fn hop_limit_bounds_receive_and_send() {
 				Some(&Kind::End),
 				"{name}"
 			);
-			let _replacement = source.dynamic_route("short", route(1)).unwrap();
+			let _replacement = source.dynamic_route(Path::new("short").unwrap(), route(1)).unwrap();
 			moq_clock::sim::idle().await;
 			assert!(drain(&mut sent).is_empty(), "{name}: forwarded over-limit replacement");
 			continue;
@@ -738,9 +739,9 @@ async fn hop_limit_falls_back_to_a_forwardable_route() {
 				.with_cost(origin::Cost::new(cost))
 		};
 		// Three hops at the relay once the sender is appended: in the cap, but full.
-		let _cheap = far.dynamic_route("room", route(100, 2, 1)).unwrap();
+		let _cheap = far.dynamic_route(Path::new("room").unwrap(), route(100, 2, 1)).unwrap();
 		// Two hops at the relay, so it has room for the relay's own.
-		let pricey = near.dynamic_route("room", route(200, 1, 50)).unwrap();
+		let pricey = near.dynamic_route(Path::new("room").unwrap(), route(200, 1, 50)).unwrap();
 		moq_clock::sim::idle().await;
 		let started = drain(&mut sent);
 		assert_eq!(

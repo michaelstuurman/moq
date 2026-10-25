@@ -6,6 +6,7 @@
 //! limits size is granted back as requests close, so a client that keeps opening and closing
 //! requests within them never stalls.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -44,7 +45,7 @@ async fn setup(version: &str, limits: Limits, tracks: usize) -> Setup {
 	let server = produce_origin(1);
 	let client = produce_origin(2);
 
-	let broadcast = server.create_broadcast("bcast").unwrap();
+	let broadcast = server.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let tracks = (0..tracks)
 		.map(|i| broadcast.create_track(format!("t{i}"), None).unwrap())
 		.collect();
@@ -82,7 +83,7 @@ async fn closed_requests_are_granted_back() {
 		// A window of 8 requests, far fewer than the rounds below. Doubling the limit leaves
 		// room for an UNSUBSCRIBE still in flight when the next SUBSCRIBE lands.
 		let setup = setup(version, limits(0, 4), ROUNDS).await;
-		let broadcast = moq_clock::timeout(TIMEOUT, setup.client.consume().routed_broadcast("bcast"))
+		let broadcast = moq_clock::timeout(TIMEOUT, setup.client.consume().routed_broadcast(Path::new("bcast").unwrap()))
 			.await
 			.expect("announce timeout")
 			.unwrap();
@@ -119,7 +120,7 @@ async fn flow_control_bounds_the_subscriptions_a_peer_holds() {
 		let version: Version = version.parse().unwrap();
 		let server = produce_origin(1);
 		let client = produce_origin(2);
-		let broadcast = server.create_broadcast("bcast").unwrap();
+		let broadcast = server.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		let tracks: Vec<_> = (0..TRACKS)
 			.map(|i| broadcast.create_track(format!("t{i}"), None).unwrap())
 			.collect();
@@ -132,7 +133,7 @@ async fn flow_control_bounds_the_subscriptions_a_peer_holds() {
 		options.server_limits = Some(limits(0, BOUND / 2));
 		let pair = connect_mock(options).await;
 
-		let remote = moq_clock::timeout(TIMEOUT, client.consume().routed_broadcast("bcast"))
+		let remote = moq_clock::timeout(TIMEOUT, client.consume().routed_broadcast(Path::new("bcast").unwrap()))
 			.await
 			.expect("announce timeout")
 			.unwrap();
@@ -169,8 +170,8 @@ async fn an_announce_past_the_cap_closes_the_session() {
 		let version: Version = version.parse().unwrap();
 		let client = produce_origin(1);
 		let server = produce_origin(2);
-		let a = client.create_broadcast("a").unwrap();
-		let b = client.create_broadcast("b").unwrap();
+		let a = client.create_broadcast(Path::new("a").unwrap()).unwrap();
+		let b = client.create_broadcast(Path::new("b").unwrap()).unwrap();
 		a.announce(Default::default()).unwrap();
 		b.announce(Default::default()).unwrap();
 

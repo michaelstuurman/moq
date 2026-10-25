@@ -5,6 +5,7 @@
 //!
 //! Deterministic: paused time and a single-threaded runtime over the mock transport.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -50,7 +51,7 @@ struct Setup {
 
 async fn setup(version: Version) -> Setup {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("room").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 	let track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -61,11 +62,11 @@ async fn setup(version: Version) -> Setup {
 	let pair = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("room"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("room").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("room", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("room").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

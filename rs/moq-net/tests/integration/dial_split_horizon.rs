@@ -8,6 +8,7 @@
 //! anonymous dial: the accepting side already stamps one, and the dialing side
 //! has to as well.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -43,7 +44,7 @@ struct Link {
 async fn dial(dialer: &origin::Producer, edge: &origin::Producer) -> Link {
 	let version = version();
 	let registry = stats::Registry::new(stats::Config::new());
-	let session_stats = registry.tier(stats::Tier::default()).session("");
+	let session_stats = registry.tier(stats::Tier::default()).session(Path::new("").unwrap());
 	let mut mock = moq_net::transport::memory::Config::default();
 	mock.protocol = Some(version.alpn().to_string());
 	let (client_transport, server_transport) = create_mock_session_pair(mock);
@@ -134,7 +135,7 @@ async fn dialed_anonymous_session_does_not_echo_or_route_subscribe_back() {
 	let to_publisher = dial(&dialer, &publisher).await;
 	let to_subscriber = dial(&dialer, &subscriber).await;
 
-	let broadcast = publisher.create_broadcast("room").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 	let track = broadcast.create_track("video", None).unwrap();
 	broadcast.announce(origin::Route::default()).unwrap();
 
@@ -181,7 +182,7 @@ async fn dialed_anonymous_session_does_not_echo_or_route_subscribe_back() {
 	// session it arrived on.
 	let viewed = subscriber
 		.consume()
-		.request_broadcast("room", None)
+		.request_broadcast(Path::new("room").unwrap(), None)
 		.await
 		.expect("subscriber resolves the namespace");
 	let subscription = moq_net::track::Subscription::default();

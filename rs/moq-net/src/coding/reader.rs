@@ -460,6 +460,7 @@ impl<S: RecvStream, V: StreamCodes> Reader<S, V> {
 
 #[cfg(test)]
 mod tests {
+	use crate::Path;
 	use std::{collections::VecDeque, sync::Arc};
 
 	use futures::FutureExt;
@@ -499,7 +500,7 @@ mod tests {
 			stats::{Bytes, Control, Registry, Tier},
 		};
 		let registry = Registry::new(Default::default());
-		let session = registry.tier(Tier::default()).session("");
+		let session = registry.tier(Tier::default()).session(Path::new("").unwrap());
 		let version = lite::Version::Lite07;
 		let msg = lite::Probe {
 			bitrate: Some(123),

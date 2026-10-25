@@ -9,6 +9,7 @@
 //! on, and every fetch gets the whole group written so far. A failing seed is
 //! shrunk to the ops it needs, which the report names.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -265,7 +266,7 @@ impl Topology {
 
 	/// A fresh request for the broadcast; `None` when refused, as with no route right now.
 	async fn request(&self, step: usize) -> Result<Option<moq_net::broadcast::Consumer>, Failure> {
-		let request = self.subscriber.consume().request_broadcast("live", None);
+		let request = self.subscriber.consume().request_broadcast(Path::new("live").unwrap(), None);
 		match moq_clock::timeout(READ_TIMEOUT, request).await {
 			Ok(result) => Ok(result.ok()),
 			Err(_) => Err(stuck(format!("{step}: request hung"))),
@@ -279,7 +280,7 @@ async fn execute(version: Version, ops: &[Op]) -> Result<(), Failure> {
 	let relay_b = produce_origin(3);
 	let subscriber = produce_origin(4);
 
-	let broadcast = publisher.create_broadcast("live").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("live").unwrap()).unwrap();
 	let info = track::Info::default().with_timescale(moq_net::Timescale::MILLI);
 	let track = broadcast.create_track("catalog.json", info).unwrap();
 	broadcast
@@ -291,7 +292,7 @@ async fn execute(version: Version, ops: &[Op]) -> Result<(), Failure> {
 		link(version, &publisher, &relay_b).await,
 	];
 	let a_to_r = link(version, &relay_a, &subscriber).await;
-	subscriber.consume().routed("live").await.unwrap();
+	subscriber.consume().routed(Path::new("live").unwrap()).await.unwrap();
 	let mut topology = Topology {
 		version,
 		publisher,

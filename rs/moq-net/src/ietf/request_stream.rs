@@ -566,6 +566,7 @@ impl<const TRACKS: bool> Decode<Version> for NamespaceUpdate<TRACKS> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 
 	#[moq_clock::test]
 	async fn request_messages_keep_goaway_state_across_response_phases() {
@@ -594,7 +595,7 @@ mod tests {
 		use crate::lite::test_transport::ScriptedSession;
 		use crate::stats::{Control, Registry, Tier};
 		let registry = Registry::new(Default::default());
-		let stats = registry.tier(Tier::default()).session("");
+		let stats = registry.tier(Tier::default()).session(Path::new("").unwrap());
 		let version = Version::Draft22;
 		let session = ScriptedSession::new(vec![0x10, 0, 2, 0, 0, 0x07, 0, 0]);
 		let mut stream = with_stats(

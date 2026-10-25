@@ -282,6 +282,7 @@ impl<S: crate::transport::poll::SendStream, V> Drop for Writer<S, V> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 	use crate::lite::test_transport::{Log, SinkSend};
 	use std::task::Waker;
 
@@ -416,7 +417,7 @@ mod tests {
 			stats::{Bytes, Control, Registry, Tier},
 		};
 		let stats = Registry::new(Default::default());
-		let session = stats.tier(Tier::new("internal")).session("");
+		let session = stats.tier(Tier::new(Path::new("internal").unwrap())).session(Path::new("").unwrap());
 		let gate = kio::Producer::new(false);
 		let mut writer =
 			Writer::new(SinkSend::gated(Log::default(), gate.consume()), lite::Version::Lite07).with_stats(&session);
@@ -432,11 +433,11 @@ mod tests {
 		assert!(writer.poll_flush(&mut Context::from_waker(Waker::noop())).is_pending());
 		assert_eq!(
 			stats.snapshot().control(),
-			vec![(Tier::new("internal"), Control::Probe, Bytes { tx: size, rx: 0 })]
+			vec![(Tier::new(Path::new("internal").unwrap()), Control::Probe, Bytes { tx: size, rx: 0 })]
 		);
 		writer
 			.buffer(&lite::Track {
-				broadcast: "test".into(),
+				broadcast: Path::new("test").unwrap(),
 				epoch: None,
 				track: "video".into(),
 			})

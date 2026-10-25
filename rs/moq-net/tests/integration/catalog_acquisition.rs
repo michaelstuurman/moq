@@ -2,6 +2,7 @@
 
 //! Initial catalog acquisition while the same publisher gains a second session.
 
+use moq_net::Path;
 use crate::support;
 
 use moq_net::{Error, Hop, Version, origin};
@@ -27,14 +28,14 @@ async fn acquisition(version: &str, carries_epoch: bool) {
 	let version: Version = version.parse().unwrap();
 	let publisher = origin(1);
 	let subscriber = origin(2);
-	let broadcast = publisher.create_broadcast("live").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("live").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast
 		.announce(origin::Route::default().with_epoch(moq_net::Epoch::mint()))
 		.unwrap();
 	let _old = link(version, &publisher, &subscriber, 100).await;
-	let remote = subscriber.consume().routed_broadcast("live").await.unwrap();
-	let mut announced = subscriber.consume().follow("live").unwrap();
+	let remote = subscriber.consume().routed_broadcast(Path::new("live").unwrap()).await.unwrap();
+	let mut announced = subscriber.consume().follow(Path::new("live").unwrap()).unwrap();
 	let old_cost = match announced.next().await {
 		Some(moq_net::announce::Event::Start(announce)) => announce.route.cost,
 		other => panic!("expected the first route, got {other:?}"),

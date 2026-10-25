@@ -8,6 +8,7 @@
 //! last until those groups drain: a relay cancels its upstream subscription once nobody
 //! subscribes, and the publisher then resets every group still on the wire.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -60,7 +61,7 @@ enum Arrival {
 async fn round(name: &str, arrival: Arrival) -> (Vec<u64>, Result<(), moq_net::Error>) {
 	let version: Version = name.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let mut track = broadcast.create_track("tail", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -77,11 +78,11 @@ async fn round(name: &str, arrival: Arrival) -> (Vec<u64>, Result<(), moq_net::E
 	let downstream = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

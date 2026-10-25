@@ -3,6 +3,7 @@
 //! Hop IDs span 64 bits. A link whose varint stops at 2^62 - 1 carries a larger
 //! one as 0, the reserved unknown hop.
 
+use moq_net::Path;
 use crate::support;
 
 use moq_net::{Hop, Version, cache, origin};
@@ -28,13 +29,13 @@ async fn widest_hop_crosses_each_varint_form() {
 		let upstream: Version = "moq-transport-18".parse().unwrap();
 		let _upstream = peer(upstream, &source, &relay).await;
 		let _downstream = peer(downstream.parse().unwrap(), &relay, &sink).await;
-		let _route = source.dynamic_route("room", origin::Route::default()).unwrap();
+		let _route = source.dynamic_route(Path::new("room").unwrap(), origin::Route::default()).unwrap();
 		moq_clock::sim::idle().await;
 
 		let ids = |route: origin::Route| route.hops.iter().map(|hop| hop.id()).collect::<Vec<_>>();
-		let at_relay = relay.consume().routed("room").await.expect("relay learned the route");
+		let at_relay = relay.consume().routed(Path::new("room").unwrap()).await.expect("relay learned the route");
 		assert_eq!(ids(at_relay), [u64::MAX], "{downstream}");
-		let at_sink = sink.consume().routed("room").await.expect("sink learned the route");
+		let at_sink = sink.consume().routed(Path::new("room").unwrap()).await.expect("sink learned the route");
 		assert_eq!(ids(at_sink), [forwarded, 2], "{downstream}");
 	}
 }

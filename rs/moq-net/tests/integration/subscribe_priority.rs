@@ -3,6 +3,7 @@
 //! One upstream subscription carries the aggregate priority of the subscribers it serves,
 //! and follows it as they come and go, directly and through a relay.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -60,7 +61,7 @@ async fn priority(track: &moq_net::track::Producer, want: i8) -> Result<(), Stri
 /// publisher sees the priority rise and fall back.
 async fn follows(version: Version, relay: bool) -> Result<(), String> {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast
 		.create_track("video", Info::default().with_timescale(Timescale::MILLI))
 		.unwrap();
@@ -77,11 +78,11 @@ async fn follows(version: Version, relay: bool) -> Result<(), String> {
 	}
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

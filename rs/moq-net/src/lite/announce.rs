@@ -634,7 +634,7 @@ mod tests {
 		let version = Version::Lite02;
 		let mut wire = Vec::new();
 		AnnounceInit {
-			suffixes: vec![Path::new("a"), Path::new(""), Path::new("b")],
+			suffixes: vec![Path::new("a").unwrap(), Path::new("").unwrap(), Path::new("b").unwrap()],
 		}
 		.encode(&mut Encoder::new(&mut wire, version.into()), version)
 		.unwrap();
@@ -691,7 +691,7 @@ mod tests {
 		let mut buf = Vec::new();
 		AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: PathRef::literal(Path::new("foo/bar")),
+			suffix: PathRef::literal(Path::new("foo/bar").unwrap()),
 			hops: HopsRef::default(),
 			cost: Cost::default(),
 		}
@@ -782,14 +782,14 @@ mod tests {
 		hops.push(Hop::new(7).unwrap()).unwrap();
 		let msg = AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: PathRef::literal(Path::new("room/cam")),
+			suffix: PathRef::literal(Path::new("room/cam").unwrap()),
 			hops: HopsRef::literal(hops.clone()),
 			cost: Cost::UNKNOWN,
 		};
 		assert_eq!(broadcast_round_trip(&msg, Version::Lite05), msg);
 
 		let ended = AnnounceBroadcast::Ended {
-			suffix: Path::new("room/cam"),
+			suffix: Path::new("room/cam").unwrap(),
 			hops: Hops::new(),
 		};
 		assert_eq!(broadcast_round_trip(&ended, Version::Lite05), ended);
@@ -805,7 +805,7 @@ mod tests {
 
 		let active = AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: PathRef::literal(Path::new("room/cam")),
+			suffix: PathRef::literal(Path::new("room/cam").unwrap()),
 			hops: HopsRef::literal(hops.clone()),
 			cost,
 		};
@@ -834,7 +834,7 @@ mod tests {
 			suffix: PathRef {
 				base: 2,
 				keep: 3,
-				rest: Path::new("cam"),
+				rest: Path::new("cam").unwrap(),
 			},
 			hops: HopsRef {
 				base: 1,
@@ -926,7 +926,7 @@ mod tests {
 			suffix: PathRef {
 				base: 1,
 				keep: 1,
-				rest: Path::new("cam"),
+				rest: Path::new("cam").unwrap(),
 			},
 			hops: HopsRef::default(),
 			cost: Cost::default(),
@@ -960,7 +960,7 @@ mod tests {
 		));
 		assert!(matches!(
 			AnnounceBroadcast::Ended {
-				suffix: Path::new("room/cam"),
+				suffix: Path::new("room/cam").unwrap(),
 				hops: Hops::new()
 			}
 			.encode(&mut Encoder::new(&mut buf, Version::Lite06.into()), Version::Lite06),
@@ -976,7 +976,7 @@ mod tests {
 	fn route_cost_is_dropped_before_lite06() {
 		let msg = AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: PathRef::literal(Path::new("room/cam")),
+			suffix: PathRef::literal(Path::new("room/cam").unwrap()),
 			hops: HopsRef::default(),
 			cost: Cost::new(9),
 		};
@@ -985,7 +985,7 @@ mod tests {
 			got,
 			AnnounceBroadcast::Active {
 				epoch: None,
-				suffix: PathRef::literal(Path::new("room/cam")),
+				suffix: PathRef::literal(Path::new("room/cam").unwrap()),
 				hops: HopsRef::default(),
 				cost: Cost::UNKNOWN,
 			}
@@ -1008,7 +1008,7 @@ mod tests {
 	#[test]
 	fn unknown_announce_type_is_skipped() {
 		let mut body = Vec::new();
-		Path::new("room/cam")
+		Path::new("room/cam").unwrap()
 			.encode(&mut Encoder::new(&mut body, Version::Lite06.into()), Version::Lite06)
 			.unwrap();
 		Hops::new()
@@ -1061,7 +1061,7 @@ mod tests {
 	fn announce_request_carries_hidden_from_lite07() {
 		for hidden in [false, true] {
 			let msg = AnnounceRequest {
-				prefix: Path::new("room/"),
+				prefix: Path::new("room").unwrap(),
 				exclude_hop: Hop::UNKNOWN,
 				hidden,
 			};
@@ -1075,7 +1075,7 @@ mod tests {
 	fn announce_request_rejects_a_bad_hidden_flag() {
 		let mut buf = Vec::new();
 		let mut body = Vec::new();
-		Path::new("room")
+		Path::new("room").unwrap()
 			.encode(&mut Encoder::new(&mut body, Version::Lite07.into()), Version::Lite07)
 			.unwrap();
 		body.push(2);
@@ -1091,7 +1091,7 @@ mod tests {
 	#[test]
 	fn announce_request_carries_exclude_hop_on_lite05() {
 		let msg = AnnounceRequest {
-			prefix: Path::new("room/"),
+			prefix: Path::new("room").unwrap(),
 			exclude_hop: Hop::new(42).unwrap(),
 			hidden: false,
 		};
@@ -1103,7 +1103,7 @@ mod tests {
 	#[test]
 	fn announce_request_drops_exclude_hop_on_lite06() {
 		let msg = AnnounceRequest {
-			prefix: Path::new("room/"),
+			prefix: Path::new("room").unwrap(),
 			exclude_hop: Hop::new(42).unwrap(),
 			hidden: false,
 		};

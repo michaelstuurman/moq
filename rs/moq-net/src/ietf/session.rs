@@ -1544,6 +1544,7 @@ async fn enforce_grant(auth: crate::auth::Link, publisher: Publisher, mut sessio
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 	use crate::model::ProduceTest;
 
 	/// The peer's IMPLEMENTATION option is read alongside what it declared, and one that
@@ -1667,7 +1668,7 @@ mod tests {
 							} else {
 								ietf::TrackStatus {
 									request_id: RequestId(id),
-									track_namespace: crate::Path::from("test"),
+									track_namespace: crate::Path::new("test").unwrap(),
 									track_name: "video".into(),
 									properties_wanted: true,
 									epoch: None,
@@ -1871,7 +1872,7 @@ mod tests {
 		writer.varint(ietf::Namespace::ID).await.unwrap();
 		writer
 			.encode(&ietf::Namespace {
-				suffix: crate::Path::new("cam"),
+				suffix: crate::Path::new("cam").unwrap(),
 				params: None,
 			})
 			.await
@@ -1959,7 +1960,7 @@ mod tests {
 			.map(|prefix| crate::Pattern::subtree(prefix).unwrap())
 			.collect();
 		let scoped = origin
-			.scope("rootns", &scope)
+			.scope(Path::new("rootns").unwrap(), &scope)
 			.expect("scope the origin to two prefixes");
 		let _watch = scoped.consume().announced();
 
@@ -2016,7 +2017,7 @@ mod tests {
 		);
 		let msg = ietf::SubscribeNamespaceLegacy {
 			request_id,
-			namespace: crate::Path::new(namespace),
+			namespace: crate::Path::new(namespace).unwrap(),
 			subscribe_options: ietf::SubscribeOptions::Namespace,
 			hidden: false,
 		};
@@ -2030,7 +2031,7 @@ mod tests {
 		let log = crate::lite::test_transport::Log::default();
 		let mut writer = Writer::new(crate::lite::test_transport::SinkSend::new(log.clone()), version);
 		let msg = ietf::UnsubscribeNamespace {
-			prefix: crate::Path::new(prefix),
+			prefix: crate::Path::new(prefix).unwrap(),
 			request_id,
 		};
 		writer.varint(ietf::UnsubscribeNamespace::ID).await.unwrap();
@@ -2042,7 +2043,7 @@ mod tests {
 	fn watch(origin: &crate::origin::Producer, prefix: &str) -> crate::announce::Consumer {
 		origin
 			.consume()
-			.scope(prefix, &crate::Patterns::from(crate::Pattern::all()))
+			.scope(Path::new(prefix).unwrap(), &crate::Patterns::from(crate::Pattern::all()))
 			.unwrap()
 			.announced()
 	}
@@ -2343,7 +2344,7 @@ mod tests {
 	/// enough: the question is only whether the bytes went out unasked.
 	async fn announce_occurrences(peer_declared: Option<peer::Peer>) -> usize {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-		let _cam = origin.announce("solo-cam", crate::origin::Route::default()).unwrap();
+		let _cam = origin.announce(Path::new("solo-cam").unwrap(), crate::origin::Route::default()).unwrap();
 
 		// An open gate: an unsolicited PUBLISH_NAMESPACE can reach the wire.
 		let gate = kio::Producer::new(true);
@@ -2449,7 +2450,7 @@ mod tests {
 
 	fn auth_session(auth: bool) -> AuthSession {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-		let cam = origin.announce("solo-cam", crate::origin::Route::default()).unwrap();
+		let cam = origin.announce(Path::new("solo-cam").unwrap(), crate::origin::Route::default()).unwrap();
 
 		let gate = kio::Producer::new(true);
 		let session = crate::lite::test_transport::SinkSession::gated_bi(gate.consume());
@@ -2991,7 +2992,7 @@ mod tests {
 			max_age: None,
 			new_group: None,
 			request_id: RequestId(1),
-			track_namespace: crate::Path::new("room"),
+			track_namespace: crate::Path::new("room").unwrap(),
 			track_name: "video".into(),
 			subscriber_priority: 128,
 			group_order: ietf::GroupOrder::Descending,
@@ -3010,7 +3011,7 @@ mod tests {
 		// Stall before the type, then after it while the body has not arrived.
 		for stalled in [Vec::new(), vec![ietf::Subscribe::ID as u8]] {
 			let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-			let broadcast = origin.publish("room", crate::origin::Route::default()).unwrap();
+			let broadcast = origin.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 			let mut track = broadcast.create_track("video", None).unwrap();
 			let session = crate::lite::test_transport::ScriptedSession::new(Vec::new())
 				.with_incoming_bidis(vec![stalled, subscribe.clone()]);
@@ -3322,7 +3323,7 @@ mod tests {
 		writer
 			.encode(&ietf::PublishNamespace {
 				request_id: RequestId(1),
-				track_namespace: crate::Path::new("room/host"),
+				track_namespace: crate::Path::new("room/host").unwrap(),
 				params: Default::default(),
 				authorization_token: None,
 			})
@@ -3333,7 +3334,7 @@ mod tests {
 			writer.varint(ietf::PublishNamespaceDone::ID).await.unwrap();
 			writer
 				.encode(&ietf::PublishNamespaceDone {
-					track_namespace: crate::Path::new("room/host"),
+					track_namespace: crate::Path::new("room/host").unwrap(),
 					request_id: RequestId(0),
 				})
 				.await
@@ -3409,7 +3410,7 @@ mod tests {
 
 		let accepted = publish_namespace_ok(RequestId(1)).await;
 		for _ in 0..ANNOUNCE_TURNS {
-			if occurrences(&log, &accepted) > 0 && consumer.get_broadcast("room/host").is_none() {
+			if occurrences(&log, &accepted) > 0 && consumer.get_broadcast(Path::new("room/host").unwrap()).is_none() {
 				break;
 			}
 			moq_clock::sleep(std::time::Duration::from_millis(1)).await;
@@ -3417,7 +3418,7 @@ mod tests {
 
 		assert_eq!(occurrences(&log, &accepted), 1, "the advertisement was not accepted");
 		assert!(
-			consumer.get_broadcast("room/host").is_none(),
+			consumer.get_broadcast(Path::new("room/host").unwrap()).is_none(),
 			"the withdrawal did not reach the request that advertised it"
 		);
 		assert!(!driver.is_finished(), "the repeated withdrawal ended the session");
@@ -3431,7 +3432,7 @@ mod tests {
 			max_age: None,
 			new_group: None,
 			request_id: RequestId(0),
-			track_namespace: crate::Path::new("room"),
+			track_namespace: crate::Path::new("room").unwrap(),
 			track_name: "video".into(),
 			subscriber_priority: 128,
 			group_order: ietf::GroupOrder::Descending,
@@ -3981,7 +3982,7 @@ mod tests {
 		let mut body = Vec::new();
 		ietf::SubscribeNamespace {
 			request_id: RequestId(request_id),
-			namespace: crate::Path::new(""),
+			namespace: crate::Path::new("").unwrap(),
 			hidden: false,
 		}
 		.encode_msg(&mut crate::coding::Encoder::new(&mut body, version.into()), version)

@@ -2,6 +2,7 @@
 
 //! Moxygen announces one prefix, then serves its sixteen-field test namespaces.
 
+use moq_net::Path;
 use crate::support::harness::{MockConnectOptions, connect_mock, spawn};
 use moq_net::{Hop, Version, broadcast, origin};
 use std::sync::Arc;
@@ -21,7 +22,7 @@ async fn routing(version: &str, cluster: bool) {
 	let publisher = origin(1);
 	let relay = origin(2);
 	let reader = origin(4);
-	let prefix = Arc::new(publisher.dynamic_route(PREFIX, Default::default()).unwrap());
+	let prefix = Arc::new(publisher.dynamic_route(Path::new(PREFIX).unwrap(), Default::default()).unwrap());
 	let broadcast = broadcast::Info::new().produce();
 	let track = broadcast.create_track("test", moq_net::track::Info::default()).unwrap();
 	let serving = prefix.clone();
@@ -53,8 +54,8 @@ async fn routing(version: &str, cluster: bool) {
 	options.client_subscribe = Some(reader.clone());
 	links.push(connect_mock(options).await);
 
-	reader.consume().routed(NAMESPACE).await.unwrap();
-	let remote = reader.consume().request_broadcast(NAMESPACE, None).await.unwrap();
+	reader.consume().routed(Path::new(NAMESPACE).unwrap()).await.unwrap();
+	let remote = reader.consume().request_broadcast(Path::new(NAMESPACE).unwrap(), None).await.unwrap();
 	let mut subscription = remote.track("test").unwrap().subscribe(None).await.unwrap();
 	crate::support::harness::subscribed(&track).await;
 	let mut group = track.append_group().unwrap();

@@ -303,7 +303,7 @@ pub fn excluding(origin: crate::origin::Consumer, peer: crate::Hop) -> crate::or
 pub struct Snapshot(#[allow(dead_code, reason = "held for its drop, which lands the snapshot")] crate::model::Snapshot);
 
 /// Start a snapshot under `prefix`, as a session requesting announcements there does.
-pub fn snapshot(origin: &crate::origin::Producer, prefix: &str) -> Snapshot {
+pub fn snapshot(origin: &crate::origin::Producer, prefix: &Path) -> Snapshot {
 	Snapshot(origin.snapshot(prefix))
 }
 
@@ -369,13 +369,13 @@ impl Meter {
 }
 
 /// Build a session-local payload meter without exposing the model's private stats carriers.
-pub fn session_meter(registry: &crate::stats::Registry, tier: crate::stats::Tier, label: &str, path: &str) -> Meter {
+pub fn session_meter(registry: &crate::stats::Registry, tier: crate::stats::Tier, label: &Path, path: &Path) -> Meter {
 	let session = registry.tier(tier).session(label);
 	Meter(session.egress(path).meter())
 }
 
 /// Build the original per-path-only payload meter as the benchmark baseline.
-pub fn path_meter(registry: &crate::stats::Registry, tier: &crate::stats::Tier, path: &str) -> Meter {
+pub fn path_meter(registry: &crate::stats::Registry, tier: &crate::stats::Tier, path: &Path) -> Meter {
 	Meter(registry.publisher_meter(path, tier))
 }
 
@@ -484,7 +484,7 @@ impl LiteSample {
 				order: crate::track::Order::Descending,
 				epoch: None,
 				id: 3,
-				broadcast: Path::new("room/alice"),
+				broadcast: Path::new("room/alice").unwrap(),
 				track: "video".into(),
 				priority: 2,
 				max_delay: std::time::Duration::from_secs(10),
@@ -678,7 +678,7 @@ impl Default for Messages {
 				order: crate::track::Order::Descending,
 				epoch: None,
 				id: 7,
-				broadcast: Path::new("room/alice"),
+				broadcast: Path::new("room/alice").unwrap(),
 				track: "video".into(),
 				priority: 3,
 				max_delay: Duration::from_millis(500),
@@ -717,7 +717,7 @@ impl Default for Messages {
 				max_age: None,
 				new_group: None,
 				request_id: ietf::RequestId(2),
-				track_namespace: Path::new("room/alice"),
+				track_namespace: Path::new("room/alice").unwrap(),
 				track_name: "video".into(),
 				subscriber_priority: 128,
 				group_order: ietf::GroupOrder::Descending,
@@ -839,12 +839,19 @@ pub fn path(data: &[u8]) -> bool {
 	};
 
 	let (target, base) = text.split_once('\n').unwrap_or((text, ""));
-	let target = Path::new(target);
-	let base = Path::new(base);
 
-	// Normalization is a fixed point: re-parsing what `as_str` printed changes nothing,
-	// or every path that made a round trip through the wire would drift.
-	assert_eq!(Path::new(target.as_str()), target, "normalization is not idempotent");
+	// A spelling is refused exactly when it has an empty segment, so each path has one.
+	for s in [target, base] {
+		let empty = !s.is_empty() && s.split('/').any(str::is_empty);
+		assert_eq!(Path::new(s).is_err(), empty, "{s:?} was refused wrongly");
+	}
+	let (Ok(target), Ok(base)) = (Path::new(target), Path::new(base)) else {
+		return false;
+	};
+
+	// A path's own spelling parses back to it, or every path that made a round trip
+	// through the wire would drift.
+	assert_eq!(Path::new(target.as_str()).expect("a path's spelling is valid"), target);
 	assert_eq!(target.to_owned(), target, "owning a path changed it");
 	assert_eq!(target.borrow(), target, "borrowing a path changed it");
 	assert_eq!(target.parts().collect::<Vec<_>>().join("/"), target.as_str());
@@ -1040,7 +1047,7 @@ pub fn seeds() -> Vec<Seed> {
 				group_id: 0,
 			},
 			ietf::FetchType::Filtered {
-				namespace: crate::Path::new("a"),
+				namespace: crate::Path::new("a").unwrap(),
 				track: "b".into(),
 				filter: ietf::Filter::Relative(1),
 			},
@@ -1103,7 +1110,7 @@ pub fn seeds() -> Vec<Seed> {
 	let mut announced = Vec::new();
 	let hop = |id: u64| crate::Hop::new(id).expect("a valid hop");
 	for n in 0..12u64 {
-		let suffix = PathOwned::from(format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2));
+		let suffix = PathOwned::try_from(format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2)).unwrap();
 		let hops = Hops::try_from(vec![hop(100 + n % 3), hop(1 << 40), hop(1 << 41)]).expect("valid hops");
 		announced.push(Announced::Start(suffix, hops));
 		if n % 4 == 3 {
@@ -1363,13 +1370,13 @@ mod tests {
 		let registry = crate::stats::Registry::new(crate::stats::Config::new());
 		let (origin, driver) = crate::origin::Producer::new(crate::origin::Config::default());
 		let _driver = driver;
-		let tier = crate::stats::Tier::new("t");
-		let session = registry.tier(tier.clone()).session("root");
-		let _broadcast = origin.publish("room/1", crate::origin::Route::default()).unwrap();
+		let tier = crate::stats::Tier::new(Path::new("t").unwrap());
+		let session = registry.tier(tier.clone()).session(Path::new("root").unwrap());
+		let _broadcast = origin.publish(Path::new("room/1").unwrap(), crate::origin::Route::default()).unwrap();
 		let mut cursor = origin.consume().with_stats(session).announced();
 		while cursor.next().now_or_never().flatten().is_some() {}
 
-		bump_publisher_bytes(&registry, "room/1", &tier, 5);
+		bump_publisher_bytes(&registry, Path::new("room/1").unwrap(), &tier, 5);
 		let mut report = crate::stats::Report::default();
 		registry.report(&mut report);
 		registry.report(&mut report);

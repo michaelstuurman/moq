@@ -3205,6 +3205,7 @@ impl Fetch {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use crate::Path;
 	use crate::model::test_tracing::count_drop_warnings;
 	use bytes::Bytes;
 	#[cfg(feature = "async")]
@@ -4799,7 +4800,7 @@ mod test {
 	#[cfg(feature = "async")]
 	fn inflation_is_shared_and_stops_at_release() {
 		let registry = stats::Registry::new(stats::Config::new());
-		let meter = registry.publisher_meter("demo", &stats::Tier::default());
+		let meter = registry.publisher_meter(Path::new("demo").unwrap(), &stats::Tier::default());
 		let inflated = || {
 			registry
 				.snapshot()
@@ -4863,7 +4864,7 @@ mod test {
 				.map_or(0, |(_, _, traffic)| traffic.bytes)
 		};
 		let pool = cache::Pool::unbounded();
-		let meter = registry.publisher_meter("demo", &stats::Tier::default());
+		let meter = registry.publisher_meter(Path::new("demo").unwrap(), &stats::Tier::default());
 		let mut group = compressed_group(&pool).with_meter(meter);
 
 		group.write_frame(None, verbose(0)).unwrap();

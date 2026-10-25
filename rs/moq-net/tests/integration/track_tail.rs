@@ -11,6 +11,7 @@
 //!
 //! Time is paused, so the one-second grace for a group that never arrives is free.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -77,7 +78,7 @@ struct Pair {
 
 async fn connect(version: &str) -> Pair {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -88,11 +89,11 @@ async fn connect(version: &str) -> Pair {
 	let pair = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

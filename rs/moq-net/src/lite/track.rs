@@ -483,7 +483,7 @@ mod test {
 	fn track_request_roundtrips_on_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").unwrap().to_owned(),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();
@@ -491,7 +491,7 @@ mod test {
 			.unwrap();
 		let mut slice = buf.as_slice();
 		let got = crate::coding::decode_buf(&mut slice, Version::Lite05, Track::decode_msg).unwrap();
-		assert_eq!(got.broadcast, Path::new("room"));
+		assert_eq!(got.broadcast, Path::new("room").unwrap());
 		assert_eq!(got.track, "video");
 	}
 
@@ -499,7 +499,7 @@ mod test {
 	fn track_request_errors_before_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").unwrap().to_owned(),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();

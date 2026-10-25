@@ -7,6 +7,7 @@
 //! the hop into the subscriber and releases them by send order, the way a congested
 //! sender would transmit them.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -47,12 +48,12 @@ async fn connect(
 fn read_arrivals(origin: moq_net::origin::Producer, order: Order) -> moq_clock::sim::JoinHandle<Vec<u64>> {
 	moq_clock::sim::spawn(async move {
 		let consumer = origin.consume();
-		moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+		moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 			.await
 			.expect("announce timeout")
 			.expect("routed");
 		let remote = consumer
-			.request_broadcast("bcast", None)
+			.request_broadcast(Path::new("bcast").unwrap(), None)
 			.await
 			.expect("broadcast resolves");
 		let subscription = Subscription::default()
@@ -114,7 +115,7 @@ fn carries_order(version: &str) -> bool {
 async fn round(version: &str, relay: bool, order: Order) -> Vec<u64> {
 	let version: Version = version.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast
 		.create_track(
 			"ordered",
@@ -189,7 +190,7 @@ async fn merged_subscribers_keep_their_own_order() {
 	for version in ["moq-lite-07-wip", "moq-transport-17"] {
 		let version: Version = version.parse().unwrap();
 		let publisher = produce_origin(1);
-		let broadcast = publisher.create_broadcast("bcast").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		let track = broadcast
 			.create_track(
 				"ordered",

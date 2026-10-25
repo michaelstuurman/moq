@@ -578,6 +578,7 @@ impl Client {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 	use crate::model::ProduceTest;
 	use std::{
 		collections::VecDeque,
@@ -1059,7 +1060,7 @@ mod tests {
 			let fake = FakeSession::new(Some(ALPN_LITE_04), Vec::new());
 			let client = Client::new()
 				.with_versions(Version::Lite(lite::Version::Lite04).into())
-				.with_stats(registry.tier(Tier::default()).session("root"));
+				.with_stats(registry.tier(Tier::default()).session(Path::new("root").unwrap()));
 			let runtime = crate::time::Deadlines::new(crate::time::Instant::now());
 			let (session, mut driver) = futures::executor::block_on(client.connect(runtime.now(), fake)).unwrap();
 			session.abort(abort);
@@ -1091,7 +1092,7 @@ mod tests {
 		let registry = Registry::new(Default::default());
 		let client = Client::new()
 			.with_versions(Version::Lite(lite::Version::Lite04).into())
-			.with_stats(registry.tier(Tier::default()).session("root"));
+			.with_stats(registry.tier(Tier::default()).session(Path::new("root").unwrap()));
 		let runtime = crate::time::Deadlines::new(crate::time::Instant::now());
 		let mut task = Transport::new(FakeSession::new(Some(ALPN_LITE_04), Vec::new()));
 		let (session, mut driver) =

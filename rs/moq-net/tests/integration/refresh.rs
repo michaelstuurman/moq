@@ -1,6 +1,7 @@
 #![cfg(feature = "async")]
 
 //! Refresh joins traverse real protocol hops, judged independently from each cache.
+use moq_net::Path;
 use crate::support::harness::{MockConnectOptions, connect_mock, peer, spawn, subscribed};
 use moq_net::{Hop, Version, origin, track};
 use std::time::Duration;
@@ -26,7 +27,7 @@ async fn json_snapshot_refresh_crosses_a_two_relay_cluster() {
 		let a = origin(2);
 		let b = origin(3);
 		let reader = origin(4);
-		let broadcast = source.create_broadcast("room").unwrap();
+		let broadcast = source.create_broadcast(Path::new("room").unwrap()).unwrap();
 		let track = broadcast
 			.create_track(
 				"state",
@@ -44,8 +45,8 @@ async fn json_snapshot_refresh_crosses_a_two_relay_cluster() {
 			options.client_subscribe = Some(downstream.clone());
 			links.push(connect_mock(options).await);
 		}
-		reader.consume().routed("room").await.unwrap();
-		let remote = reader.consume().request_broadcast("room", None).await.unwrap();
+		reader.consume().routed(Path::new("room").unwrap()).await.unwrap();
+		let remote = reader.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 		let remote = remote.track("state").unwrap();
 		let mut baseline = remote.subscribe(None).await.unwrap();
 		assert_eq!(baseline.info().refresh, Some(ratio));
@@ -151,7 +152,7 @@ async fn ratio_joins_cross_two_relays() {
 		let source = origin(1);
 		let a = origin(2);
 		let b = origin(3);
-		let broadcast = source.create_broadcast("room").unwrap();
+		let broadcast = source.create_broadcast(Path::new("room").unwrap()).unwrap();
 		let producer = broadcast
 			.create_track("data", track::Info::default().with_refresh(1))
 			.unwrap();
@@ -163,8 +164,8 @@ async fn ratio_joins_cross_two_relays() {
 			options.client_subscribe = Some(downstream.clone());
 			links.push(connect_mock(options).await);
 		}
-		b.consume().routed("room").await.unwrap();
-		let remote = b.consume().request_broadcast("room", None).await.unwrap();
+		b.consume().routed(Path::new("room").unwrap()).await.unwrap();
+		let remote = b.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 		let remote = remote.track("data").unwrap();
 		let mut baseline = remote.subscribe(None).await.unwrap();
 		assert_eq!(baseline.info().refresh, (name == "moq-lite-07-wip").then_some(1));

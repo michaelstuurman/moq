@@ -6,6 +6,7 @@
 //! contradicts a received group, which the relay treats as a protocol violation and closes
 //! the whole session.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -43,7 +44,7 @@ async fn serve(
 async fn empty_replacement_ends_after_the_cached_group(version: &str) {
 	let version: Version = version.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("room").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -54,11 +55,11 @@ async fn empty_replacement_ends_after_the_cached_group(version: &str) {
 	let pair = connect_mock(options).await;
 
 	let consumer = relay.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("room"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("room").unwrap()))
 		.await
 		.unwrap()
 		.unwrap();
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("room", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("room").unwrap(), None))
 		.await
 		.unwrap()
 		.unwrap();

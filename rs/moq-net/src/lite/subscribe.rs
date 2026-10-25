@@ -776,7 +776,7 @@ mod test {
 			order: crate::track::Order::Descending,
 			epoch: None,
 			id: 1,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").unwrap().to_owned(),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: std::time::Duration::from_millis(250),

@@ -557,7 +557,7 @@ mod tests {
 		let mut body = Vec::new();
 		let w = &mut Encoder::new(&mut body, version.into());
 		RequestId(1).encode(w, version)?;
-		super::super::namespace::encode_namespace(w, &crate::Path::new("broadcast"))?;
+		super::super::namespace::encode_namespace(w, &crate::Path::new("broadcast").unwrap())?;
 		w.string("video")?;
 		w.varint(1u64)?; // track alias
 
@@ -580,7 +580,7 @@ mod tests {
 		let mut body = Vec::new();
 		let w = &mut Encoder::new(&mut body, version.into());
 		RequestId(1).encode(w, version)?;
-		super::super::namespace::encode_namespace(w, &crate::Path::new("broadcast"))?;
+		super::super::namespace::encode_namespace(w, &crate::Path::new("broadcast").unwrap())?;
 		w.string("video")?;
 		w.varint(1u64)?;
 		encode_params!(w, version, 0x20 => 128u8);
@@ -606,7 +606,7 @@ mod tests {
 	fn test_publish_v14_round_trip() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::new("test/ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: Some(Location { group: 10, object: 5 }),
@@ -635,7 +635,7 @@ mod tests {
 	fn test_publish_v15_round_trip() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::new("test/ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: Some(Location { group: 10, object: 5 }),
@@ -702,7 +702,7 @@ mod tests {
 	fn test_publish_v17_round_trip() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::new("test/ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: Some(Location { group: 10, object: 5 }),
@@ -753,7 +753,7 @@ mod tests {
 		if version == Version::Draft17 {
 			w.varint(0).unwrap();
 		}
-		encode_namespace(w, &Path::new("t")).unwrap();
+		encode_namespace(w, &Path::new("t").unwrap()).unwrap();
 		w.string("v").unwrap();
 		w.varint(1).unwrap();
 		w.varint(1).unwrap();
@@ -866,7 +866,7 @@ mod tests {
 	fn test_publish_v18_round_trip() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::new("test/ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: Some(Location { group: 10, object: 5 }),
@@ -906,7 +906,7 @@ mod tests {
 		] {
 			let mut msg = Publish {
 				request_id: RequestId(1),
-				track_namespace: Path::new("ns"),
+				track_namespace: Path::new("ns").unwrap(),
 				track_name: "video".into(),
 				track_alias: 42,
 				largest_location: None,
@@ -942,7 +942,7 @@ mod tests {
 	fn test_publish_v18_group_order_is_a_property() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("ns"),
+			track_namespace: Path::new("ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: None,
@@ -984,7 +984,7 @@ mod tests {
 	fn test_publish_v15_group_order_is_a_parameter() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("ns"),
+			track_namespace: Path::new("ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: None,
@@ -1026,7 +1026,7 @@ mod tests {
 	fn test_publish_v18_is_one_byte_shorter_than_v17() {
 		let msg = Publish {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::new("test/ns").unwrap(),
 			track_name: "video".into(),
 			track_alias: 42,
 			largest_location: None,

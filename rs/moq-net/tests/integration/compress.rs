@@ -5,6 +5,7 @@
 //! Negotiated IETF and lite-07 hops keep DEFLATE slices as received. Peers that cannot
 //! signal compression receive the plain frames the relay inflates once for all of them.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -62,7 +63,7 @@ struct Published {
 /// Announce one track described by `info`.
 fn publish(info: moq_net::track::Info) -> Published {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast.create_track("data", info).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	Published {
@@ -105,8 +106,8 @@ async fn relay(published: Published, hops: [&str; 2], subscription: moq_net::tra
 	let downstream = connect_mock(options).await;
 
 	let consumer = origin.consume();
-	consumer.routed("bcast").await.unwrap();
-	let remote = consumer.request_broadcast("bcast", None).await.unwrap();
+	consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
+	let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
 	let subscriber = remote.track("data").unwrap().subscribe(subscription).await.unwrap();
 	support::harness::subscribed(&track).await;
 
@@ -286,7 +287,7 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 	for &version in &["moq-lite-07-wip", "moq-lite-06"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
-			let broadcast = publisher.create_broadcast("bcast").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 			let mut track = broadcast.create_track("data", compressed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
@@ -296,7 +297,7 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 			let mut options = MockConnectOptions::new("moq-lite-07-wip".parse::<Version>().unwrap());
 			options.client_publish = Some(publisher.consume());
 			options.server_subscribe = Some(relay.clone());
-			options.server_stats = ingress.tier(Default::default()).session("ingress");
+			options.server_stats = ingress.tier(Default::default()).session(Path::new("ingress").unwrap());
 			let upstream = connect_mock(options).await;
 
 			let origin = produce_origin(3);
@@ -304,12 +305,12 @@ async fn datagrams_meter_the_bytes_on_the_wire() {
 			let mut options = MockConnectOptions::new(version.parse::<Version>().unwrap());
 			options.server_publish = Some(relay.consume());
 			options.client_subscribe = Some(origin.clone());
-			options.server_stats = egress.tier(Default::default()).session("egress");
+			options.server_stats = egress.tier(Default::default()).session(Path::new("egress").unwrap());
 			let downstream = connect_mock(options).await;
 
 			let consumer = origin.consume();
-			consumer.routed("bcast").await.unwrap();
-			let remote = consumer.request_broadcast("bcast", None).await.unwrap();
+			consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
 			let mut subscriber = remote.track("data").unwrap().subscribe(None).await.unwrap();
 			support::harness::subscribed(&track).await;
 
@@ -400,7 +401,7 @@ async fn ietf_fetch_keeps_the_stored_form() {
 	for version in ["moq-transport-16", "moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
-			let broadcast = publisher.create_broadcast("bcast").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 			let track = broadcast.create_track("data", compressed()).unwrap();
 			let mut group = track.append_group().unwrap();
 			for index in 0..3 {
@@ -416,8 +417,8 @@ async fn ietf_fetch_keeps_the_stored_form() {
 			options.server_publish = Some(publisher.consume());
 			options.client_subscribe = Some(origin.clone());
 			let _pair = connect_mock(options).await;
-			origin.consume().routed("bcast").await.unwrap();
-			let remote = origin.consume().request_broadcast("bcast", None).await.unwrap();
+			origin.consume().routed(Path::new("bcast").unwrap()).await.unwrap();
+			let remote = origin.consume().request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
 			let consumer = remote.track("data").unwrap();
 			assert_eq!(consumer.query().await.unwrap().compress, version != "moq-transport-16");
 			let mut fetched = consumer.fetch_group(0, moq_net::group::Fetch::default()).await.unwrap();

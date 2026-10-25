@@ -112,7 +112,7 @@ mod test {
 	fn fetch_sample() -> Fetch<'static> {
 		Fetch {
 			epoch: None,
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").unwrap().to_owned(),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: None,
@@ -157,7 +157,7 @@ mod test {
 	fn fetch_roundtrips() {
 		for version in [Version::Lite03, Version::Lite04, Version::Lite05] {
 			let got = fetch_roundtrip(version, &fetch_sample());
-			assert_eq!(got.broadcast, Path::new("room"));
+			assert_eq!(got.broadcast, Path::new("room").unwrap());
 			assert_eq!(got.track, "video");
 			assert_eq!(got.priority, 3);
 			assert_eq!(got.group, 7);

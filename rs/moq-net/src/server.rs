@@ -1030,6 +1030,7 @@ impl Drop for Handshake {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 	use crate::Hop;
 	use crate::model::ProduceTest;
 	use std::{
@@ -1388,7 +1389,7 @@ mod tests {
 			.accept_request(start, session.clone())
 			.await
 			.unwrap()
-			.with_stats(registry.tier(Default::default()).session("room"))
+			.with_stats(registry.tier(Default::default()).session(Path::new("room").unwrap()))
 			.with_deadline(deadline);
 		let Err(err) = request.ok().await else {
 			panic!("a reply the peer never took completed");
@@ -1416,7 +1417,7 @@ mod tests {
 			.accept_request(moq_clock::now(), session.clone())
 			.await
 			.unwrap()
-			.with_stats(registry.tier(Default::default()).session("room"));
+			.with_stats(registry.tier(Default::default()).session(Path::new("room").unwrap()));
 		let abandoned = moq_clock::timeout(std::time::Duration::from_secs(1), request.ok()).await;
 		assert!(abandoned.is_err(), "a reply the peer never took completed");
 		assert_eq!(
@@ -1442,7 +1443,7 @@ mod tests {
 				.accept_request(moq_clock::now(), session)
 				.await
 				.unwrap()
-				.with_stats(registry.tier(Default::default()).session("room"))
+				.with_stats(registry.tier(Default::default()).session(Path::new("room").unwrap()))
 				.close(err.clone());
 			let failures = registry.snapshot().sessions()[0].1.sessions_failed;
 			for kind in stats::Failure::ALL {
@@ -1691,7 +1692,7 @@ mod tests {
 		echoed_hops.push(crate::Hop::UNKNOWN).unwrap();
 		let _echoed = origin
 			.announce(
-				"echoed-route",
+				Path::new("echoed-route").unwrap(),
 				crate::origin::Route::default()
 					.with_hops(echoed_hops)
 					.with_via(assigned),
@@ -1701,7 +1702,7 @@ mod tests {
 		let mut local_hops = crate::Hops::new();
 		local_hops.push(other).unwrap();
 		let _local = origin
-			.announce("local-route", crate::origin::Route::default().with_hops(local_hops))
+			.announce(Path::new("local-route").unwrap(), crate::origin::Route::default().with_hops(local_hops))
 			.unwrap();
 
 		let (session, driver) = request.ok().await.unwrap();

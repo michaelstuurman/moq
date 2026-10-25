@@ -8,6 +8,7 @@
 //! publisher watching its demand sees one `used` edge for a viewer, not `used`, `unused`,
 //! `used` with a round trip per hop in between.
 
+use moq_net::Path;
 use crate::support;
 
 use std::{cell::RefCell, rc::Rc, time::Duration};
@@ -100,7 +101,7 @@ async fn one_used_edge(version: &str, relays: usize, reorder: bool) {
 	}
 	let reader: &MockSession = &links.last().unwrap().client_transport;
 
-	let broadcast = nodes[0].create_broadcast("room").unwrap();
+	let broadcast = nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 	let broadcast_edges = record!(broadcast.demand());
@@ -124,11 +125,11 @@ async fn one_used_edge(version: &str, relays: usize, reorder: bool) {
 	});
 
 	let consumer = nodes.last().unwrap().consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("room"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("room").unwrap()))
 		.await
 		.unwrap_or_else(|_| panic!("{label}: never announced"))
 		.unwrap();
-	let remote = consumer.request_broadcast("room", None).await.unwrap();
+	let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 
 	let subscribing = remote.track("video").unwrap().subscribe(None);
 	if reorder {
@@ -203,7 +204,7 @@ async fn bare_handle_is_lazy(version: &str, relays: usize) {
 		links.push(link(version, &pair[0], &pair[1]).await);
 	}
 
-	let broadcast = nodes[0].create_broadcast("room").unwrap();
+	let broadcast = nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 	let broadcast_edges = record!(broadcast.demand());
@@ -220,11 +221,11 @@ async fn bare_handle_is_lazy(version: &str, relays: usize) {
 	});
 
 	let consumer = nodes.last().unwrap().consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("room"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("room").unwrap()))
 		.await
 		.unwrap_or_else(|_| panic!("{label}: never announced"))
 		.unwrap();
-	let remote = consumer.request_broadcast("room", None).await.unwrap();
+	let remote = consumer.request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 
 	let handle = remote.track("video").unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;

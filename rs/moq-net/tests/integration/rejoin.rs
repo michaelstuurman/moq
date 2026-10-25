@@ -2,6 +2,7 @@
 
 //! A reader leaving and rejoining a track relayed over the in-memory mock transport.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -45,7 +46,7 @@ async fn rejoin_recovers_the_group_reset_on_leave() {
 				let publisher = produce_origin(1);
 				let relay = produce_origin(2);
 
-				let broadcast = publisher.create_broadcast("bench").unwrap();
+				let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 				let track = broadcast.create_track("video", timed()).unwrap();
 				broadcast.announce(Default::default()).unwrap();
 
@@ -55,8 +56,8 @@ async fn rejoin_recovers_the_group_reset_on_leave() {
 				let _pair = connect_mock(options).await;
 
 				let consumer = relay.consume();
-				consumer.routed("bench").await.unwrap();
-				let remote = consumer.request_broadcast("bench", None).await.unwrap();
+				consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+				let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 
 				let ts = |ms| Timestamp::from_millis(ms).unwrap();
 				let prefs = || track::Subscription::default().with_max_delay(Duration::from_secs(10));
@@ -138,7 +139,7 @@ async fn rejoin_skips_a_cache_kept_by_another_handle() {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
@@ -148,8 +149,8 @@ async fn rejoin_skips_a_cache_kept_by_another_handle() {
 			let _pair = connect_mock(options).await;
 
 			let consumer = relay.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let ts = |ms| Timestamp::from_millis(ms).unwrap();
 
 			// Held for fetches only: it keeps the relay's copy without subscribing.
@@ -202,7 +203,7 @@ async fn rejoin_mid_group_keeps_the_head_for_later_readers() {
 			let relay = produce_origin(2);
 			let client = produce_origin(3);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 			// Left open, as a JSON snapshot group stays open for its deltas.
@@ -220,8 +221,8 @@ async fn rejoin_mid_group_keeps_the_head_for_later_readers() {
 			let _downstream = connect_mock(options).await;
 
 			let consumer = client.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let mut sub = remote.track("video").unwrap().subscribe(None).await.unwrap();
 			let mut group = sub.recv_group().await.unwrap().unwrap();
 			assert_eq!(group.read_frame().await.unwrap().unwrap().payload, b"a0".as_ref());
@@ -233,7 +234,7 @@ async fn rejoin_mid_group_keeps_the_head_for_later_readers() {
 			assert_eq!(rejoined.read_frame().await.unwrap().unwrap().payload, b"a0".as_ref());
 			crate::support::wanted(track.demand()).await.unwrap();
 
-			let later = relay.consume().request_broadcast("bench", None).await.unwrap();
+			let later = relay.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let mut sub = later.track("video").unwrap().subscribe(None).await.unwrap();
 			let mut group = sub.recv_group().await.unwrap().unwrap();
 			assert_eq!(group.sequence, 0, "{version}");
@@ -275,7 +276,7 @@ async fn rejoin_goes_live_without_the_join_head() {
 			let relay = produce_origin(2);
 			let client = produce_origin(3);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 			let mut open = track.append_group().unwrap();
@@ -292,8 +293,8 @@ async fn rejoin_goes_live_without_the_join_head() {
 			let _downstream = connect_mock(options).await;
 
 			let consumer = client.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let mut sub = remote.track("video").unwrap().subscribe(None).await.unwrap();
 			let mut group = sub.recv_group().await.unwrap().unwrap();
 			assert_eq!(group.read_frame().await.unwrap().unwrap().payload, b"a0".as_ref());
@@ -320,7 +321,7 @@ async fn rejoin_goes_live_without_the_join_head() {
 				.unwrap();
 			next.finish().unwrap();
 
-			let local = relay.consume().request_broadcast("bench", None).await.unwrap();
+			let local = relay.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let mut sub = local.track("video").unwrap().subscribe(None).await.unwrap();
 			let mut group = sub.recv_group().await.unwrap().unwrap();
 			assert_eq!(group.sequence, 1, "{version}");
@@ -345,7 +346,7 @@ async fn rejoin_during_the_cancel_skips_the_cache() {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
@@ -356,8 +357,8 @@ async fn rejoin_during_the_cancel_skips_the_cache() {
 			let _pair = connect_mock(options).await;
 
 			let consumer = relay.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let ts = |ms| Timestamp::from_millis(ms).unwrap();
 
 			let mut group = track.append_group().unwrap();
@@ -406,7 +407,7 @@ async fn rejoin_waits_for_the_answers_first_frame() {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
@@ -416,8 +417,8 @@ async fn rejoin_waits_for_the_answers_first_frame() {
 			let pair = connect_mock(options).await;
 
 			let consumer = relay.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			let ts = |ms| Timestamp::from_millis(ms).unwrap();
 
 			// Held for fetches only: it keeps the relay's copy without subscribing.
@@ -479,7 +480,7 @@ async fn leaving_after_the_cache_window_keeps_the_latest_group() {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("catalog", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 			let mut group = track.append_group().unwrap();
@@ -501,8 +502,8 @@ async fn leaving_after_the_cache_window_keeps_the_latest_group() {
 					options.client_subscribe = Some(client.clone());
 					let pair = connect_mock(options).await;
 					let consumer = client.consume();
-					consumer.routed("bench").await.unwrap();
-					let remote = consumer.request_broadcast("bench", None).await.unwrap();
+					consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+					let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 					(remote, pair)
 				}
 			};
@@ -554,7 +555,7 @@ async fn rejoin_keeps_source_timestamps() {
 			let publisher = produce_origin(1);
 			let client = produce_origin(2);
 
-			let broadcast = publisher.create_broadcast("bench").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 			let track = broadcast.create_track("video", timed()).unwrap();
 			broadcast.announce(Default::default()).unwrap();
 
@@ -564,8 +565,8 @@ async fn rejoin_keeps_source_timestamps() {
 			let _pair = connect_mock(options).await;
 
 			let consumer = client.consume();
-			consumer.routed("bench").await.unwrap();
-			let remote = consumer.request_broadcast("bench", None).await.unwrap();
+			consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+			let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 			// Far from any arrival time, so a frame stamped on arrival cannot pass.
 			let ts = |ms| Timestamp::from_millis(ms).unwrap();
 
@@ -639,7 +640,7 @@ async fn quiet_catalog_survives_cache_expiry(version: Version, takeover: bool) {
 	moq_clock::timeout(TEST_TIMEOUT + moq_net::cache::DEFAULT_EXPIRY * 5, async {
 		let publisher = produce_origin(1);
 		let relay = produce_origin(2);
-		let broadcast = publisher.create_broadcast("bench").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 		let track = broadcast.create_track("catalog", timed()).unwrap();
 		broadcast
 			.announce(moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint()))
@@ -667,8 +668,8 @@ async fn quiet_catalog_survives_cache_expiry(version: Version, takeover: bool) {
 				options.client_subscribe = Some(client.clone());
 				let pair = connect_mock(options).await;
 				let consumer = client.consume();
-				consumer.routed("bench").await.unwrap();
-				let remote = consumer.request_broadcast("bench", None).await.unwrap();
+				consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+				let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 				let sub = remote.track("catalog").unwrap().subscribe(None).await.unwrap();
 				(sub, remote, pair)
 			}
@@ -680,7 +681,7 @@ async fn quiet_catalog_survives_cache_expiry(version: Version, takeover: bool) {
 			let (mut holder, remote, pair) = session(3).await;
 			assert_eq!(holder.recv_group().await.unwrap().unwrap().sequence, 0, "{version}");
 			// The new connection is cheaper, so the relay reports its route taking over.
-			let mut follow = relay.consume().follow("bench").unwrap();
+			let mut follow = relay.consume().follow(Path::new("bench").unwrap()).unwrap();
 			assert!(
 				matches!(follow.next().await, Some(announce::Event::Start(_))),
 				"{version}"

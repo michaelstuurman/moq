@@ -11,6 +11,7 @@
 //! the subscriber are held, with a one-message stream buffer, so the relay still holds
 //! most of the track when the upstream session ends.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -61,7 +62,7 @@ enum End {
 async fn round(name: &str, end: End) -> (Vec<(u64, u64)>, Result<(), Error>) {
 	let version: Version = name.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -79,11 +80,11 @@ async fn round(name: &str, end: End) -> (Vec<(u64, u64)>, Result<(), Error>) {
 	let downstream = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

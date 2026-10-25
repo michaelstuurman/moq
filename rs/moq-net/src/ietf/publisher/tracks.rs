@@ -1315,6 +1315,7 @@ fn unlisted(listed: &kio::Consumer<bool>) -> Served {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::Path;
 	use crate::model::ProduceTest as _;
 	use crate::transport::memory;
 
@@ -1346,7 +1347,7 @@ mod tests {
 
 	fn harness_with(version: Version, config: memory::Config, declared: peer::Peer) -> Harness {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
-		let broadcast = origin.publish("room/cam", crate::origin::Route::default()).unwrap();
+		let broadcast = origin.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default()).unwrap();
 		let tracks = ["video", "audio"]
 			.into_iter()
 			.map(|name| (name, broadcast.create_track(name, crate::track::Info::timed()).unwrap()))
@@ -1377,7 +1378,7 @@ mod tests {
 	fn listing(forward: bool) -> ietf::SubscribeTracks<'static> {
 		ietf::SubscribeTracks {
 			request_id: RequestId(0),
-			prefix: crate::Path::new("room"),
+			prefix: crate::Path::new("room").unwrap(),
 			forward,
 			subscriber_priority: None,
 			group_order: None,
@@ -1513,7 +1514,7 @@ mod tests {
 			let (_stream, _, name, _) = h.publish().await;
 			assert_eq!(name, "captions", "{version}");
 
-			let mic = h._origin.publish("room/mic", crate::origin::Route::default()).unwrap();
+			let mic = h._origin.publish(Path::new("room/mic").unwrap(), crate::origin::Route::default()).unwrap();
 			let _audio = mic.create_track("audio", crate::track::Info::timed()).unwrap();
 			let (_stream, namespace, name, _) = h.publish().await;
 			assert_eq!((namespace.as_str(), name.as_str()), ("room/mic", "audio"), "{version}");
@@ -1727,7 +1728,7 @@ mod tests {
 
 			let mut nested = listing(false);
 			nested.request_id = RequestId(2);
-			nested.prefix = crate::Path::new("room/cam");
+			nested.prefix = crate::Path::new("room/cam").unwrap();
 			let mut second = h.request(&nested).await;
 			let (id, body) = next(&mut second).await;
 			assert_eq!(id, ietf::RequestError::ID, "{version}");
@@ -1753,7 +1754,7 @@ mod tests {
 
 			let subscribe = ietf::Subscribe {
 				request_id: RequestId(2),
-				track_namespace: crate::Path::new("room/cam"),
+				track_namespace: crate::Path::new("room/cam").unwrap(),
 				track_name: "video".into(),
 				subscriber_priority: 128,
 				group_order: GroupOrder::Descending,
@@ -1842,7 +1843,7 @@ mod tests {
 				let route = kio::Producer::new(());
 				let request = Request {
 					origin: h._origin.consume(),
-					prefix: crate::Path::new("").to_owned(),
+					prefix: crate::Path::new("").unwrap().to_owned(),
 					forward: true,
 					params: Params {
 						priority: crate::ietf::priority::DEFAULT_WIRE,
@@ -1857,7 +1858,7 @@ mod tests {
 				};
 				moq_clock::sim::spawn(h.publisher.clone().run_listed_broadcast(
 					request,
-					crate::Path::new("room/cam").to_owned(),
+					crate::Path::new("room/cam").unwrap().to_owned(),
 					None,
 					route.consume(),
 				));
@@ -2343,7 +2344,7 @@ mod tests {
 			let mut h = harness(version);
 			let subscribe = ietf::Subscribe {
 				request_id: RequestId(0),
-				track_namespace: crate::Path::new("room/cam"),
+				track_namespace: crate::Path::new("room/cam").unwrap(),
 				track_name: "video".into(),
 				subscriber_priority: 128,
 				group_order: GroupOrder::Descending,
@@ -2505,7 +2506,7 @@ mod tests {
 			moq_clock::sleep(Duration::from_millis(10)).await;
 
 			// A new instance takes the path while the old one goes on: only its route ends.
-			let _restarted = h._origin.publish("room/cam", crate::origin::Route::default()).unwrap();
+			let _restarted = h._origin.publish(Path::new("room/cam").unwrap(), crate::origin::Route::default()).unwrap();
 			let (id, body) = next(&mut stream).await;
 			assert_eq!(id, ietf::PublishDone::ID, "{version}");
 			let done: ietf::PublishDone = body.message(version).unwrap();

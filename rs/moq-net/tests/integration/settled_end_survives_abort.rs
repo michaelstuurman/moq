@@ -5,6 +5,7 @@
 //! the session dying, ends the track cleanly but must not throw those groups away: a
 //! consumer that has not read them yet still gets them, then the clean end.
 
+use moq_net::Path;
 use crate::support;
 
 use moq_net::{Error, Hop, Timestamp};
@@ -27,7 +28,7 @@ const GROUPS: u64 = 2;
 /// or in sequence order, and how the read ended.
 async fn round(abort: bool, ordered: bool) -> (Vec<u64>, Option<Error>) {
 	let origin = produce_origin(1);
-	let broadcast = origin.create_broadcast("bcast").unwrap();
+	let broadcast = origin.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let mut track = broadcast.create_track("video", timed()).unwrap();
 	// From the first group with a replay window: a late reader is owed the whole track,
 	// not the live edge.

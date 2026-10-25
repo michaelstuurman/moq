@@ -451,7 +451,7 @@ mod tests {
 	fn test_announce_round_trip() {
 		let msg = PublishNamespace {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/broadcast"),
+			track_namespace: Path::new("test/broadcast").unwrap(),
 			params: Default::default(),
 			authorization_token: None,
 		};
@@ -480,7 +480,7 @@ mod tests {
 	#[test]
 	fn test_unannounce_v14() {
 		let msg = PublishNamespaceDone {
-			track_namespace: Path::new("old/stream"),
+			track_namespace: Path::new("old/stream").unwrap(),
 			request_id: RequestId(0),
 		};
 
@@ -506,7 +506,7 @@ mod tests {
 	#[test]
 	fn test_announce_cancel_v14() {
 		let msg = PublishNamespaceCancel {
-			track_namespace: Path::new("canceled"),
+			track_namespace: Path::new("canceled").unwrap(),
 			request_id: RequestId(0),
 			error_code: 1,
 			reason_phrase: "Shutdown".into(),
@@ -541,7 +541,7 @@ mod tests {
 	fn test_publish_namespace_v17_round_trip() {
 		let msg = PublishNamespace {
 			request_id: RequestId(5),
-			track_namespace: Path::new("v17/broadcast"),
+			track_namespace: Path::new("v17/broadcast").unwrap(),
 			params: Default::default(),
 			authorization_token: None,
 		};
@@ -557,7 +557,7 @@ mod tests {
 	fn test_publish_namespace_v18_round_trip() {
 		let msg = PublishNamespace {
 			request_id: RequestId(5),
-			track_namespace: Path::new("v18/broadcast"),
+			track_namespace: Path::new("v18/broadcast").unwrap(),
 			params: Default::default(),
 			authorization_token: None,
 		};

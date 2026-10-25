@@ -9,6 +9,7 @@
 //! once unread lets the next viewer reach worker `B`, which wins the path now, rather
 //! than the drained worker.
 
+use moq_net::Path;
 use crate::support;
 
 use std::{cell::RefCell, rc::Rc, time::Duration};
@@ -56,7 +57,7 @@ impl Worker {
 		let origin = produce_origin(hop);
 		let claim = Rc::new(
 			origin
-				.dynamic_route("pool", origin::Route::default().with_cost(cost))
+				.dynamic_route(Path::new("pool").unwrap(), origin::Route::default().with_cost(cost))
 				.unwrap(),
 		);
 		let outputs = Rc::new(RefCell::new(Vec::new()));
@@ -83,7 +84,7 @@ impl Worker {
 
 /// Read the first frame of `video` at `pool/p` through `relay`.
 async fn watch(relay: &origin::Producer) -> String {
-	let broadcast = relay.consume().request_broadcast("pool/p", None).await.unwrap();
+	let broadcast = relay.consume().request_broadcast(Path::new("pool/p").unwrap(), None).await.unwrap();
 	let mut subscription = broadcast.track("video").unwrap().subscribe(None).await.unwrap();
 	let mut group = subscription.recv_group().await.unwrap().expect("a group");
 	let frame = group.read_frame().await.unwrap().expect("a frame");

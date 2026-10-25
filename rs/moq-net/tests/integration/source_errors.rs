@@ -6,6 +6,7 @@
 //! Each case runs publisher -> relay -> far over two mock sessions. moq-lite only:
 //! moq-transport's PUBLISH_DONE registry has no code for either error.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -40,11 +41,11 @@ struct Relayed {
 
 async fn resolve(origin: &moq_net::origin::Producer) -> moq_net::broadcast::Consumer {
 	let consumer = origin.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves")
@@ -55,7 +56,7 @@ async fn relayed(version: &str) -> Relayed {
 	let publisher = produce_origin(1);
 	let relay = produce_origin(2);
 	let far = produce_origin(3);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
 	let mut options = MockConnectOptions::new(version);

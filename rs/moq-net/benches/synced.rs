@@ -13,6 +13,7 @@
 //!
 //! Run with `cargo bench -p moq-net --features fuzz --bench synced`.
 
+use moq_net::Path;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use moq_net::{Hop, Pattern, Patterns, announce, fuzz, origin};
 
@@ -31,7 +32,7 @@ struct Table {
 fn table(streams: usize, consumers: usize) -> Table {
 	let (producer, driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 	let streams = (0..streams)
-		.map(|i| fuzz::snapshot(&producer, &format!("room/{i}")))
+		.map(|i| fuzz::snapshot(&producer, &Path::try_from(format!("room/{i}")).unwrap()))
 		.collect();
 	let consumers = (0..consumers)
 		.map(|i| scoped(&producer, &format!("other/{i}")).announced())
@@ -47,7 +48,7 @@ fn table(streams: usize, consumers: usize) -> Table {
 fn scoped(producer: &origin::Producer, prefix: &str) -> origin::Consumer {
 	producer
 		.consume()
-		.scope(prefix, &Patterns::from(Pattern::all()))
+		.scope(Path::new(prefix).unwrap(), &Patterns::from(Pattern::all()))
 		.unwrap()
 }
 
@@ -58,8 +59,9 @@ fn bench_land(c: &mut Criterion) {
 		group.bench_function(id, |b| {
 			let table = table(streams, consumers);
 			let watcher = scoped(&table.producer, "room/incoming").announced();
+			let prefix = Path::new("room/incoming").unwrap();
 			b.iter(|| {
-				let snapshot = fuzz::snapshot(&table.producer, "room/incoming");
+				let snapshot = fuzz::snapshot(&table.producer, &prefix);
 				assert!(!watcher.is_synced());
 				drop(snapshot);
 				assert!(watcher.is_synced());
@@ -76,7 +78,7 @@ fn bench_register(c: &mut Criterion) {
 		group.bench_function(id, |b| {
 			let table = table(streams, consumers);
 			let incoming = scoped(&table.producer, "room/incoming");
-			let _held = fuzz::snapshot(&table.producer, "room/incoming");
+			let _held = fuzz::snapshot(&table.producer, &Path::new("room/incoming").unwrap());
 			b.iter(|| {
 				let watcher = incoming.announced();
 				assert!(!watcher.is_synced());

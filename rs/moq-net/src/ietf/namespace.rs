@@ -173,7 +173,7 @@ mod tests {
 	const FORM: Form = Form::LeadingOnes { seven: false };
 
 	fn encode_ns(path: &str) -> Vec<u8> {
-		encode_path(&Path::from(path.to_string()))
+		encode_path(&Path::new(path).unwrap().to_owned())
 	}
 
 	fn encode_path(path: &Path<'_>) -> Vec<u8> {

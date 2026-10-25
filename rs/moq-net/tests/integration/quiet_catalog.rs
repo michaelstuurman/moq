@@ -5,6 +5,7 @@
 //! catalog does not produce one, so a reader that never received the snapshot
 //! must still get it.
 
+use moq_net::Path;
 use crate::support;
 
 use std::{future::Future, time::Duration};
@@ -48,7 +49,7 @@ async fn settle() {
 
 /// Announce `live/catalog.json` holding one finished snapshot group.
 fn publish(origin: &origin::Producer) -> (broadcast::Producer, track::Producer) {
-	let broadcast = origin.create_broadcast("live").unwrap();
+	let broadcast = origin.create_broadcast(Path::new("live").unwrap()).unwrap();
 	let track = broadcast.create_track("catalog.json", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	let mut group = track.append_group().unwrap();
@@ -59,8 +60,8 @@ fn publish(origin: &origin::Producer) -> (broadcast::Producer, track::Producer) 
 
 async fn request(origin: &origin::Producer) -> broadcast::Consumer {
 	let consumer = origin.consume();
-	consumer.routed("live").await.unwrap();
-	consumer.request_broadcast("live", None).await.unwrap()
+	consumer.routed(Path::new("live").unwrap()).await.unwrap();
+	consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap()
 }
 
 /// Subscribe without a floor and expect the snapshot as group 0.

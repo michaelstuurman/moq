@@ -7,6 +7,7 @@
 //! encoder writes its send time instead, and their receivers drop every timestamp, which
 //! leaves a timed track untimed too.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -85,7 +86,7 @@ impl Chain {
 
 	async fn subscribe(&self, track: &str) -> track::Subscriber {
 		let consumer = self.nodes.last().unwrap().consume();
-		let broadcast = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("room", None))
+		let broadcast = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("room").unwrap(), None))
 			.await
 			.expect("resolve timeout")
 			.expect("broadcast resolves");
@@ -111,7 +112,7 @@ async fn next_frame(subscriber: &mut track::Subscriber) -> Option<Timestamp> {
 async fn frame_through(hops: &[&str], info: track::Info) -> (Option<Timestamp>, track::Info) {
 	let timestamp = info.timescale.map(|_| millis(7));
 	let chain = Chain::new(hops).await;
-	let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
+	let broadcast = chain.nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut producer = broadcast.create_track("data", info).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;
@@ -177,7 +178,7 @@ async fn a_relay_forwards_an_untimed_track_untimed() {
 async fn an_explicit_start_holds_on_an_untimed_track() {
 	for version in ["moq-lite-03", "moq-lite-06", "moq-lite-07-wip", "moq-transport-20"] {
 		let chain = Chain::new(&[version]).await;
-		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
+		let broadcast = chain.nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 		let mut producer = broadcast.create_track("data", untimed()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		for _ in 0..5 {
@@ -185,7 +186,7 @@ async fn an_explicit_start_holds_on_an_untimed_track() {
 		}
 		moq_clock::sleep(Duration::from_secs(1)).await;
 
-		let consumer = chain.nodes[1].consume().request_broadcast("room", None).await.unwrap();
+		let consumer = chain.nodes[1].consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 		let subscription = track::Subscription::default()
 			.with_range(2..)
 			.with_max_delay(Duration::from_secs(30));
@@ -212,7 +213,7 @@ async fn an_explicit_start_holds_on_an_untimed_track() {
 async fn datagrams_arrive_as_published() {
 	for version in ["moq-lite-05", "moq-lite-07-wip", "moq-transport-16", "moq-transport-20"] {
 		let chain = Chain::new(&[version]).await;
-		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
+		let broadcast = chain.nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 		let mut producer = broadcast.create_track("data", untimed()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sleep(Duration::from_secs(1)).await;
@@ -237,12 +238,12 @@ async fn datagrams_arrive_as_published() {
 async fn a_fetched_untimed_frame_arrives_untimed() {
 	for version in ["moq-lite-06", "moq-lite-07-wip", "moq-transport-19"] {
 		let chain = Chain::new(&[version]).await;
-		let broadcast = chain.nodes[0].create_broadcast("room").unwrap();
+		let broadcast = chain.nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 		let mut dynamic = broadcast.dynamic();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sleep(Duration::from_secs(1)).await;
 
-		let consumer = chain.nodes[1].consume().request_broadcast("room", None).await.unwrap();
+		let consumer = chain.nodes[1].consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 		let mut waiting = Box::pin(consumer.track("video").unwrap().fetch_group(0, None));
 		let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut waiting).await {
 			futures::future::Either::Left((request, _)) => request.expect("the track request reaches the publisher"),

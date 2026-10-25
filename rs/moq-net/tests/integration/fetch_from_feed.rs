@@ -4,6 +4,7 @@
 //! subscription: a group the feed delivers is served, and one it never will is a miss,
 //! never a version error that a caller would retry forever.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -32,7 +33,7 @@ struct Relay {
 /// A publisher on `version` with group 0 of an untimed track written, and the relay's view of it.
 async fn relay(version: &str) -> Relay {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let mut track = broadcast
 		.create_track("video", moq_net::track::Info::default().with_timescale(None))
 		.unwrap();
@@ -46,11 +47,11 @@ async fn relay(version: &str) -> Relay {
 	let pair = connect_mock(options).await;
 
 	let consumer = client.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");

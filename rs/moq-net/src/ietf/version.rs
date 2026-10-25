@@ -93,7 +93,7 @@ mod tests {
 			max_age: None,
 			new_group: None,
 			request_id: RequestId(1),
-			track_namespace: Path::new("broadcast"),
+			track_namespace: Path::new("broadcast").unwrap(),
 			track_name: "video".into(),
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
@@ -120,7 +120,7 @@ mod tests {
 
 		let publish = Publish {
 			request_id: RequestId(2),
-			track_namespace: Path::new("broadcast"),
+			track_namespace: Path::new("broadcast").unwrap(),
 			track_name: "audio".into(),
 			track_alias: 7,
 			largest_location: Some(Location { group: 9, object: 0 }),
@@ -136,7 +136,7 @@ mod tests {
 			subscriber_priority: 64,
 			group_order: GroupOrder::Ascending,
 			fetch_type: FetchType::Filtered {
-				namespace: Path::new("broadcast"),
+				namespace: Path::new("broadcast").unwrap(),
 				track: "video".into(),
 				filter: Filter::Absolute {
 					start: Location { group: 1, object: 0 },
@@ -176,7 +176,7 @@ mod tests {
 			max_age: None,
 			new_group: None,
 			request_id: RequestId(1),
-			track_namespace: Path::new("broadcast"),
+			track_namespace: Path::new("broadcast").unwrap(),
 			track_name: "video".into(),
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,

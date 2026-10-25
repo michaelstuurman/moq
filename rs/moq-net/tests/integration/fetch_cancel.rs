@@ -7,6 +7,7 @@
 //! (lite has no FETCH_OK, so one that never answers would pin them for good) or is
 //! partway through the group. A group cut short is aborted, never cached as whole.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -47,14 +48,14 @@ async fn abandoned_fetch_reaches_the_publisher(version: &str, relays: u64, stage
 		_pairs.push(peer(version, &pair[0], &pair[1]).await);
 	}
 
-	let broadcast = nodes[0].create_broadcast("room").unwrap();
+	let broadcast = nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;
 
 	let consumer = nodes[relays as usize]
 		.consume()
-		.request_broadcast("room", None)
+		.request_broadcast(Path::new("room").unwrap(), None)
 		.await
 		.unwrap();
 	let track = consumer.track("video").unwrap();
@@ -169,12 +170,12 @@ async fn a_refetch_within_the_linger_stays_on_the_relay(version: &str) {
 	let relay = produce_origin(2);
 	let _pair = peer(version, &publisher, &relay).await;
 
-	let broadcast = publisher.create_broadcast("room").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;
 
-	let consumer = relay.consume().request_broadcast("room", None).await.unwrap();
+	let consumer = relay.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 	let mut waiting = Box::pin(consumer.track("video").unwrap().fetch_group(0, None));
 	let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut waiting).await {
 		futures::future::Either::Left((request, _)) => request.expect("the track request reaches the publisher"),

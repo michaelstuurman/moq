@@ -196,19 +196,19 @@ mod test {
 	fn the_request_roundtrips() {
 		let epoch: crate::Epoch = "01900000-0000-7000-8000-000000000001".parse().unwrap();
 		let msg = Tracks {
-			broadcast: Path::new("room/alice").to_owned(),
+			broadcast: Path::new("room/alice").unwrap().to_owned(),
 			epoch: Some(epoch.clone()),
 		};
 		let buf = msg.encode_bytes(Version::Lite07).unwrap();
 		let (got, _) = Tracks::decode_slice(&buf, Version::Lite07).unwrap();
-		assert_eq!(got.broadcast, Path::new("room/alice"));
+		assert_eq!(got.broadcast, Path::new("room/alice").unwrap());
 		assert_eq!(got.epoch, Some(epoch));
 	}
 
 	#[test]
 	fn older_versions_have_no_tracks_stream() {
 		let msg = Tracks {
-			broadcast: Path::new("room").to_owned(),
+			broadcast: Path::new("room").unwrap().to_owned(),
 			epoch: None,
 		};
 		assert!(msg.encode_bytes(Version::Lite06).is_err());

@@ -1,5 +1,6 @@
 //! The explicit-time model works without async helpers or a runtime.
 
+use moq_net::Path;
 use moq_net::{Error, Hop, Timestamp, broadcast, frame, group, kio, origin, track};
 use std::task::Poll;
 
@@ -16,7 +17,7 @@ fn origin_front_serves_media_with_only_explicit_polls() {
 	let waiter = kio::Waiter::noop();
 	let (origin, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 	driver.poll(now, &waiter).unwrap();
-	let broadcast = origin.create_broadcast("room/live").unwrap();
+	let broadcast = origin.create_broadcast(Path::new("room/live").unwrap()).unwrap();
 	let track = broadcast
 		.create_track(
 			"video",
@@ -29,7 +30,7 @@ fn origin_front_serves_media_with_only_explicit_polls() {
 	broadcast.announce(origin::Route::default()).unwrap();
 
 	// Resolving and subscribing pass through the origin's core front tasks.
-	let requesting = origin.consume().request_broadcast("room/live", None);
+	let requesting = origin.consume().request_broadcast(Path::new("room/live").unwrap(), None);
 	assert!(requesting.poll_ok(&waiter).is_pending());
 	driver.poll(now, &waiter).unwrap();
 	let receiving: broadcast::Consumer = ready(requesting.poll_ok(&waiter)).unwrap();
@@ -44,7 +45,7 @@ fn origin_front_serves_media_with_only_explicit_polls() {
 
 	// Driver teardown also works without any executor-owned tasks.
 	drop(driver);
-	assert!(matches!(origin.create_broadcast("after-close"), Err(Error::Closed)));
+	assert!(matches!(origin.create_broadcast(Path::new("after-close").unwrap()), Err(Error::Closed)));
 }
 
 #[test]
@@ -57,9 +58,9 @@ fn routed_broadcast_resolves_with_only_explicit_polls() {
 	driver.poll(now, &waiter).unwrap();
 
 	// Nothing covers the path yet: the first ask fails `Unroutable` and parks on the routes.
-	let mut routing = origin.consume().routed_broadcast("room/live");
+	let mut routing = origin.consume().routed_broadcast(Path::new("room/live").unwrap());
 	assert!(routing.poll(&waiter).is_pending());
-	let broadcast = origin.create_broadcast("room/live").unwrap();
+	let broadcast = origin.create_broadcast(Path::new("room/live").unwrap()).unwrap();
 	assert!(routing.poll(&waiter).is_pending());
 
 	// Announcing moves the routes, so the next poll asks again and the driver serves it.
@@ -70,7 +71,7 @@ fn routed_broadcast_resolves_with_only_explicit_polls() {
 	assert_eq!(resolved.info().path.as_str(), "room/live");
 
 	// A closed origin ends a parked resolution.
-	let mut routing = origin.consume().routed_broadcast("room/other");
+	let mut routing = origin.consume().routed_broadcast(Path::new("room/other").unwrap());
 	assert!(routing.poll(&waiter).is_pending());
 	drop(driver);
 	assert!(matches!(ready(routing.poll(&waiter)), Err(Error::Closed)));

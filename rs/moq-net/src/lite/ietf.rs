@@ -1057,7 +1057,7 @@ pub(crate) async fn test_hop(
 	);
 	downstream
 		.consume()
-		.routed(broadcast)
+		.routed(crate::Path::new(broadcast).unwrap())
 		.await
 		.expect("the hop announced the broadcast");
 	(downstream, [client, server])
@@ -1066,6 +1066,7 @@ pub(crate) async fn test_hop(
 #[cfg(all(test, feature = "async"))]
 mod hop_tests {
 	use super::*;
+	use crate::Path;
 	use crate::{Timestamp, frame, model::ProduceTest, track};
 	use std::time::Duration;
 
@@ -1135,7 +1136,7 @@ mod hop_tests {
 	}
 
 	async fn subscribe(origin: &crate::origin::Producer) -> (track::Consumer, track::Subscriber) {
-		let broadcast = moq_clock::timeout(TIMEOUT, origin.consume().request_broadcast("room", None))
+		let broadcast = moq_clock::timeout(TIMEOUT, origin.consume().request_broadcast(Path::new("room").unwrap(), None))
 			.await
 			.expect("no broadcast")
 			.unwrap();
@@ -1164,7 +1165,7 @@ mod hop_tests {
 		for offer in [[true, true], [true, false], [false, true]] {
 			let negotiated = offer == [true, true];
 			let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-			let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+			let broadcast = upstream.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 			let mut info = track::Info::timed().with_timescale(Timescale::MILLI);
 			info.max_age = Some(Duration::from_secs(7));
 			info.priority = 9;
@@ -1276,11 +1277,11 @@ mod hop_tests {
 	/// Subscribe across a negotiated hop to a track with `info`.
 	async fn subscribe_across_info(info: track::Info) -> Result<(), crate::Error> {
 		let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-		let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+		let broadcast = upstream.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 		let _track = broadcast.create_track("video", info).unwrap();
 
 		let (downstream, _sessions) = test_hop(&upstream, "room", [true, true]).await;
-		let broadcast = moq_clock::timeout(TIMEOUT, downstream.consume().request_broadcast("room", None))
+		let broadcast = moq_clock::timeout(TIMEOUT, downstream.consume().request_broadcast(Path::new("room").unwrap(), None))
 			.await
 			.expect("no broadcast")
 			.unwrap();
@@ -1385,7 +1386,7 @@ mod hop_tests {
 	#[moq_clock::test]
 	async fn plain_media_crosses_unchanged() {
 		let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-		let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+		let broadcast = upstream.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 		let mut track = broadcast
 			.create_track("video", track::Info::timed().with_timescale(Timescale::MILLI))
 			.unwrap();
@@ -1428,7 +1429,7 @@ mod hop_tests {
 		for offer in [[true, true], [true, false], [false, true]] {
 			let negotiated = offer == [true, true];
 			let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-			let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+			let broadcast = upstream.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 			let info = track::Info {
 				properties: draft22(Vec::new()),
 				..track::Info::timed()
@@ -1438,7 +1439,7 @@ mod hop_tests {
 			head.write_frame(ts(100), b"frame".to_vec()).unwrap();
 			head.finish().unwrap();
 			let (downstream, sessions) = test_hop(&upstream, "room", offer).await;
-			let broadcast = downstream.consume().request_broadcast("room", None).await.unwrap();
+			let broadcast = downstream.consume().request_broadcast(Path::new("room").unwrap(), None).await.unwrap();
 			// A listing cannot carry the provenance, so it lists the track untimed even when
 			// negotiated: a relay re-listing it would otherwise advertise it as native lite.
 			let mut tracks = broadcast.tracks().unwrap();
@@ -1499,7 +1500,7 @@ mod hop_tests {
 	#[moq_clock::test]
 	async fn compressed_media_crosses_a_negotiated_hop() {
 		let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
-		let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+		let broadcast = upstream.publish(Path::new("room").unwrap(), crate::origin::Route::default()).unwrap();
 		let info = track::Info::timed()
 			.with_timescale(Timescale::MILLI)
 			.with_compress(true);

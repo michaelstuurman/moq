@@ -3416,7 +3416,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3488,7 +3488,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").to_owned(),
+			path: Path::new("room").unwrap().to_owned(),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3558,7 +3558,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3617,7 +3617,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").to_owned(),
+			path: Path::new("room").unwrap().to_owned(),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3801,7 +3801,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber: subscriber.clone(),
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -3896,7 +3896,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room").to_owned(),
+					path: Path::new("room").unwrap().to_owned(),
 					epoch: None,
 					name: "video".to_string(),
 				},
@@ -3943,7 +3943,7 @@ mod tests {
 			subscriber,
 			MintedSource {
 				validity,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				source: crate::model::broadcast::SourceGuard::new(broadcast),
 				dynamic,
@@ -4071,7 +4071,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -4122,7 +4122,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").to_owned(),
+			path: Path::new("room/host").unwrap().to_owned(),
 			epoch: None,
 			name: "catalog.json".to_string(),
 		};
@@ -4189,7 +4189,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").to_owned(),
+			path: Path::new("room/host").unwrap().to_owned(),
 			epoch: None,
 			name: "audio".to_string(),
 		};
@@ -4257,7 +4257,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room/host").to_owned(),
+					path: Path::new("room/host").unwrap().to_owned(),
 					epoch: None,
 					name: "catalog.json".to_string(),
 				},
@@ -4323,7 +4323,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4377,7 +4377,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").to_owned(),
+				path: Path::new("room").unwrap().to_owned(),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4686,7 +4686,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		let mut announced = Announced::default();
 		assert!(
 			subscriber
@@ -4746,7 +4746,7 @@ mod tests {
 			assert!(
 				subscriber
 					.start_announce(
-						Path::new(&format!("room/{i}")).to_owned(),
+						Path::new(&format!("room/{i}")).unwrap().to_owned(),
 						None,
 						crate::Hops::new(),
 						crate::origin::Cost::default(),
@@ -4764,7 +4764,7 @@ mod tests {
 		assert!(announced.ready.is_empty());
 
 		let consumer = origin.consume();
-		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast("room/7", None).await });
+		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("room/7").unwrap(), None).await });
 
 		let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 		assert_eq!(ready.as_str(), "room/7");
@@ -4794,7 +4794,7 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let path = Path::new("pool").to_owned();
+		let path = Path::new("pool").unwrap().to_owned();
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
@@ -4816,7 +4816,7 @@ mod tests {
 			announced: &mut Announced,
 		) -> (crate::broadcast::Consumer, SourceServe) {
 			let consumer = origin.consume();
-			let request = moq_clock::sim::spawn(async move { consumer.request_broadcast("pool/p", None).await });
+			let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await });
 			let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 			announced.ready.try_push(ready).unwrap();
 			announced.poll_serve(subscriber, &kio::Waiter::noop());
@@ -4866,7 +4866,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("pool").to_owned(),
+				Path::new("pool").unwrap().to_owned(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::default(),
@@ -4878,7 +4878,7 @@ mod tests {
 		announced.poll_serve(&subscriber, &kio::Waiter::noop());
 
 		let consumer = origin.consume();
-		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast("pool/p", None).await });
+		let request = moq_clock::sim::spawn(async move { consumer.request_broadcast(Path::new("pool/p").unwrap(), None).await });
 		let ready = kio::wait(|waiter| announced.ready.poll_pop(waiter)).await.unwrap();
 		announced.ready.try_push(ready).unwrap();
 		announced.poll_serve(&subscriber, &kio::Waiter::noop());
@@ -4920,7 +4920,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		let mut announced = Announced::default();
 
 		// A chain that already names us is a reflection, declined but still recorded.
@@ -4979,7 +4979,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		let mut announced = Announced::default();
 		let mut reflected = crate::Hops::new();
 		reflected.push(assigned).unwrap();
@@ -4997,7 +4997,7 @@ mod tests {
 				.unwrap(),
 			"a chain naming its own sender must be dropped",
 		);
-		assert!(consumer.get_broadcast("room/host").is_none());
+		assert!(consumer.get_broadcast(Path::new("room/host").unwrap()).is_none());
 
 		let mut hops = crate::Hops::new();
 		hops.push(crate::Hop::new(7).unwrap()).unwrap();
@@ -5045,7 +5045,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").unwrap().to_owned(),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5057,7 +5057,7 @@ mod tests {
 		assert!(!accepted, "a chain naming its own sender must not become a route");
 
 		moq_clock::sleep(std::time::Duration::from_millis(1)).await;
-		assert!(consumer.get_broadcast("room/host").is_none());
+		assert!(consumer.get_broadcast(Path::new("room/host").unwrap()).is_none());
 	}
 
 	/// A peer that was advertised a local path and announces it back with this
@@ -5070,7 +5070,7 @@ mod tests {
 		let origin = origin::Config::new(relay).produce();
 		let assigned = crate::Hop::new(777).unwrap();
 
-		let local = origin.publish("room/host", origin::Route::default()).unwrap();
+		let local = origin.publish(Path::new("room/host").unwrap(), origin::Route::default()).unwrap();
 		let track = local.create_track("video", crate::track::Info::timed()).unwrap();
 		let mut group = track.append_group().unwrap();
 		group.write_frame(crate::Timestamp::ZERO, b"local".as_ref()).unwrap();
@@ -5079,7 +5079,7 @@ mod tests {
 		// The peer's own subscription, excluding the hop the server minted for
 		// it, is served from the local front before anything is announced back.
 		let peer = origin.consume().excluding(assigned);
-		let resolved = peer.request_broadcast("room/host", None).await.expect("resolves");
+		let resolved = peer.request_broadcast(Path::new("room/host").unwrap(), None).await.expect("resolves");
 		let mut sub = resolved
 			.track("video")
 			.unwrap()
@@ -5111,7 +5111,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").unwrap().to_owned(),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5125,7 +5125,7 @@ mod tests {
 		// The local front is still the one at the path, and still serving: the
 		// peer's next request joins it rather than minting another.
 		let still = peer
-			.request_broadcast("room/host", None)
+			.request_broadcast(Path::new("room/host").unwrap(), None)
 			.await
 			.expect("the local front keeps serving");
 		assert!(
@@ -5170,7 +5170,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").unwrap().to_owned(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5183,7 +5183,7 @@ mod tests {
 
 		// The route is announced synchronously: hop 0 on the wire, assigned id local.
 		let mut cursor = consumer.announced();
-		let route = cursor.expect_next_active("room/host").await;
+		let route = cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		let hops: Vec<_> = route.hops.iter().copied().collect();
 		assert_eq!(hops, vec![crate::Hop::UNKNOWN]);
 		assert!(route.is_anonymous());
@@ -5217,7 +5217,7 @@ mod tests {
 		assert!(
 			subscriber
 				.start_announce(
-					Path::new("room/host").to_owned(),
+					Path::new("room/host").unwrap().to_owned(),
 					None,
 					hops,
 					crate::origin::Cost::UNKNOWN,
@@ -5229,7 +5229,7 @@ mod tests {
 		);
 
 		let mut cursor = consumer.announced();
-		let route = cursor.expect_next_active("room/host").await;
+		let route = cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		let hops: Vec<_> = route.hops.iter().copied().collect();
 		assert_eq!(hops, vec![crate::Hop::UNKNOWN, crate::Hop::UNKNOWN]);
 		assert!(route.is_anonymous());
@@ -5245,7 +5245,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").unwrap().to_owned(),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5257,14 +5257,14 @@ mod tests {
 
 		let mut cursor = consumer.announced();
 		moq_clock::sim::yield_now().await;
-		let route = cursor.expect_next_active("room/host").await;
+		let route = cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		let hops: Vec<_> = route.hops.iter().copied().collect();
 		assert_eq!(hops, vec![crate::Hop::UNKNOWN]);
 
 		// A reprice from the same unnamed publisher stays anonymous and in place.
 		subscriber
 			.update_announce(
-				Path::new("room/host").to_owned(),
+				Path::new("room/host").unwrap().to_owned(),
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
 				4,
@@ -5273,7 +5273,7 @@ mod tests {
 			)
 			.unwrap();
 		moq_clock::sim::yield_now().await;
-		let route = cursor.expect_next_active("room/host").await;
+		let route = cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		let hops: Vec<_> = route.hops.iter().copied().collect();
 		assert_eq!(hops, vec![crate::Hop::UNKNOWN]);
 	}
@@ -5303,7 +5303,7 @@ mod tests {
 		let (mut subscriber, consumer) = restart_subscriber(SinkSession::new(Default::default()));
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5318,7 +5318,7 @@ mod tests {
 
 		let mut cursor = consumer.announced();
 		moq_clock::sim::yield_now().await;
-		cursor.expect_next_active("room/host").await;
+		cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 
 		subscriber
 			.update_announce(
@@ -5332,7 +5332,7 @@ mod tests {
 			.unwrap();
 
 		moq_clock::sim::yield_now().await;
-		let route = cursor.expect_next_active("room/host").await;
+		let route = cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		assert_eq!(route.cost, crate::origin::Cost::new(5).charged(0));
 	}
 
@@ -5344,7 +5344,7 @@ mod tests {
 		let auth = subscriber.auth.clone();
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5357,7 +5357,7 @@ mod tests {
 			)
 			.unwrap();
 		let mut cursor = consumer.announced();
-		cursor.expect_next_active("room/host").await;
+		cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 
 		auth.handle().authorize(&crate::auth::Grant {
 			publish: Default::default(),
@@ -5376,7 +5376,7 @@ mod tests {
 			)
 			.unwrap();
 		assert!(!attached, "a restart outside the limit was attached");
-		cursor.expect_next_ended("room/host").await;
+		cursor.expect_next_ended(Path::new("room/host").unwrap()).await;
 	}
 
 	/// An announce stream that dies without an explicit `ended` retracts the route
@@ -5403,7 +5403,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").to_owned();
+		let path = Path::new("room/host").unwrap().to_owned();
 		let hops = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
 		let mut announced = Announced::default();
 		subscriber
@@ -5418,12 +5418,12 @@ mod tests {
 			)
 			.unwrap();
 		let mut cursor = consumer.announced();
-		cursor.expect_next_active("room/host").await;
+		cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 
 		// The stream ends without retracting anything: the map dies with it and the
 		// route retracts.
 		drop(announced);
-		cursor.expect_next_ended("room/host").await;
+		cursor.expect_next_ended(Path::new("room/host").unwrap()).await;
 
 		// An explicit retraction retracts it the same way.
 		let hops = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
@@ -5439,10 +5439,10 @@ mod tests {
 				&mut announced,
 			)
 			.unwrap();
-		cursor.expect_next_active("room/host").await;
+		cursor.expect_next_active(Path::new("room/host").unwrap()).await;
 		assert!(announced.contains(&path.clone()), "the announce was not recorded");
 		announced.withdraw(&path);
-		cursor.expect_next_ended("room/host").await;
+		cursor.expect_next_ended(Path::new("room/host").unwrap()).await;
 	}
 
 	/// An unknown announce type between two starts is skipped without ending the
@@ -5452,7 +5452,7 @@ mod tests {
 		const VERSION: Version = Version::Lite06;
 		let start = |suffix| lite::AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: lite::PathRef::literal(Path::new(suffix)),
+			suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 			hops: lite::HopsRef::literal(crate::Hops::new()),
 			cost: crate::origin::Cost::default(),
 		};
@@ -5488,16 +5488,16 @@ mod tests {
 		});
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").to_owned(),
-			subscriber.origin.snapshot(""),
+			Path::new("").unwrap().to_owned(),
+			subscriber.origin.snapshot(Path::new("").unwrap()),
 		);
 		let mut cursor = consumer.announced();
 
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
 		assert!(futures::poll!(run.as_mut()).is_pending());
 
-		cursor.expect_next_active("a").await;
-		cursor.expect_next_active("b").await;
+		cursor.expect_next_active(Path::new("a").unwrap()).await;
+		cursor.expect_next_active(Path::new("b").unwrap()).await;
 	}
 
 	/// A peer's announce stream for the root, encoded for `version`.
@@ -5526,7 +5526,7 @@ mod tests {
 		move |w| {
 			lite::AnnounceBroadcast::Active {
 				epoch: None,
-				suffix: lite::PathRef::literal(Path::new(suffix)),
+				suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 				hops: lite::HopsRef::literal(crate::Hops::new()),
 				cost: crate::origin::Cost::default(),
 			}
@@ -5557,8 +5557,8 @@ mod tests {
 		(
 			AnnouncePrefix::new(
 				subscriber.clone(),
-				Path::new("").to_owned(),
-				subscriber.origin.snapshot(""),
+				Path::new("").unwrap().to_owned(),
+				subscriber.origin.snapshot(Path::new("").unwrap()),
 			),
 			consumer,
 		)
@@ -5583,14 +5583,14 @@ mod tests {
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
 		assert!(futures::poll!(run.as_mut()).is_pending());
 
-		cursor.assert_next_active("a");
+		cursor.assert_next_active(Path::new("a").unwrap());
 		assert!(!cursor.is_synced(), "never before an earlier event is read");
-		cursor.assert_next_active("b");
+		cursor.assert_next_active(Path::new("b").unwrap());
 		assert!(cursor.is_synced());
 		// A consumer created after the boundary syncs on its replay.
 		let mut late = consumer.announced();
-		late.assert_next_active("a");
-		late.assert_next_active("b");
+		late.assert_next_active(Path::new("a").unwrap());
+		late.assert_next_active(Path::new("b").unwrap());
 		assert!(late.is_synced());
 	}
 
@@ -5604,7 +5604,7 @@ mod tests {
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
 		assert!(futures::poll!(run.as_mut()).is_pending());
 
-		cursor.assert_next_active("a");
+		cursor.assert_next_active(Path::new("a").unwrap());
 		assert!(!cursor.is_synced());
 	}
 
@@ -5677,7 +5677,7 @@ mod tests {
 		const VERSION: Version = Version::Lite02;
 		let init = |w: &mut crate::coding::Encoder<'_>| {
 			lite::AnnounceInit {
-				suffixes: vec![Path::new("a")],
+				suffixes: vec![Path::new("a").unwrap()],
 			}
 			.encode(w, VERSION)
 			.unwrap()
@@ -5690,7 +5690,7 @@ mod tests {
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
 		assert!(futures::poll!(run.as_mut()).is_pending());
 		assert!(!cursor.is_synced());
-		cursor.assert_next_active("a");
+		cursor.assert_next_active(Path::new("a").unwrap());
 		assert!(cursor.is_synced());
 	}
 
@@ -5701,7 +5701,7 @@ mod tests {
 		const VERSION: Version = Version::Lite06;
 		let start = |suffix| lite::AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: lite::PathRef::literal(Path::new(suffix)),
+			suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 			hops: lite::HopsRef::literal(crate::Hops::new()),
 			cost: crate::origin::Cost::default(),
 		};
@@ -5736,8 +5736,8 @@ mod tests {
 		subscriber.announces = slots.clone();
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").to_owned(),
-			subscriber.origin.snapshot(""),
+			Path::new("").unwrap().to_owned(),
+			subscriber.origin.snapshot(Path::new("").unwrap()),
 		);
 
 		let err = kio::wait(|waiter| prefix.poll(waiter))

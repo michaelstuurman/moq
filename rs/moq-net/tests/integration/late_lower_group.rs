@@ -7,6 +7,7 @@
 //! is dropped. Lite-06 and later encode a floor of group 0 as 0, which is the only
 //! spelling of both an omitted floor and group 0; the draft says that 0 is group 0.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -82,7 +83,7 @@ async fn read_all(sub: &mut moq_net::track::Subscriber) -> Vec<(u64, usize)> {
 async fn session(version: &str, relay: bool, start: Option<u64>) -> Vec<(u64, usize)> {
 	let version: Version = version.parse().unwrap();
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast
 		.create_track(
 			"late",
@@ -114,11 +115,11 @@ async fn session(version: &str, relay: bool, start: Option<u64>) -> Vec<(u64, us
 	let pair = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");
@@ -158,7 +159,7 @@ async fn session(version: &str, relay: bool, start: Option<u64>) -> Vec<(u64, us
 
 async fn in_process(start: Option<u64>) -> Vec<(u64, usize)> {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast
 		.create_track(
 			"late",

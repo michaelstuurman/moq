@@ -5,6 +5,7 @@
 //!
 //! Deterministic: simulated time over the mock transport.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -42,7 +43,7 @@ async fn setup(version: &str) -> Setup {
 
 async fn setup_with_gate(version: &str, gate: Option<kio::Consumer<bool>>) -> Setup {
 	let publisher = produce_origin(1);
-	let broadcast = publisher.create_broadcast("bcast").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 	let track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 
@@ -54,11 +55,11 @@ async fn setup_with_gate(version: &str, gate: Option<kio::Consumer<bool>>) -> Se
 	let pair = connect_mock(options).await;
 
 	let consumer = subscriber.consume();
-	moq_clock::timeout(TIMEOUT, consumer.routed("bcast"))
+	moq_clock::timeout(TIMEOUT, consumer.routed(Path::new("bcast").unwrap()))
 		.await
 		.expect("announce timeout")
 		.expect("routed");
-	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast("bcast", None))
+	let remote = moq_clock::timeout(TIMEOUT, consumer.request_broadcast(Path::new("bcast").unwrap(), None))
 		.await
 		.expect("resolve timeout")
 		.expect("broadcast resolves");
@@ -108,7 +109,7 @@ async fn setup_with_gate(version: &str, gate: Option<kio::Consumer<bool>>) -> Se
 async fn track_info_interest_precedes_a_subscription() {
 	for version in ["moq-lite-05", "moq-lite-06", "moq-lite-07-wip"] {
 		let publisher = produce_origin(1);
-		let broadcast = publisher.create_broadcast("bcast").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		let track = broadcast.create_track("video", timed()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let subscriber = produce_origin(2);
@@ -117,8 +118,8 @@ async fn track_info_interest_precedes_a_subscription() {
 		options.client_subscribe = Some(subscriber.clone());
 		let _pair = connect_mock(options).await;
 		let consumer = subscriber.consume();
-		consumer.routed("bcast").await.unwrap();
-		let remote = consumer.request_broadcast("bcast", None).await.unwrap();
+		consumer.routed(Path::new("bcast").unwrap()).await.unwrap();
+		let remote = consumer.request_broadcast(Path::new("bcast").unwrap(), None).await.unwrap();
 		let copy = remote.track("video").unwrap();
 		copy.query().await.expect("TRACK_INFO");
 		crate::support::wanted(track.demand())
@@ -231,14 +232,14 @@ async fn abort_cuts_a_drain_short_for(version: &str) {
 async fn close_withdraws_announcements_before_closing_the_transport() {
 	for version in ["moq-lite-01", "moq-lite-07-wip", "moq-transport-17", "moq-transport-22"] {
 		let publisher = produce_origin(1);
-		let broadcast = publisher.create_broadcast("bcast").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let subscriber = produce_origin(2);
 		let mut options = MockConnectOptions::new(version.parse().unwrap());
 		options.client_publish = Some(publisher.consume());
 		options.server_subscribe = Some(subscriber.clone());
 		let pair = connect_mock(options).await;
-		subscriber.consume().routed("bcast").await.unwrap();
+		subscriber.consume().routed(Path::new("bcast").unwrap()).await.unwrap();
 		let before = pair.client_transport.finished_streams();
 		pair.client.close().await.unwrap();
 		assert!(
@@ -252,14 +253,14 @@ async fn close_withdraws_announcements_before_closing_the_transport() {
 async fn close_times_out_waiting_for_announcement_acknowledgements() {
 	for version in ["moq-lite-01", "moq-lite-07-wip", "moq-transport-17", "moq-transport-22"] {
 		let publisher = produce_origin(1);
-		let broadcast = publisher.create_broadcast("bcast").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		let subscriber = produce_origin(2);
 		let mut options = MockConnectOptions::new(version.parse().unwrap());
 		options.client_publish = Some(publisher.consume());
 		options.server_subscribe = Some(subscriber.clone());
 		let pair = connect_mock(options).await;
-		subscriber.consume().routed("bcast").await.unwrap();
+		subscriber.consume().routed(Path::new("bcast").unwrap()).await.unwrap();
 		pair.client_transport.hold_fin_acknowledgements();
 		let started = moq_clock::now();
 		assert!(matches!(pair.client.close().await, Err(Error::Timeout)), "{version}");
@@ -433,7 +434,7 @@ async fn an_unknown_lite_range_abort_is_unspecified_on_every_wire() {
 async fn ended(version: &str, close: impl FnOnce(&MockPair)) -> (Error, moq_net::stats::Failures) {
 	let registry = moq_net::stats::Registry::new(Default::default());
 	let mut options = MockConnectOptions::new(version.parse().unwrap());
-	options.server_stats = registry.tier(Default::default()).session("room");
+	options.server_stats = registry.tier(Default::default()).session(Path::new("room").unwrap());
 	let pair = connect_mock(options).await;
 	close(&pair);
 	let err = moq_clock::timeout(TIMEOUT, pair.server.closed())

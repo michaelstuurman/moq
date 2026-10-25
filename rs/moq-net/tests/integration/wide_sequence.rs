@@ -2,6 +2,7 @@
 
 //! Group sequence boundaries, directly and through a forwarding origin.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -19,7 +20,7 @@ async fn largest_quic_sequence_reaches_the_subscriber() {
 			let publisher = produce_origin(1);
 			let relay = produce_origin(2);
 			let client = produce_origin(3);
-			let broadcast = publisher.create_broadcast("ladder").unwrap();
+			let broadcast = publisher.create_broadcast(Path::new("ladder").unwrap()).unwrap();
 			let info = moq_net::track::Info::default().with_timescale(moq_net::Timescale::MICRO);
 			let track = broadcast.create_track("data", info).unwrap();
 			broadcast.announce(Default::default()).unwrap();
@@ -35,8 +36,8 @@ async fn largest_quic_sequence_reaches_the_subscriber() {
 			} else {
 				None
 			};
-			client.consume().routed("ladder").await.unwrap();
-			let remote = client.consume().request_broadcast("ladder", None).await.unwrap();
+			client.consume().routed(Path::new("ladder").unwrap()).await.unwrap();
+			let remote = client.consume().request_broadcast(Path::new("ladder").unwrap(), None).await.unwrap();
 			let mut sub = remote.track("data").unwrap().subscribe(None).await.unwrap();
 			for sequence in [5, 1 << 32, (1 << 53) - 1, (1 << 53) + 1, (1 << 62) - 1] {
 				// Timestamps stop at 2^61 - 1, the most lite-05/06 can zigzag as a first frame.
@@ -81,7 +82,7 @@ async fn wide_sequence_fails_only_its_subscription() {
 	let relay = produce_origin(2);
 	let client = produce_origin(3);
 
-	let broadcast = publisher.create_broadcast("bench").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 	let wide = broadcast.create_track("wide", timed()).unwrap();
 	let narrow = broadcast.create_track("narrow", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
@@ -100,14 +101,14 @@ async fn wide_sequence_fails_only_its_subscription() {
 	let _downstream = connect_mock(options).await;
 
 	// lite-07 carries the full 64 bits, so the relay holds the group.
-	relay.consume().routed("bench").await.unwrap();
-	let cached = relay.consume().request_broadcast("bench", None).await.unwrap();
+	relay.consume().routed(Path::new("bench").unwrap()).await.unwrap();
+	let cached = relay.consume().request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 	let mut sub = cached.track("wide").unwrap().subscribe(None).await.unwrap();
 	assert_eq!(sub.recv_group().await.unwrap().unwrap().sequence, WIDE);
 
 	let consumer = client.consume();
-	consumer.routed("bench").await.unwrap();
-	let remote = consumer.request_broadcast("bench", None).await.unwrap();
+	consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+	let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 
 	let result = moq_clock::timeout(Duration::from_secs(5), async {
 		let mut sub = remote.track("wide").unwrap().subscribe(None).await?;
@@ -137,7 +138,7 @@ async fn a_later_wide_group_fails_only_that_subscription() {
 	let relay = produce_origin(2);
 	let client = produce_origin(3);
 
-	let broadcast = publisher.create_broadcast("bench").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 	let wide = broadcast.create_track("wide", timed()).unwrap();
 	let narrow = broadcast.create_track("narrow", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
@@ -156,8 +157,8 @@ async fn a_later_wide_group_fails_only_that_subscription() {
 	let _downstream = connect_mock(options).await;
 
 	let consumer = client.consume();
-	consumer.routed("bench").await.unwrap();
-	let remote = consumer.request_broadcast("bench", None).await.unwrap();
+	consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+	let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 
 	let mut sub = remote.track("wide").unwrap().subscribe(None).await.unwrap();
 	let mut group = sub.recv_group().await.unwrap().unwrap();

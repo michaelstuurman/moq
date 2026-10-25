@@ -1281,7 +1281,7 @@ mod tests {
 		let broadcast = crate::broadcast::Info::default().produce();
 		let lister = Arc::new(broadcast.dynamic().lister().unwrap());
 		let tracks = broadcast.consume().tracks().unwrap();
-		let listening = subscriber.listen(PathOwned::from("bcast"), lister);
+		let listening = subscriber.listen(Path::new("bcast").unwrap(), lister);
 		Harness {
 			subscriber,
 			peer,
@@ -1372,7 +1372,7 @@ mod tests {
 			let mut subscriber = self.subscriber.clone();
 			let serving = moq_clock::sim::spawn(async move {
 				subscriber
-					.run_subscribe(Path::new("bcast"), dynamic, None, request)
+					.run_subscribe(Path::new("bcast").unwrap(), dynamic, None, request)
 					.await;
 			});
 			(track, reader, serving)
@@ -1449,7 +1449,7 @@ mod tests {
 	fn offered<'a>(namespace: &'a str, name: &'a str, request_id: u64) -> ietf::Publish<'a> {
 		ietf::Publish {
 			request_id: RequestId(request_id),
-			track_namespace: Path::new(namespace),
+			track_namespace: Path::new(namespace).unwrap(),
 			track_name: name.into(),
 			track_alias: request_id,
 			largest_location: None,
@@ -1564,7 +1564,7 @@ mod tests {
 			let mut h = harness(version);
 			let mut listing = h.establish().await;
 			let skipped = ietf::PublishSkipped {
-				suffix: Path::new(""),
+				suffix: Path::new("").unwrap(),
 				track_name: "audio".into(),
 			};
 			write(&mut listing, ietf::PublishSkipped::ID, &skipped).await;
@@ -1609,7 +1609,7 @@ mod tests {
 		let mut h = harness(version);
 		let mut listing = h.establish().await;
 		let skipped = ietf::PublishSkipped {
-			suffix: Path::new(""),
+			suffix: Path::new("").unwrap(),
 			track_name: "audio".into(),
 		};
 		write(&mut listing, ietf::PublishSkipped::ID, &skipped).await;

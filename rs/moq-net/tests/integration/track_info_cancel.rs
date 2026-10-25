@@ -8,6 +8,7 @@
 //! with its stream credit spent) pins them for good, and a relay retrying across
 //! routes accumulates them until it runs out of memory.
 
+use moq_net::Path;
 use crate::support;
 
 use std::time::Duration;
@@ -30,14 +31,14 @@ async fn abandoned_request_reaches_the_publisher(version: &str, relays: u64) {
 		_pairs.push(peer(version, &pair[0], &pair[1]).await);
 	}
 
-	let broadcast = nodes[0].create_broadcast("room").unwrap();
+	let broadcast = nodes[0].create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	broadcast.announce(Default::default()).unwrap();
 	moq_clock::sleep(Duration::from_secs(1)).await;
 
 	let consumer = nodes[relays as usize]
 		.consume()
-		.request_broadcast("room", None)
+		.request_broadcast(Path::new("room").unwrap(), None)
 		.await
 		.unwrap();
 	let mut waiting = Box::pin(consumer.track("video").unwrap().subscribe(None));
@@ -74,7 +75,7 @@ async fn withdrawn_broadcast_releases_track_info(version: &str, answered: bool, 
 	let version: Version = version.parse().unwrap();
 	let publisher = produce_origin(1);
 	let reader = produce_origin(2);
-	let broadcast = publisher.create_broadcast("room").unwrap();
+	let broadcast = publisher.create_broadcast(Path::new("room").unwrap()).unwrap();
 	let mut dynamic = broadcast.dynamic();
 	let mut route = origin::Route::default();
 	if explicit {
@@ -85,7 +86,7 @@ async fn withdrawn_broadcast_releases_track_info(version: &str, answered: bool, 
 	options.server_publish = Some(publisher.consume());
 	options.client_subscribe = Some(reader.clone());
 	let pair = connect_mock(options).await;
-	let remote = reader.consume().routed_broadcast("room").await.unwrap();
+	let remote = reader.consume().routed_broadcast(Path::new("room").unwrap()).await.unwrap();
 	let mut query = remote.track("video").unwrap().query();
 	let request = match futures::future::select(std::pin::pin!(dynamic.requested_track()), &mut query).await {
 		futures::future::Either::Left((request, _)) => request.expect("TRACK reaches the publisher"),

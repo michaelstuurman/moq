@@ -367,7 +367,7 @@ mod tests {
 		PathRef {
 			base,
 			keep,
-			rest: Path::new(rest).to_owned(),
+			rest: Path::new(rest).unwrap().to_owned(),
 		}
 	}
 
@@ -511,7 +511,7 @@ mod tests {
 	/// Encode a message with `encoder`, decode it with `decoder`, and check that the
 	/// resolved values match the input.
 	fn start(encoder: &mut AnnounceEncoder, decoder: &mut AnnounceDecoder, suffix: &str, ids: &[u64]) -> (u64, usize) {
-		let (id, wire_path, wire_hops) = encoder.start(Path::new(suffix).to_owned(), hops(ids));
+		let (id, wire_path, wire_hops) = encoder.start(Path::new(suffix).unwrap().to_owned(), hops(ids));
 		let size = wire_path.encode_bytes(VERSION).unwrap().len() + wire_hops.encode_bytes(VERSION).unwrap().len();
 		let (got_path, got_hops) = decoder.start(wire_path, wire_hops).unwrap();
 		assert_eq!(got_path.as_str(), suffix);
@@ -565,7 +565,7 @@ mod tests {
 		// Shares a byte prefix with `a/b/d`, but no second segment.
 		start(&mut encoder, &mut decoder, "a/b-z", &[3]);
 
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("a/b/d").to_owned(), hops(&[5, 1u64 << 51]));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("a/b/d").unwrap().to_owned(), hops(&[5, 1u64 << 51]));
 		assert_eq!(wire_path, path(2, 2, "d"));
 		assert_eq!(wire_hops, chain(2, &[5], 1));
 	}
@@ -594,7 +594,7 @@ mod tests {
 			let suffix = format!("f{n}");
 			start(&mut encoder, &mut decoder, &suffix, &[1]);
 		}
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("again").to_owned(), hops(&[100]));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("again").unwrap().to_owned(), hops(&[100]));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[100])));
 		let (got_path, got_hops) = decoder.start(wire_path, wire_hops).unwrap();
 		assert_eq!(got_path.as_str(), "again");
@@ -606,19 +606,19 @@ mod tests {
 		let mut encoder = AnnounceEncoder::new(VERSION);
 		let mut decoder = AnnounceDecoder::default();
 		start(&mut encoder, &mut decoder, "a", &[1]);
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("b").to_owned(), hops(&[2]));
-		assert_eq!(wire_path, PathRef::literal(Path::new("b")));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("b").unwrap().to_owned(), hops(&[2]));
+		assert_eq!(wire_path, PathRef::literal(Path::new("b").unwrap()));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[2])));
 	}
 
 	#[test]
 	fn lite06_assigns_ids_without_bases() {
 		let mut encoder = AnnounceEncoder::new(Version::Lite06);
-		let (id, _, _) = encoder.start(Path::new("a/b").to_owned(), hops(&[1]));
+		let (id, _, _) = encoder.start(Path::new("a/b").unwrap().to_owned(), hops(&[1]));
 		assert_eq!(id, Some(0));
-		let (id, wire_path, wire_hops) = encoder.start(Path::new("a/c").to_owned(), hops(&[1]));
+		let (id, wire_path, wire_hops) = encoder.start(Path::new("a/c").unwrap().to_owned(), hops(&[1]));
 		assert_eq!(id, Some(1));
-		assert_eq!(wire_path, PathRef::literal(Path::new("a/c")));
+		assert_eq!(wire_path, PathRef::literal(Path::new("a/c").unwrap()));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[1])));
 		encoder.end(0);
 		assert_eq!(encoder.update(1, hops(&[1])), HopsRef::literal(hops(&[1])));
@@ -632,11 +632,11 @@ mod tests {
 	fn golden() -> Vec<crate::fuzz::Announced> {
 		use crate::fuzz::Announced;
 		vec![
-			Announced::Start(Path::new("room/a/cam").to_owned(), hops(&[0x1111, 0x2222])),
-			Announced::Start(Path::new("room/a/mic").to_owned(), hops(&[0x3333, 0x2222])),
+			Announced::Start(Path::new("room/a/cam").unwrap().to_owned(), hops(&[0x1111, 0x2222])),
+			Announced::Start(Path::new("room/a/mic").unwrap().to_owned(), hops(&[0x3333, 0x2222])),
 			Announced::Update(0, hops(&[0x4444, 0x2222])),
 			Announced::End(1),
-			Announced::Start(Path::new("room/b").to_owned(), hops(&[0x5555, 0x2222])),
+			Announced::Start(Path::new("room/b").unwrap().to_owned(), hops(&[0x5555, 0x2222])),
 		]
 	}
 

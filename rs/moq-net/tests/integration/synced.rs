@@ -4,6 +4,7 @@
 //! peer's initial announcements: exactly on versions that mark the boundary, and
 //! on the answer, as a best effort, on the rest.
 
+use moq_net::Path;
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -46,9 +47,9 @@ async fn read_until_synced(announced: &mut announce::Consumer) -> BTreeSet<Strin
 /// origin's consumer had read when it synced.
 async fn synced(version: &str) -> BTreeSet<String> {
 	let publisher = produce_origin(1);
-	let a = publisher.create_broadcast("a").unwrap();
+	let a = publisher.create_broadcast(Path::new("a").unwrap()).unwrap();
 	a.announce(Default::default()).unwrap();
-	let b = publisher.create_broadcast("b").unwrap();
+	let b = publisher.create_broadcast(Path::new("b").unwrap()).unwrap();
 	b.announce(Default::default()).unwrap();
 
 	let subscriber = produce_origin(2);
@@ -97,7 +98,7 @@ async fn a_best_effort_boundary_still_catches_up() {
 #[moq_clock::test]
 async fn a_second_session_catches_up() {
 	let publisher = produce_origin(1);
-	let a = publisher.create_broadcast("a").unwrap();
+	let a = publisher.create_broadcast(Path::new("a").unwrap()).unwrap();
 	a.announce(Default::default()).unwrap();
 
 	let subscriber = produce_origin(2);
@@ -136,7 +137,7 @@ async fn a_cold_relay_syncs_then_forwards_upstream_routes_as_live() {
 	assert!(announced.try_next().is_none());
 
 	let upstream = produce_origin(1);
-	let broadcast = upstream.create_broadcast("room/cam").unwrap();
+	let broadcast = upstream.create_broadcast(Path::new("room/cam").unwrap()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	let mut options = MockConnectOptions::new(version);
 	options.server_publish = Some(upstream.consume());

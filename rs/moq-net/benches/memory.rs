@@ -18,6 +18,7 @@
 	reason = "custom timings measure the real time the work took, not the ambient clock"
 )]
 
+use moq_net::Path;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
@@ -134,7 +135,7 @@ impl Link {
 			}
 		);
 
-		let broadcast = publisher.create_broadcast("bench").unwrap();
+		let broadcast = publisher.create_broadcast(Path::new("bench").unwrap()).unwrap();
 		let info = track::Info::default().with_timescale(moq_net::Timescale::MILLI);
 		let tracks: Vec<_> = (0..streams)
 			.map(|index| broadcast.create_track(format!("{index}"), info.clone()).unwrap())
@@ -142,8 +143,8 @@ impl Link {
 		broadcast.announce(Default::default()).unwrap();
 
 		let consumer = subscriber.consume();
-		consumer.routed("bench").await.unwrap();
-		let remote = consumer.request_broadcast("bench", None).await.unwrap();
+		consumer.routed(Path::new("bench").unwrap()).await.unwrap();
+		let remote = consumer.request_broadcast(Path::new("bench").unwrap(), None).await.unwrap();
 		let mut subscribers = Vec::new();
 		for index in 0..streams {
 			let track = remote.track(&format!("{index}")).unwrap();
