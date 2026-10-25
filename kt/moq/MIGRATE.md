@@ -8,6 +8,14 @@ How to update your code for each breaking change, newest first.
 
 Publishing, serving, or requesting a broadcast at a path with a leading, trailing, or doubled `/` throws instead of collapsing it. Pass the canonical path, such as `room/cam`.
 
+### Durations are `java.time.Duration`
+
+The records carry durations as `java.time.Duration` fields instead of `*Us` microsecond integers, so the duration extension properties are gone: read `backoff.initial`, `stats.rtt`, `grant.expires`, `info.maxAge`, `fill.maxDelay()`, and `consumer.delay()` directly.
+Convert with `toKotlinDuration()` and `toJavaDuration()` where you want `kotlin.time.Duration`.
+`AudioEncoderOutput.frameDuration` is nullable: pass null where you passed `frameDurationUs = 0u` for the codec's own frame.
+`Subscription.maxDelay` has no default: pass `java.time.Duration.ZERO` for the old one.
+`TrackConsumer.info()` no longer throws.
+
 ### Connection state
 
 `Moq.connect` returns a connecting native session. Replace `status()`, `connects()`, and failure polls with `session.state()` and `session.stateChanged(state.revision)`. `ConnectionState` carries `phase`, `connects`, `failure`, and `version`; `ConnectionPhase` replaces `ConnectionStatus`.
