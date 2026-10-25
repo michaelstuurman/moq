@@ -10,6 +10,11 @@ Rolling a cluster across a release also follows the [upgrade guide](https://moq.
 A session dialed at a URL path with a trailing or doubled `/`, such as `/room/` or `/room//cam`, is refused instead of collapsed; dial `/room`. An auth grant whose `root`, `mounts`, or `label` has one is refused as unavailable, and `stats.prefix`, `stats.node`, and `--cluster-tier` with one refuse to start.
 Embedders: `auth::Token::new` and `auth::Lease::new` return a `Result`.
 
+### Tiers are metric-safe names (#6778)
+
+`--cluster-tier` and the auth server's grant and refusal `tier` must be `/`-joined segments of ASCII letters, digits, `.`, `_`, and `-`.
+The relay refuses to start with any other `--cluster-tier`, and treats a grant naming one as an auth server error; rename such tiers, for example `gold tier` to `gold-tier`.
+
 ### Unknown `MOQ_*` environment variables stop startup ([#6633](https://github.com/moq-dev/moq/pull/6633))
 
 A `MOQ_*` variable moq-relay does not read, such as a misspelling, a removed name, or one meant for another binary, now stops startup with the variable named instead of being ignored.
