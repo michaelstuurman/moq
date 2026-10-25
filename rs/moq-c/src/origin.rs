@@ -32,7 +32,7 @@ pub struct Origin {
 	broadcast_request: NonZeroSlab<(moq_net::origin::Request, crate::ffi::Background)>,
 
 	/// Claim answers being filled before their exact route is announced.
-	prepared: NonZeroSlab<(moq_net::origin::Prepared, crate::ffi::Background)>,
+	prepared: NonZeroSlab<(moq_net::origin::Prepared, crate::ffi::Background, Id)>,
 }
 
 #[derive(Clone)]
@@ -330,7 +330,7 @@ impl Origin {
 		&self,
 		origin: Id,
 		path: P,
-	) -> Result<(moq_net::broadcast::Producer, crate::ffi::Background), Error> {
+	) -> Result<(moq_net::origin::Publication, crate::ffi::Background), Error> {
 		let origin = self.get(origin)?;
 		let result = origin.producer.create_broadcast(path);
 		origin.driver.check()?;
@@ -427,14 +427,15 @@ impl Origin {
 		&mut self,
 		prepared: moq_net::origin::Prepared,
 		driver: crate::ffi::Background,
+		broadcast: Id,
 	) -> Result<Id, Error> {
-		self.prepared.insert((prepared, driver))
+		self.prepared.insert((prepared, driver, broadcast))
 	}
 
 	pub fn prepared_take(
 		&mut self,
 		prepared: Id,
-	) -> Result<(moq_net::origin::Prepared, crate::ffi::Background), Error> {
+	) -> Result<(moq_net::origin::Prepared, crate::ffi::Background, Id), Error> {
 		self.prepared.remove(prepared).ok_or(Error::NotFound)
 	}
 
@@ -447,7 +448,6 @@ impl Origin {
 #[cfg(test)]
 mod supervision_tests {
 	use super::*;
-	use moq_net::Path;
 
 	#[tokio::test]
 	async fn a_broadcast_keeps_the_origin_failure_after_its_origin_handle_is_released() {
@@ -462,11 +462,7 @@ mod supervision_tests {
 			.unwrap();
 		let mut publish = crate::publish::Publish::default();
 		let broadcast = publish
-			.create(
-				origins
-					.create_broadcast(origin, Path::new("retained").unwrap())
-					.unwrap(),
-			)
+			.create_publication(origins.create_broadcast(origin, moq_net::Path::new("retained").unwrap()).unwrap())
 			.unwrap();
 		origins.close(origin).unwrap();
 		*trigger
@@ -480,11 +476,7 @@ mod supervision_tests {
 		));
 		let healthy = origins.create().unwrap();
 		let broadcast = publish
-			.create(
-				origins
-					.create_broadcast(healthy, Path::new("healthy").unwrap())
-					.unwrap(),
-			)
+			.create_publication(origins.create_broadcast(healthy, moq_net::Path::new("healthy").unwrap()).unwrap())
 			.unwrap();
 		publish.announce(broadcast, Default::default()).unwrap();
 	}

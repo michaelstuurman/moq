@@ -3,7 +3,7 @@
 use hang::moq_net::Path;
 use std::time::{Duration, Instant};
 
-use hang::moq_net::{self, Epoch, Timestamp, announce, broadcast, origin, track};
+use hang::moq_net::{self, Epoch, Timestamp, announce, origin, track};
 use moq_mux::catalog::Stream;
 
 const LITE_07: &str = "moq-lite-07-wip";
@@ -76,17 +76,15 @@ async fn read(subscription: &mut track::Subscriber) -> String {
 
 struct Published {
 	catalog: moq_mux::catalog::Producer,
-	_catalog_broadcast: broadcast::Producer,
-	sibling: broadcast::Producer,
+	_catalog_broadcast: origin::Publication,
+	sibling: origin::Publication,
 	media: track::Producer,
 }
 
 fn publish(origin: &origin::Producer, epoch: &Epoch, tag: &str) -> Published {
 	let route = origin::Route::default().with_epoch(epoch.clone());
-	let mut broadcast = origin
-		.publish(Path::new("live/catalog.hang").unwrap(), route.clone())
-		.unwrap();
-	let sibling = origin.publish(Path::new("live/media").unwrap(), route).unwrap();
+	let broadcast = origin.publish(moq_net::Path::new("live/catalog.hang").unwrap(), route.clone()).unwrap();
+	let sibling = origin.publish(moq_net::Path::new("live/media").unwrap(), route).unwrap();
 	let media = sibling
 		.create_track(
 			"audio",
@@ -94,7 +92,7 @@ fn publish(origin: &origin::Producer, epoch: &Epoch, tag: &str) -> Published {
 		)
 		.unwrap();
 	write(&media, &format!("{tag}:0"));
-	let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
+	let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), Default::default()).unwrap();
 	catalog
 		.mutate(|catalog| {
 			let mut audio = hang::catalog::AudioConfig::new(hang::catalog::AudioCodec::Opus, 48_000, 2);

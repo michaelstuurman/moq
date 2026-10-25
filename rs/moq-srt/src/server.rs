@@ -914,10 +914,10 @@ mod tests {
 
 		let (origin, driver) = moq_net::origin::Producer::new(moq_net::origin::Config::default());
 		tokio::spawn(moq_net::time::run(driver));
-		let mut broadcast = origin.create_broadcast(Path::new("marker").unwrap()).unwrap();
+		let broadcast = origin.create_broadcast(moq_net::Path::new("marker").unwrap()).unwrap();
 		broadcast.announce(moq_net::origin::Route::default()).unwrap();
 		let mut catalog = moq_mux::catalog::Producer::new(
-			&mut broadcast,
+			&mut broadcast.broadcast().clone(),
 			moq_mux::catalog::Config::default().with_catalog(moq_mux::catalog::hang::Catalog::<ts::Ext>::default()),
 		)
 		.unwrap();
@@ -1016,7 +1016,7 @@ mod tests {
 	/// One publisher instance of `live`: an announced broadcast under its own epoch with one
 	/// Legacy AAC track, for the egress tests.
 	struct Instance {
-		_broadcast: moq_net::broadcast::Producer,
+		_broadcast: moq_net::origin::Publication,
 		catalog: moq_mux::catalog::Producer<moq_mux::container::ts::Ext>,
 		audio: moq_mux::container::Producer<moq_mux::catalog::hang::Container>,
 	}
@@ -1024,9 +1024,9 @@ mod tests {
 	impl Instance {
 		fn publish(origin: &moq_net::origin::Producer, track: &str) -> Self {
 			let route = moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint());
-			let mut broadcast = origin.publish(Path::new("live").unwrap(), route).unwrap();
+			let broadcast = origin.publish(moq_net::Path::new("live").unwrap(), route).unwrap();
 			let mut catalog = moq_mux::catalog::Producer::new(
-				&mut broadcast,
+				&mut broadcast.broadcast().clone(),
 				moq_mux::catalog::Config::default()
 					.with_catalog(moq_mux::catalog::hang::Catalog::<moq_mux::container::ts::Ext>::default()),
 			)

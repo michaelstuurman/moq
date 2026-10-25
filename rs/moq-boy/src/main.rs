@@ -259,7 +259,7 @@ async fn run(config: &Config) -> Result<()> {
 	let (broadcast_path, viewer_path) = config.paths(&name)?;
 
 	// Create the broadcast on the publish origin and announce its path.
-	let mut broadcast = publish_origin
+	let broadcast = publish_origin
 		.create_broadcast(&broadcast_path)
 		.context("failed to create broadcast")?;
 	let epoch = moq_net::Epoch::mint();
@@ -284,15 +284,16 @@ async fn run(config: &Config) -> Result<()> {
 		.connect(url);
 
 	// Set up catalog and encoders.
-	let catalog = moq_mux::catalog::Producer::new(&mut broadcast, moq_mux::catalog::Config::default())?;
-	let video_encoder = video::VideoEncoder::spawn(broadcast.clone(), catalog.clone()).await;
+	let catalog =
+		moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), moq_mux::catalog::Config::default())?;
+	let video_encoder = video::VideoEncoder::spawn(broadcast.broadcast().clone(), catalog.clone()).await;
 
-	let audio_encoder = audio::AudioEncoder::new(broadcast.clone(), catalog.clone(), 44100)?;
+	let audio_encoder = audio::AudioEncoder::new(broadcast.broadcast().clone(), catalog.clone(), 44100)?;
 
 	let video_track = video_encoder.demand.clone();
 	let audio_track = audio_encoder.demand();
 
-	let status_publisher = status::StatusPublisher::new(&mut broadcast)?;
+	let status_publisher = status::StatusPublisher::new(&mut broadcast.broadcast().clone())?;
 
 	let session = Arc::new(Session {
 		video_encoder,

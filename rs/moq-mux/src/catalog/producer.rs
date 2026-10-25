@@ -1457,7 +1457,7 @@ mod test {
 			let (origin, driver) = moq_net::origin::Producer::new(Default::default());
 			let driver = tokio::spawn(moq_net::time::run(driver));
 			let mut broadcast = match path {
-				Some(path) => origin.create_broadcast(Path::new(path).unwrap()).unwrap(),
+				Some(path) => origin.create_broadcast(moq_net::Path::new(path).unwrap()).unwrap().broadcast().clone(),
 				None => moq_net::broadcast::Info::new().produce(),
 			};
 			let mut producer = Producer::new(&mut broadcast, Config::default()).unwrap();
@@ -2066,11 +2066,11 @@ mod test {
 		let wall = moq_clock::Wall::UNIX_EPOCH + Duration::from_millis(hang::catalog::MOQ_EPOCH_UNIX_MILLIS + 60_000);
 		let clock = crate::Clock::at(captured, wall).unwrap();
 		let (origin, _driver) = moq_net::origin::Producer::new(Default::default());
-		let mut front = origin.create_broadcast(Path::new("robot/front.hang").unwrap()).unwrap();
-		let mut rear = origin.create_broadcast(Path::new("robot/rear.hang").unwrap()).unwrap();
+		let front = origin.create_broadcast(moq_net::Path::new("robot/front.hang").unwrap()).unwrap();
+		let rear = origin.create_broadcast(moq_net::Path::new("robot/rear.hang").unwrap()).unwrap();
 		let catalogs = [
-			Producer::new(&mut front, Config::default().with_clock(clock)).unwrap(),
-			Producer::new(&mut rear, Config::default().with_clock(clock)).unwrap(),
+			Producer::new(&mut front.broadcast().clone(), Config::default().with_clock(clock)).unwrap(),
+			Producer::new(&mut rear.broadcast().clone(), Config::default().with_clock(clock)).unwrap(),
 		];
 		let mut broadcasts = [front, rear];
 		for (catalog, broadcast) in catalogs.iter().zip(&mut broadcasts) {

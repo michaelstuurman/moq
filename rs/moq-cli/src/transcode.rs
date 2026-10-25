@@ -175,7 +175,7 @@ impl Following {
 						// Dropping the old ladder cancels its pending requests and rung tasks.
 						drop(running.take());
 						let output = self.publish.create_broadcast(&self.output_path)?;
-						let transcoder = moq_transcode::Transcoder::new(source, output.clone(), self.config.clone())?;
+						let transcoder = moq_transcode::Transcoder::new(source, output.broadcast().clone(), self.config.clone())?;
 						output.announce(moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint()))?;
 						tracing::info!(source = %self.source_path, output = %self.output_path, "transcoding");
 						running = Some(Box::pin(transcoder.run()));
@@ -273,10 +273,9 @@ mod tests {
 		let origin = moq_tokio::origin::spawn();
 		let publish = moq_tokio::origin::spawn();
 		let route = || moq_net::origin::Route::default().with_epoch(moq_net::Epoch::mint());
-		let mut old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
-		let mut catalog = moq_mux::catalog::Producer::new(&mut old, Default::default()).unwrap();
-		let mut derivatives =
-			moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
+		let old = origin.publish(moq_net::Path::new("source").unwrap(), route()).unwrap();
+		let mut catalog = moq_mux::catalog::Producer::new(&mut old.broadcast().clone(), Default::default()).unwrap();
+		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), moq_net::Path::new("derived").unwrap(), None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),

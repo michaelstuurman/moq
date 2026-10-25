@@ -48,8 +48,8 @@ async fn settle() {
 }
 
 /// Announce `live/catalog.json` holding one finished snapshot group.
-fn publish(origin: &origin::Producer) -> (broadcast::Producer, track::Producer) {
-	let broadcast = origin.create_broadcast(Path::new("live").unwrap()).unwrap();
+fn publish(origin: &origin::Producer) -> (moq_net::origin::Publication, track::Producer) {
+	let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).unwrap();
 	let track = broadcast.create_track("catalog.json", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	let mut group = track.append_group().unwrap();

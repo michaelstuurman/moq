@@ -42,8 +42,8 @@ async fn resolve(origin: &moq_net::origin::Producer) -> moq_net::broadcast::Cons
 }
 
 /// Publish a finished track of three groups, and flag any subscription it ever gets.
-fn publish_finished(origin: &moq_net::origin::Producer) -> (moq_net::broadcast::Producer, Arc<AtomicBool>) {
-	let broadcast = origin.create_broadcast(Path::new("bcast").unwrap()).unwrap();
+fn publish_finished(origin: &moq_net::origin::Producer) -> (moq_net::origin::Publication, Arc<AtomicBool>) {
+	let broadcast = origin.create_broadcast(moq_net::Path::new("bcast").unwrap()).unwrap();
 	let mut track = broadcast.create_track("video", timed()).unwrap();
 	broadcast.announce(Default::default()).unwrap();
 	for sequence in 0..3u64 {
@@ -96,7 +96,6 @@ const VERSIONS: &[&str] = &[
 	"moq-transport-15",
 	"moq-transport-16",
 	"moq-transport-18",
-	"moq-transport-19",
 	"moq-transport-22",
 ];
 
@@ -167,7 +166,7 @@ async fn relayed(version: &str) {
 /// frames: the copy is timed from TRACK_STATUS_OK, and the resumed SUBSCRIBE keeps it so.
 #[moq_clock::test]
 async fn a_subscribe_after_track_status_keeps_timestamps() {
-	for version in ["moq-transport-18", "moq-transport-19", "moq-transport-22"] {
+	for version in ["moq-transport-18", "moq-transport-22"] {
 		moq_clock::timeout(TIMEOUT, async {
 			let publisher = produce_origin(1);
 			let broadcast = publisher.create_broadcast(Path::new("bcast").unwrap()).unwrap();

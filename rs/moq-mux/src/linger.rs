@@ -94,7 +94,7 @@ mod tests {
 			group.finish().unwrap();
 		}
 		track.finish().unwrap();
-		(broadcast, track)
+		(broadcast.broadcast().clone(), track)
 	}
 
 	/// Whether the origin has stopped routing [`PATH`].

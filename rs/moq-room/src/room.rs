@@ -162,8 +162,8 @@ mod tests {
 		moq_tokio::origin::spawn()
 	}
 
-	fn publish(origin: &origin::Producer, path: &str) -> broadcast::Producer {
-		let broadcast = origin.create_broadcast(Path::new(path).unwrap()).expect(path);
+	fn publish(origin: &origin::Producer, path: &str) -> origin::Publication {
+		let broadcast = origin.create_broadcast(moq_net::Path::new(path).unwrap()).expect(path);
 		broadcast.announce(Route::default()).expect("announce");
 		broadcast
 	}

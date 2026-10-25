@@ -1297,7 +1297,7 @@ mod tests {
 	#[allow(dead_code, reason = "held for their drop, never read")]
 	struct Feed {
 		announced: announce::Consumer,
-		source: broadcast::Producer,
+		source: origin::Publication,
 		consumer: broadcast::Consumer,
 		sub: track::Subscriber,
 		ctx: moq_net::stats::Session,
@@ -1385,7 +1385,7 @@ mod tests {
 	/// Dropping it unannounces the node.
 	#[allow(dead_code, reason = "held for their drop, never read")]
 	struct NodeBroadcast {
-		source: broadcast::Producer,
+		source: origin::Publication,
 		group: moq_json::snapshot::Producer<GroupFrame>,
 		track: track::Producer,
 		frame: TrafficFrame,
@@ -2239,7 +2239,7 @@ mod tests {
 	/// totals track and no epoch, so a new one at the same path is that node
 	/// restarting without telling the reader.
 	struct TotalsNode {
-		_source: broadcast::Producer,
+		_source: origin::Publication,
 		totals: moq_json::snapshot::Producer<TotalsFrame>,
 	}
 

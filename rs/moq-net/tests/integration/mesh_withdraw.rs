@@ -14,7 +14,7 @@ use std::{collections::HashMap, time::Duration};
 
 use futures::channel::mpsc;
 
-use moq_net::{Hop, Version, announce, broadcast, cache, origin};
+use moq_net::{Hop, Version, announce, cache, origin};
 use support::harness::{MockConnectOptions, MockPair, connect_mock, peer, peer_with_latency};
 
 fn produce_origin(hop: u64) -> origin::Producer {
@@ -98,7 +98,7 @@ impl Mesh {
 
 	/// Publish `count` broadcasts spread over every relay but the watcher, starting
 	/// at relay `offset`, and require the watcher to see each announced.
-	async fn publish(&mut self, count: usize, offset: usize) -> Vec<broadcast::Producer> {
+	async fn publish(&mut self, count: usize, offset: usize) -> Vec<moq_net::origin::Publication> {
 		let relays = self.nodes.len() - 1;
 		let broadcasts = (0..count)
 			.map(|i| {
@@ -362,8 +362,8 @@ impl Cluster {
 
 	/// Publish `path` from the client and require everyone to see it. Returns
 	/// what the watching client saw.
-	async fn publish(&mut self, path: &str) -> (broadcast::Producer, Vec<Kind>) {
-		let broadcast = self.publisher.create_broadcast(Path::new(path).unwrap()).unwrap();
+	async fn publish(&mut self, path: &str) -> (moq_net::origin::Publication, Vec<Kind>) {
+		let broadcast = self.publisher.create_broadcast(moq_net::Path::new(path).unwrap()).unwrap();
 		broadcast.announce(Default::default()).unwrap();
 		moq_clock::sim::idle().await;
 		let client = drain(&mut self.client).remove(path).unwrap();
@@ -376,7 +376,7 @@ impl Cluster {
 	}
 
 	/// Close `broadcast` cleanly: what the watching client, then each relay, saw.
-	async fn close(&mut self, path: &str, broadcast: broadcast::Producer) -> (Vec<Kind>, Vec<Vec<Kind>>) {
+	async fn close(&mut self, path: &str, broadcast: moq_net::origin::Publication) -> (Vec<Kind>, Vec<Vec<Kind>>) {
 		drop(broadcast);
 		moq_clock::sim::idle().await;
 		let client = drain(&mut self.client).remove(path).unwrap();
@@ -636,9 +636,6 @@ async fn hop_limit_bounds_receive_and_send() {
 		"moq-lite-07-wip",
 		"moq-transport-17",
 		"moq-transport-18",
-		"moq-transport-19",
-		"moq-transport-20",
-		"moq-transport-21",
 		"moq-transport-22",
 	] {
 		let version = name.parse().unwrap();
@@ -710,9 +707,6 @@ async fn hop_limit_falls_back_to_a_forwardable_route() {
 		"moq-lite-07-wip",
 		"moq-transport-17",
 		"moq-transport-18",
-		"moq-transport-19",
-		"moq-transport-20",
-		"moq-transport-21",
 		"moq-transport-22",
 	] {
 		let version = name.parse().unwrap();

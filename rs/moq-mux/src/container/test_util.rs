@@ -2,7 +2,6 @@
 
 use bytes::{Bytes, BytesMut};
 use hang::catalog::{AudioConfig, Container, H264, VideoConfig};
-use moq_net::Path;
 use moq_net::Timestamp;
 
 /// A live single-track Legacy broadcast. All producers stay open, so an
@@ -110,7 +109,7 @@ pub(crate) struct Moving {
 	/// `other`'s track `a`.
 	pub(crate) other: crate::container::Producer<crate::catalog::hang::Container>,
 	origin: moq_net::origin::Producer,
-	_broadcasts: [moq_net::broadcast::Producer; 2],
+	_broadcasts: [moq_net::origin::Publication; 2],
 }
 
 impl Moving {
@@ -120,9 +119,10 @@ impl Moving {
 
 	pub(crate) fn new() -> Self {
 		let origin = crate::source::produce_origin();
-		let mut live = origin.publish(Path::new("live").unwrap(), Default::default()).unwrap();
-		let mut other = origin.publish(Path::new("other").unwrap(), Default::default()).unwrap();
-		let catalog = crate::catalog::Producer::new(&mut live, crate::catalog::Config::default()).unwrap();
+		let live = origin.publish(moq_net::Path::new("live").unwrap(), Default::default()).unwrap();
+		let other = origin.publish(moq_net::Path::new("other").unwrap(), Default::default()).unwrap();
+		let catalog =
+			crate::catalog::Producer::new(&mut live.broadcast().clone(), crate::catalog::Config::default()).unwrap();
 		let track = |broadcast: &mut moq_net::broadcast::Producer, name: &str| {
 			let info = hang::container::track_info(hang::catalog::PRIORITY.video);
 			let track = broadcast.create_track(name, info).unwrap();
@@ -130,9 +130,9 @@ impl Moving {
 			crate::container::Producer::new(track, wire)
 		};
 		let mut moving = Self {
-			a: track(&mut live, "a"),
-			b: track(&mut live, "b"),
-			other: track(&mut other, "a"),
+			a: track(&mut live.broadcast().clone(), "a"),
+			b: track(&mut live.broadcast().clone(), "b"),
+			other: track(&mut other.broadcast().clone(), "a"),
 			catalog,
 			origin,
 			_broadcasts: [live, other],
