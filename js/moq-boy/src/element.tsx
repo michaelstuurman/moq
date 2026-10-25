@@ -17,19 +17,6 @@ type Observed = (typeof OBSERVED)[number];
 
 const DEFAULT_PREFIX = Moq.Path.from("boy");
 
-// Parse a path attribute, warning and returning `fallback` when it has an empty segment.
-function parsePrefix<T>(name: Observed, value: string | null, fallback: T): Moq.Path.Valid | T {
-	if (value === null) return fallback;
-	try {
-		return Moq.Path.from(value);
-	} catch {
-		console.warn(
-			`moq-boy: invalid ${name}="${value}", expected a path without a leading, trailing, or doubled "/"`,
-		);
-		return fallback;
-	}
-}
-
 const cleanup = new FinalizationRegistry<Moq.Signals.Effect>((signals) => signals.close());
 
 /**
@@ -96,19 +83,20 @@ export default class MoqBoy extends HTMLElement {
 		this.#dispose = undefined;
 	}
 
+	// A path attribute with an empty segment throws before it reaches discovery: refused, never defaulted.
 	attributeChangedCallback(name: Observed, _oldValue: string | null, newValue: string | null) {
 		switch (name) {
 			case "url":
 				this.connection.url.set(newValue ? new URL(newValue) : undefined);
 				break;
 			case "prefix":
-				this.#prefix.set(parsePrefix(name, newValue, DEFAULT_PREFIX));
+				this.#prefix.set(newValue === null ? DEFAULT_PREFIX : Moq.Path.from(newValue));
 				break;
 			case "prefix-game":
-				this.#gamePrefixOverride.set(parsePrefix(name, newValue, undefined));
+				this.#gamePrefixOverride.set(newValue === null ? undefined : Moq.Path.from(newValue));
 				break;
 			case "prefix-viewer":
-				this.#viewerPrefixOverride.set(parsePrefix(name, newValue, undefined));
+				this.#viewerPrefixOverride.set(newValue === null ? undefined : Moq.Path.from(newValue));
 				break;
 		}
 	}
