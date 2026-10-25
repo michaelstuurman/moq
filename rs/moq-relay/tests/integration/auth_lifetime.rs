@@ -444,8 +444,8 @@ async fn forwards_the_setup_token() {
 
 		// Draft-18 SETUP (0x2F00): AUTHORIZATION TOKEN (3), USE_VALUE (3), Token Type 0.
 		let encoded = [&[0x03, 0x00][..], &value].concat();
-		let params = [&[0x01, 0x03, encoded.len() as u8][..], &encoded].concat();
-		let setup = [&[0x6f, 0x00][..], &(params.len() as u16).to_be_bytes(), &params].concat();
+		let params = [&[0x03, encoded.len() as u8][..], &encoded].concat();
+		let setup = [&[0xaf, 0x00][..], &(params.len() as u16).to_be_bytes(), &params].concat();
 		let mut session = if websocket {
 			qmux::ws::Client::new()
 				.with_protocol("moqt-18", &[qmux::Version::QMux01])
