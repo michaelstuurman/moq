@@ -663,6 +663,32 @@ impl Tracks {
 		}
 	}
 
+	/// Finish the record track of `name`, whose recorder dropped and whose owner never enrolls the
+	/// name again, and forget it, so a producer minting a name per track holds only its live ones.
+	///
+	/// Readers already on the record track read it to its end. Nothing happens for a name never
+	/// enrolled; a name whose recorder is still alive errors.
+	pub fn retire(&self, name: &str) -> crate::Result<()> {
+		let mut state = self.state.lock().unwrap();
+		let Some((_, live)) = state.tracks.get(name) else {
+			return Ok(());
+		};
+		let mut live = live.lock().unwrap();
+		if live.recording {
+			return Err(moq_net::Error::Duplicate.into());
+		}
+		live.finish();
+		drop(live);
+		state.tracks.remove(name);
+		Ok(())
+	}
+
+	/// How many record tracks are held, live or kept for a re-enrollment.
+	#[cfg(test)]
+	pub fn len(&self) -> usize {
+		self.state.lock().unwrap().tracks.len()
+	}
+
 	/// Stop every open segment and finish every record track. Later enrollments fail.
 	pub fn finish(&self) {
 		let mut state = self.state.lock().unwrap();
@@ -781,7 +807,9 @@ impl Drop for Recorder {
 			live.recording = false;
 			live.publish()
 		};
-		self.lead(&published.fire());
+		// A pacer going away says nothing about where the others' content stops, so its last stop
+		// isn't mirrored: each follower stops where its own content does, or paces on.
+		published.fire();
 
 		// The earliest enrollment still recording takes over pacing, or nobody does until the next.
 		let mut state = self.state.lock().unwrap();

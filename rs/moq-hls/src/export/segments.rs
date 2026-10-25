@@ -150,12 +150,18 @@ pub(crate) fn evicts(window: Duration, len: usize, rest: Duration) -> bool {
 	len > MAX_SEGMENTS || (len >= 2 && rest >= window)
 }
 
-/// The URI tag naming a record track's segment numbering: a hash of the track name, so every edge
-/// derives the same one, it never contains a URI separator, and another record track (a
-/// reconfigured rendition) never reuses a URL.
-pub(crate) fn tag(track: &str) -> String {
-	// 32 bits: the tag only has to tell apart the record tracks one rendition name ever carries.
-	Sha256::digest(track)[..4].iter().map(|b| format!("{b:02x}")).collect()
+/// The URI tag naming the segments one config muxes from a record track: a hash of the track name
+/// and the normalized `config`, so every edge derives the same one and it never contains a URI
+/// separator. A reconfigured rendition keeps its record track but muxes it differently, so its
+/// segments get new URLs rather than new bytes under the old ones.
+pub(crate) fn tag(track: &str, config: &[u8]) -> String {
+	let hash = Sha256::new()
+		.chain_update(track)
+		.chain_update([0])
+		.chain_update(config)
+		.finalize();
+	// 32 bits: the tag only has to tell apart the configs one rendition name ever carries.
+	hash[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// One playlist segment: its number, timing, and the groups it holds.
@@ -242,12 +248,13 @@ impl State {
 }
 
 impl Producer {
-	/// An empty window.
-	pub fn new() -> Self {
+	/// An empty window whose first segment is numbered `start` or later: those before it belong
+	/// to another window, which [`numbered`](Self::numbered) reports as never listed here.
+	pub fn new(start: u64) -> Self {
 		Self {
 			state: kio::Producer::new(State {
 				rows: VecDeque::new(),
-				sequence: 0,
+				sequence: start,
 				discontinuity: 0,
 				ended: false,
 				failed: None,
@@ -361,7 +368,7 @@ impl Producer {
 	pub fn numbered(&self, segment: u64) -> Lookup {
 		let state = self.state.read();
 		let (Some(front), Some(back)) = (state.rows.front(), state.rows.back()) else {
-			return match state.ended || state.failed.is_some() {
+			return match segment < state.sequence || state.ended || state.failed.is_some() {
 				true => Lookup::Never,
 				false => Lookup::Pending,
 			};
@@ -483,8 +490,10 @@ pub(crate) enum Lookup {
 pub struct Segment {
 	/// The segment number (its URI is `seg/{tag}.{segment}.m4s`).
 	pub segment: u64,
-	/// The transmuxed CMAF fragment (`moof`+`mdat`), fetched on demand by [`Consumer::next`].
-	pub media: Bytes,
+	/// The transmuxed CMAF fragment (`moof`+`mdat`), fetched on demand by [`Consumer::next`],
+	/// or `None` for a gap: the rendition has no media for this span (`EXT-X-GAP`), but the
+	/// segment keeps its number.
+	pub media: Option<Bytes>,
 	/// Presentation duration.
 	pub duration: Duration,
 	/// Wall-clock start time, when the catalog advertises its broadcast clock.
@@ -548,40 +557,36 @@ impl Consumer {
 	/// call with its authorization error.
 	///
 	/// Waits for the next segment's alignment to settle, then FETCHes and transmuxes its groups.
-	/// A stop or a misaligned segment is skipped. Missing window rows or unavailable media fail
-	/// the recording instead of silently omitting segments. Fetch/transmux errors leave the cursor
-	/// in place so the caller can retry. A bound instance's retained media drains after End or
-	/// Restart; a replacement's media is never read under the old rows.
+	/// A stop or a misaligned segment is yielded without media, so every segment number is
+	/// accounted for. Missing window rows or unavailable media fail the recording instead of
+	/// silently omitting segments. Fetch/transmux errors leave the cursor in place so the caller
+	/// can retry. A bound instance's retained media drains after End or Restart; a replacement's
+	/// media is never read under the old rows.
 	pub async fn next(&mut self) -> Result<Option<Segment>> {
-		loop {
-			let Some(row) = kio::wait(|waiter| self.poll_next(waiter)).await? else {
-				return Ok(None);
-			};
-			kio::wait(|waiter| {
-				// The refusal settles the binding, not this rendition's records, so watch both.
-				self.rendition.poll_media(waiter);
-				self.rendition.authorize()?;
-				self.rendition.poll_resolved(waiter, &row).map(Ok::<_, crate::Error>)
-			})
-			.await?;
-			if self.rendition.is_gap(&row) {
-				self.position.1 += 1;
-				continue;
-			}
-			let media = self
-				.rendition
-				.fetch(&row)
-				.await?
-				.ok_or(crate::Error::SegmentUnavailable { segment: row.segment })?;
-			self.position.1 += 1;
-			return Ok(Some(Segment {
-				segment: row.segment,
-				media,
-				duration: row.duration,
-				program_date_time: self.rendition.wall_clock(row.pts),
-				discontinuity: row.discontinuity,
-			}));
-		}
+		let Some(row) = kio::wait(|waiter| self.poll_next(waiter)).await? else {
+			return Ok(None);
+		};
+		kio::wait(|waiter| {
+			// The refusal settles the binding, not this rendition's records, so watch both.
+			self.rendition.poll_media(waiter);
+			self.rendition.authorize()?;
+			self.rendition.poll_resolved(waiter, &row).map(Ok::<_, crate::Error>)
+		})
+		.await?;
+		let media = if self.rendition.is_gap(&row) {
+			None
+		} else {
+			let media = self.rendition.fetch(&row).await?;
+			Some(media.ok_or(crate::Error::SegmentUnavailable { segment: row.segment })?)
+		};
+		self.position.1 += 1;
+		Ok(Some(Segment {
+			segment: row.segment,
+			media,
+			duration: row.duration,
+			program_date_time: self.rendition.wall_clock(row.pts),
+			discontinuity: row.discontinuity,
+		}))
 	}
 
 	fn poll_next(&mut self, waiter: &kio::Waiter) -> Poll<Result<Option<Row>>> {
@@ -651,7 +656,7 @@ mod tests {
 		Row {
 			index: segment,
 			segment,
-			tag: Arc::from(tag("video.hls")),
+			tag: Arc::from(tag("video.hls", b"")),
 			groups: group..group + 1,
 			duration: Duration::from_millis(duration_ms),
 			pts,
@@ -663,7 +668,7 @@ mod tests {
 
 	#[test]
 	fn every_row_is_listed() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		live.push(row(0, 0, 0, 2_000), Duration::from_secs(30));
 		live.push(row(1, 1, 2_000, 2_000), Duration::from_secs(30));
 
@@ -680,7 +685,7 @@ mod tests {
 
 	#[test]
 	fn window_evicts_and_advances_sequence() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(4);
 		for i in 0..6u64 {
 			live.push(row(i, i, i * 2_000, 2_000), window);
@@ -697,7 +702,7 @@ mod tests {
 
 	#[test]
 	fn retiring_a_prefix_advances_the_playlist_sequence() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		for i in 0..4u64 {
 			live.push(row(i, i, i * 2_000, 2_000), window);
@@ -719,7 +724,7 @@ mod tests {
 
 	#[test]
 	fn a_skipped_source_range_clears_rows_before_the_next_segment() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		live.push(row(4, 4, 8_000, 2_000), Duration::from_secs(10));
 		live.clear();
 		live.push(row(10, 10, 20_000, 2_000), Duration::from_secs(10));
@@ -760,7 +765,7 @@ mod tests {
 
 	#[test]
 	fn rows_and_the_latest_group() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		live.push(row(0, 0, 0, 1_000), window);
 		live.push(
@@ -771,7 +776,7 @@ mod tests {
 			window,
 		);
 
-		let tag = tag("video.hls");
+		let tag = tag("video.hls", b"");
 		assert_eq!(live.row(&tag, 0).unwrap().groups, 0..1);
 		assert_eq!(live.row(&tag, 7), None, "unknown segments miss");
 		assert_eq!(live.row("00000000", 0), None, "another record track's numbering misses");
@@ -780,7 +785,7 @@ mod tests {
 
 	#[test]
 	fn backwards_jump_resets_the_window() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		live.push(row(0, 0, 10_000, 2_000), window);
 		live.push(row(1, 1, 12_000, 2_000), window);
@@ -798,7 +803,7 @@ mod tests {
 
 	#[test]
 	fn lookups_tell_pending_from_never() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		assert!(matches!(live.numbered(0), Lookup::Pending));
 		live.push(row(3, 3, 6_000, 2_000), window);
@@ -815,7 +820,7 @@ mod tests {
 
 	#[test]
 	fn cursor_walks_segments() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		live.push(row(0, 0, 0, 2_000), window);
 		live.push(row(1, 1, 2_000, 2_000), window);
@@ -840,7 +845,7 @@ mod tests {
 
 	#[test]
 	fn cursors_refuse_lost_rows_and_resets() {
-		let live = Producer::new();
+		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
 		for segment in 5..8 {
 			live.push(row(segment, segment, segment * 2_000, 2_000), window);
@@ -869,8 +874,11 @@ mod tests {
 
 	#[test]
 	fn tags_tell_record_tracks_apart() {
-		assert_ne!(tag("video.hls"), tag("video2.hls"));
-		assert_eq!(tag("video.hls").len(), 8);
-		assert!(tag("a.b/c").chars().all(|c| c.is_ascii_hexdigit()));
+		assert_ne!(tag("video.hls", b""), tag("video2.hls", b""));
+		assert_ne!(tag("video.hls", b"a"), tag("video.hls", b"b"));
+		// The separator keeps a name's tail from passing for a config's head.
+		assert_ne!(tag("video.hls", b"x"), tag("video.hlsx", b""));
+		assert_eq!(tag("video.hls", b"").len(), 8);
+		assert!(tag("a.b/c", b"").chars().all(|c| c.is_ascii_hexdigit()));
 	}
 }

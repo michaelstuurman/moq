@@ -12,6 +12,13 @@ A segment that does not line up with the lead rendition's is listed as `EXT-X-GA
 The DASH manifest has one period, with `t` and `d` in milliseconds.
 Segment URL tags name each rendition's own record track, so every URL changes once.
 
+### The segment cursor yields gaps
+
+`export::segments::Consumer::next` yields a segment the rendition has no media
+for (an `EXT-X-GAP`) instead of skipping it, so a recorder can tell a declared
+gap from rows it missed. `Segment::media` is now `Option<Bytes>`, `None` for a
+gap. Write a gap entry for `None`, or skip it to keep the old behavior.
+
 ### A failed catalog fails listings and cursors with `CatalogFailed`
 
 A catalog stream that ends in an error now fails every rendition's playlist,

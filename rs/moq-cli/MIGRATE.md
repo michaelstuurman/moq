@@ -9,6 +9,11 @@ How to update your invocation and config for each breaking change, newest first.
 Imports no longer publish HLS records by default, so `export hls` lists nothing for a broadcast published without them.
 Pass `--hls` to `import` (the stdin formats, `hls`, `rtsp`, and `capture`), and start keyframes at the same timestamps across renditions.
 
+### Unknown `MOQ_*` environment variables stop startup ([#6633](https://github.com/moq-dev/moq/pull/6633))
+
+A `MOQ_*` variable `moq` does not read, such as a misspelling, a removed name, or one meant for another binary, now stops startup with the variable named instead of being ignored.
+Remove or rename what the error lists.
+
 ### `import --linger` sets how long a finished broadcast stays up
 
 A cleanly ended import used to stay up for its `--max-age`; it now stays up for `--linger` (default 30 s), counted from the end, and `--max-age` only sets retention.

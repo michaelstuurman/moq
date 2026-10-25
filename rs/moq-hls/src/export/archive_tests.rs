@@ -229,11 +229,6 @@ impl Recording {
 	}
 }
 
-/// The URL tag of `track`'s segments.
-fn tag(track: &str) -> String {
-	segments::tag(&hang::hls::default_name(track))
-}
-
 /// One Legacy frame: a VP8 keyframe for video (geometry the muxer can parse), filler otherwise.
 fn legacy(track: &str, micros: u64, keyframe: bool) -> Bytes {
 	let payload: &'static [u8] = match (track.starts_with("audio"), keyframe) {
@@ -283,7 +278,7 @@ impl Replay {
 		let driver = tokio::spawn(moq_net::time::run(driver));
 		let broadcast = origin.create_broadcast("rec").unwrap();
 		let serving = moq_archive::consumer::Config::default().with_cache(cache);
-		let consumer = moq_archive::Consumer::open(store.clone(), broadcast.clone(), serving)
+		let consumer = moq_archive::Consumer::open(store.clone(), broadcast.broadcast().clone(), serving)
 			.await
 			.unwrap();
 		let consumer = tokio::spawn(consumer.run());
@@ -384,7 +379,7 @@ async fn playlists_read_only_records_and_segments_their_own_objects() {
 	for _ in 0..2 {
 		for (kind, name) in [(Kind::Video, "1080p"), (Kind::Video, "360p"), (Kind::Audio, "audio")] {
 			let playlist = replay.playlist(kind, name).await;
-			let tag = tag(name);
+			let tag = replay.broadcaster.rendition(kind, name).unwrap().tag().to_string();
 			for segment in 0..3 {
 				let line = format!("seg/{tag}.{segment}.m4s\n");
 				assert_eq!(playlist.contains(&line), segment < 2, "{name}: {playlist}");
@@ -529,7 +524,12 @@ async fn a_growing_recording_ends_with_its_markers() {
 	recording.stored().await;
 	let replay = Replay::open(&recording.store, 64 * 1024 * 1024).await;
 	replay.playlist(Kind::Video, "1080p").await;
-	let tag = tag("1080p");
+	let tag = replay
+		.broadcaster
+		.rendition(Kind::Video, "1080p")
+		.unwrap()
+		.tag()
+		.to_string();
 
 	add_segment(&mut recording, 3);
 	recording.stored().await;
@@ -561,7 +561,12 @@ async fn durable_records_list_the_window() {
 	let recording = segments(13).await;
 	recording.stored().await;
 	let replay = Replay::open(&recording.store, 64 * 1024 * 1024).await;
-	let tag = tag("1080p");
+	let tag = replay
+		.broadcaster
+		.rendition(Kind::Video, "1080p")
+		.unwrap()
+		.tag()
+		.to_string();
 	let playlist = replay
 		.playlist_until(Kind::Video, "1080p", |playlist| {
 			playlist.contains(&format!("seg/{tag}.11.m4s\n"))

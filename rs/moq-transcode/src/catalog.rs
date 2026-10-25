@@ -1029,6 +1029,7 @@ mod tests {
 			.json_snapshot::<u32>(
 				output.create_track("status", info).unwrap(),
 				moq_mux::json::Config::default(),
+				moq_mux::json::Options::default(),
 			)
 			.unwrap();
 		let mut subscriber = status.consume();

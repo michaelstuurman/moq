@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use moq_mux::catalog::hang::Catalog;
 
+use super::master;
 use super::rendition::{Kind, Rendition};
 use super::segments::Discontinuities;
 
@@ -379,7 +380,9 @@ impl Producer {
 	/// `source` holds the broadcast the snapshot was read from, so each rendition serves media
 	/// from that same broadcast rather than whatever is at the path by the time it is asked. A
 	/// rendition whose `broadcast` reference escapes above the origin root names no broadcast at
-	/// all, so it is dropped with a warning rather than served.
+	/// all, so it is dropped with a warning rather than served. So is a rendition named `""`, `.`, or
+	/// `..`, which no URL path segment can address, so the master playlist, the DASH manifest, and
+	/// the router agree on what is served.
 	pub fn sync(&self, source: &moq_mux::Source, catalog: &Catalog) {
 		let clock = catalog.clock;
 
@@ -407,13 +410,23 @@ impl Producer {
 			})
 			.map(|(key, _)| key.clone())
 			.collect();
+		// A replacement lists the records its retired predecessor won't, so no record is muxed
+		// under both configs.
+		let mut starts = BTreeMap::new();
 		for key in stale {
 			if let Some(rendition) = current.renditions.remove(&key) {
-				rendition.retire();
+				starts.insert(key, rendition.retire());
 			}
 		}
 
 		for (name, video) in &catalog.video.renditions {
+			if !master::is_path_segment(name) {
+				tracing::warn!(
+					rendition = name,
+					"ignoring video rendition not named as a URL path segment"
+				);
+				continue;
+			}
 			let key = (Kind::Video, name.clone());
 			if let Some(rendition) = current.renditions.get(&key) {
 				// Survived the stale pass, so it decodes the same: keep its window, its cached
@@ -426,7 +439,7 @@ impl Producer {
 				continue;
 			};
 			let rendition = match Rendition::video(name.clone(), video, source, hls, clock, self.fanout()) {
-				Ok(rendition) => Arc::new(rendition),
+				Ok(rendition) => Arc::new(rendition.with_start(starts.get(&key).copied().unwrap_or(0))),
 				Err(err) => {
 					tracing::warn!(rendition = name, %err, "ignoring unservable video rendition");
 					continue;
@@ -436,6 +449,13 @@ impl Producer {
 			current.renditions.insert(key, rendition);
 		}
 		for (name, audio) in &catalog.audio.renditions {
+			if !master::is_path_segment(name) {
+				tracing::warn!(
+					rendition = name,
+					"ignoring audio rendition not named as a URL path segment"
+				);
+				continue;
+			}
 			let key = (Kind::Audio, name.clone());
 			if let Some(rendition) = current.renditions.get(&key) {
 				rendition.refresh(audio.bitrate, None, audio.enabled);
@@ -445,7 +465,7 @@ impl Producer {
 				continue;
 			};
 			let rendition = match Rendition::audio(name.clone(), audio, source, hls, clock, self.fanout()) {
-				Ok(rendition) => Arc::new(rendition),
+				Ok(rendition) => Arc::new(rendition.with_start(starts.get(&key).copied().unwrap_or(0))),
 				Err(err) => {
 					tracing::warn!(rendition = name, %err, "ignoring unservable audio rendition");
 					continue;

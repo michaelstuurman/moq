@@ -13,6 +13,11 @@ Each video and audio rendition then advertises its own `hls` field and `<track>.
 Read records with `hls::Consumer::subscribe(&broadcast, &hls)`, whose `Event::Push` carries an `hls::Entry`, or publish your own with `hls::Producer`.
 A publisher that enables HLS must align group boundaries across its renditions.
 
+### JSON snapshot encoder options move to `json::Options`
+
+`json::Config::deltas` and `with_deltas` move to the new `json::Options`, which `catalog::Producer::json_snapshot` takes as a third argument, so a custom catalog entry can set them too.
+Pass `json::Options::default()` where you relied on the default, or `json::Options::default().with_deltas(false)` where you called `Config::with_deltas(false)`.
+
 ### `Programs::finish` returns the program broadcasts
 
 `Programs::finish` now returns each program's `broadcast::Producer` instead of `()`.

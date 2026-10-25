@@ -237,6 +237,14 @@ fn normalize_audio(config: &AudioConfig) -> AudioConfig {
 	config
 }
 
+/// The segment [tag](segments::tag) of `track` muxed under the normalized `config`, hashing its
+/// catalog JSON, which every edge encodes alike.
+fn tag<T: serde::Serialize>(track: &str, config: &T) -> Arc<str> {
+	// It was parsed from catalog JSON, so it encodes back.
+	let config = serde_json::to_vec(config).expect("a catalog config encodes as JSON");
+	Arc::from(segments::tag(track, &config))
+}
+
 /// What a listed row holds on its rendition.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Content {
@@ -247,6 +255,19 @@ pub(crate) enum Content {
 	Gap,
 	/// Not yet known: the lead rendition has not listed this number yet.
 	Pending,
+}
+
+/// Which records a rendition lists, shared by its records watcher and [`Rendition::retire`] so a
+/// replacement starts exactly where a retired instance stops.
+#[derive(Default)]
+struct Claim {
+	/// Records numbered below this are a predecessor's (see [`Rendition::with_start`]).
+	start: u64,
+	/// The first record this instance will not list: the one after its pending record, else the one
+	/// after the newest it handled.
+	next: u64,
+	/// Set by [`Rendition::retire`]: nothing at or past `next` is listed.
+	retired: bool,
 }
 
 /// A single HLS rendition: master-playlist metadata, its window over its own HLS records (which
@@ -276,7 +297,8 @@ pub struct Rendition {
 	config: Config,
 	/// The catalog entry's `hls` field: the record track and nominal duration.
 	hls: Hls,
-	/// The [tag](segments::tag) of [`hls`](Self::hls)'s record track, in every segment URL.
+	/// The [tag](segments::tag) of [`hls`](Self::hls)'s record track muxed under this config, in
+	/// every segment URL.
 	tag: Arc<str>,
 	/// The catalog's root broadcast clock: the wall anchor record times map through. Absent when
 	/// the publisher exposes none.
@@ -294,6 +316,8 @@ pub struct Rendition {
 	watcher: Mutex<Option<tokio::task::JoinHandle<()>>>,
 	/// Set once the catalog drops or replaces the rendition (see [`retire`](Self::retire)).
 	retiring: tokio::sync::watch::Sender<bool>,
+	/// Which records this instance lists.
+	claim: Mutex<Claim>,
 	/// The broadcast serving this rendition's media. A sibling is bound when the rendition is
 	/// created, and ends the rendition when it ends.
 	media: Media,
@@ -386,15 +410,16 @@ impl Rendition {
 			height: config.coded_height,
 			codec: config.codec.to_string(),
 			config: Config::Video(config.clone()),
-			tag: Arc::from(segments::tag(&hls.track)),
+			tag: tag(&hls.track, &normalize_video(config)),
 			hls,
 			clock,
-			live: Arc::new(segments::Producer::new()),
+			live: Arc::new(segments::Producer::new(0)),
 			fanout,
 			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
 			retiring: tokio::sync::watch::Sender::new(false),
+			claim: Mutex::default(),
 			media,
 			run: Mutex::default(),
 			building: tokio::sync::Mutex::new(()),
@@ -422,15 +447,16 @@ impl Rendition {
 			height: None,
 			codec: config.codec.to_string(),
 			config: Config::Audio(config.clone()),
-			tag: Arc::from(segments::tag(&hls.track)),
+			tag: tag(&hls.track, &normalize_audio(config)),
 			hls,
 			clock,
-			live: Arc::new(segments::Producer::new()),
+			live: Arc::new(segments::Producer::new(0)),
 			fanout,
 			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
 			retiring: tokio::sync::watch::Sender::new(false),
+			claim: Mutex::default(),
 			media,
 			run: Mutex::default(),
 			building: tokio::sync::Mutex::new(()),
@@ -448,14 +474,39 @@ impl Rendition {
 		*self.watcher.lock().expect("watcher lock poisoned") = Some(watcher);
 	}
 
+	/// List only records numbered `start` or later, the rest being a retired predecessor's (see
+	/// [`retire`](Self::retire)).
+	pub(crate) fn with_start(mut self, start: u64) -> Self {
+		self.claim = Mutex::new(Claim {
+			start,
+			next: start,
+			retired: false,
+		});
+		self.live = Arc::new(segments::Producer::new(start));
+		self
+	}
+
 	/// End the window once the segment its records are still bounding is listed, because the
-	/// catalog dropped or replaced the rendition.
+	/// catalog dropped or replaced the rendition. Returns the first record it will not list, where
+	/// a replacement starts.
 	///
 	/// Its records go on (a replacement follows them too, and the publisher never finishes a
 	/// dropped track's), so they can't end it. Ending it at once would lose the last segment of
 	/// every recording, since it is listed only when the record after it arrives.
-	pub(crate) fn retire(&self) {
+	pub(crate) fn retire(&self) -> u64 {
+		let next = {
+			let mut claim = self.claim.lock().expect("claim lock poisoned");
+			claim.retired = true;
+			claim.next
+		};
 		self.retiring.send_replace(true);
+		next
+	}
+
+	/// The [tag](segments::tag) every segment URL carries.
+	#[cfg(test)]
+	pub(crate) fn tag(&self) -> &str {
+		&self.tag
 	}
 
 	/// List one segment, unless the bound sibling ended.
@@ -1154,42 +1205,38 @@ async fn watch_records(
 			let Some(rendition) = rendition.upgrade() else {
 				return Ok(());
 			};
+			// Held while handling the event, so a retire sees exactly what this instance lists.
+			let mut claim = rendition.claim.lock().expect("claim lock poisoned");
 			match event {
-				moq_mux::hls::Event::Push { index, entry } => {
-					// The record bounds the one a retiring rendition was waiting on, and starts
-					// what the catalog no longer lists.
-					let last = *retiring.borrow();
+				moq_mux::hls::Event::Push { entry, .. } if entry.sequence < claim.start => {}
+				moq_mux::hls::Event::Push { entry, .. } => {
 					if let Some(previous) = pending.take() {
 						match row(&rendition, &previous, &entry, broken) {
 							Some(row) => {
 								broken = false;
 								rendition.push(row);
 							}
-							// A successor that goes backwards can't bound it, so drop it.
-							None => broken = true,
+							// A successor that goes backwards can't bound it, but its number keeps
+							// its slot: a hole would renumber every later URI.
+							None => {
+								rendition.push(gap(&rendition, &previous, broken));
+								broken = true;
+							}
 						}
 					}
+					// It bounded the record a retired rendition was waiting on, and starts what
+					// the replacement lists.
+					if claim.retired {
+						return Ok(());
+					}
 					if entry.is_stop() {
-						let pts = Duration::from(entry.pts);
-						let discontinuity = rendition.fanout.stamp(entry.sequence, broken, pts);
-						rendition.push(segments::Row {
-							index,
-							segment: entry.sequence,
-							tag: rendition.tag.clone(),
-							groups: entry.group..entry.group,
-							duration: Duration::ZERO,
-							pts: entry.pts,
-							end: pts,
-							discontinuity,
-							stop: true,
-						});
+						rendition.push(gap(&rendition, &entry, broken));
 						// Whatever resumes does not continue it.
 						broken = true;
-					} else {
-						pending = Some(entry);
 					}
-					if last {
-						return Ok(());
+					claim.next = entry.sequence + 1;
+					if !entry.is_stop() {
+						pending = Some(entry);
 					}
 				}
 				moq_mux::hls::Event::Pop(range) => {
@@ -1199,9 +1246,14 @@ async fn watch_records(
 						rendition.live.retire(through);
 					}
 				}
-				moq_mux::hls::Event::Skip(_) => {
+				moq_mux::hls::Event::Skip(range) => {
+					// The pending record's successor is gone, so a retired rendition lists no more.
+					if claim.retired {
+						return Ok(());
+					}
 					pending = None;
 					broken = true;
+					claim.next = claim.next.max(range.end);
 					rendition.live.clear();
 				}
 				_ => unreachable!("unknown HLS record event"),
@@ -1225,6 +1277,23 @@ async fn watch_records(
 		}
 	}
 	rendition.close();
+}
+
+/// A row listing `record`'s number with nothing to fetch, as `EXT-X-GAP`: a stop, or a record
+/// no successor can bound.
+fn gap(rendition: &Rendition, record: &moq_mux::hls::Entry, broken: bool) -> segments::Row {
+	let pts = Duration::from(record.pts);
+	segments::Row {
+		index: record.sequence,
+		segment: record.sequence,
+		tag: rendition.tag.clone(),
+		groups: record.group..record.group,
+		duration: Duration::ZERO,
+		pts: record.pts,
+		end: pts,
+		discontinuity: rendition.fanout.stamp(record.sequence, broken, pts),
+		stop: true,
+	}
 }
 
 /// The row of `record`, bounded by its successor `next`, or `None` when `next` goes backwards.
