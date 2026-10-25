@@ -120,7 +120,7 @@ export default class MoqBoy extends HTMLElement {
 
 	/** The path prefix for game broadcasts, mirrored by the `prefix-game` attribute. */
 	get prefixGame(): string {
-		return this.#gamePrefixOverride.peek() ?? `${this.#prefix.peek()}/game`;
+		return this.#gamePrefixOverride.peek() ?? Moq.Path.from(this.#prefix.peek(), "game");
 	}
 
 	set prefixGame(value: string) {
@@ -129,7 +129,7 @@ export default class MoqBoy extends HTMLElement {
 
 	/** The path prefix for viewer broadcasts, mirrored by the `prefix-viewer` attribute. */
 	get prefixViewer(): string {
-		return this.#viewerPrefixOverride.peek() ?? `${this.#prefix.peek()}/viewer`;
+		return this.#viewerPrefixOverride.peek() ?? Moq.Path.from(this.#prefix.peek(), "viewer");
 	}
 
 	set prefixViewer(value: string) {
@@ -138,8 +138,8 @@ export default class MoqBoy extends HTMLElement {
 
 	#runDiscovery(effect: Moq.Signals.Effect) {
 		const base = effect.get(this.#prefix);
-		const gamePrefix = effect.get(this.#gamePrefixOverride) ?? `${base}/game`;
-		const viewerPrefix = effect.get(this.#viewerPrefixOverride) ?? `${base}/viewer`;
+		const gamePrefix = effect.get(this.#gamePrefixOverride) ?? Moq.Path.from(base, "game");
+		const viewerPrefix = effect.get(this.#viewerPrefixOverride) ?? Moq.Path.from(base, "viewer");
 		const prefix = Moq.Path.from(gamePrefix);
 
 		// The origin's stream spans reconnects: entries retract when the session dies and

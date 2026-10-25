@@ -130,7 +130,7 @@ export class Game {
 		// Video pipeline.
 		this.broadcast = new Watch.Broadcast({
 			origin: config.origin,
-			name: Moq.Path.from(`${gamePrefix}/${sessionId}`),
+			name: Moq.Path.from(gamePrefix, sessionId),
 			enabled: true,
 		});
 		this.#signals.cleanup(() => this.broadcast.close());
@@ -318,7 +318,7 @@ export class Game {
 		this.viewerId.set(viewerId);
 
 		const viewerBroadcast = origin.createBroadcast(
-			Moq.Path.from(`${this.#viewerPrefix}/${this.sessionId}/${viewerId}`),
+			Moq.Path.from(this.#viewerPrefix, this.sessionId, viewerId),
 		);
 		viewerBroadcast.announce({ epoch: Moq.Epoch.mint() });
 		effect.cleanup(() => {

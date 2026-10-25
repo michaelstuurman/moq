@@ -6831,7 +6831,7 @@ mod tests {
 				settle().await;
 			}
 			for entry in entries {
-				cursor.assert_next_active(Path::new(*entry).unwrap());
+				cursor.assert_next_active(Path::new(entry).unwrap());
 			}
 			assert_eq!(cursor.is_synced(), synced, "{entries:?}");
 		}

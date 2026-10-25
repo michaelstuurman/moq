@@ -480,15 +480,6 @@ function publishPath(path: Path.Valid): void {
 	}
 }
 
-// Checked before normalization, which would otherwise give one name several spellings.
-// Normalization only removes slashes, so a string without an empty segment is already valid.
-function publishInput(path: string): Path.Valid {
-	if (path.startsWith("/") || path.endsWith("/") || path.includes("//")) {
-		throw new Error("broadcast path contains an empty segment");
-	}
-	return path as Path.Valid;
-}
-
 /** Reactive backing state shared by origin producers and consumers. */
 class OriginState {
 	// Both tables decouple the application producing into the origin from the
@@ -1066,7 +1057,7 @@ export interface Table {
 	readonly discovery: Getter<boolean | undefined>;
 
 	/** Create an unannounced broadcast at `path`; see {@link Producer.createBroadcast}. */
-	createBroadcast(path: string): broadcast.Producer;
+	createBroadcast(path: Path.Valid): broadcast.Producer;
 
 	/** Resolve `path`, optionally waiting for an announcement; see {@link Consumer.request}. */
 	request(path: Path.Valid, options?: RequestOptions): Requesting;
@@ -1075,7 +1066,7 @@ export interface Table {
 	announced(scope?: Path.Pattern, options?: announce.Options): announce.Consumer;
 
 	/** Advertise a prefix and serve requests under it; see {@link Producer.dynamic}. */
-	dynamic(prefix: string): Dynamic;
+	dynamic(prefix: Path.Valid): Dynamic;
 
 	/** Insert a route with protocol metadata. @internal */
 	dynamicRoute(
@@ -1201,11 +1192,9 @@ export class Producer implements Table {
 	 * application still holds a consumer clone. Announce with a {@link Route.epoch}
 	 * (`Epoch.mint()` per run) so a restart replaces the old broadcast rather than resuming
 	 * into it; at the same epoch, a local broadcast competes on cost and wins ties.
-	 *
-	 * Throws when `name` has a leading, trailing, or doubled `/`, or a `.` or `..` segment.
 	 */
-	createBroadcast(name: string): broadcast.Producer {
-		const path = this.#scope.path(publishInput(name));
+	createBroadcast(path: Path.Valid): broadcast.Producer {
+		path = this.#scope.path(path);
 		if (this.#borrowed?.closed) throw new Error("origin handle is closed");
 		publishPath(path);
 		const created = this.#state.created;
@@ -1281,8 +1270,8 @@ export class Producer implements Table {
 	 * the returned {@link Dynamic} lives. A consumer resolving a path under it that
 	 * no announced local broadcast wins is handed to the handle as a {@link Request}.
 	 */
-	dynamic(prefix: string): Dynamic {
-		return this.#insertRoute(publishInput(prefix), Route.default, true, true);
+	dynamic(prefix: Path.Valid): Dynamic {
+		return this.#insertRoute(prefix, Route.default, true, true);
 	}
 
 	/** Insert an originated claim with route metadata that answers through `accept`, for tests and benches. @internal */

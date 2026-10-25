@@ -7,7 +7,7 @@
 ///
 /// `root` is the room prefix, `subscribe` is `**` (everything under the room),
 /// and `publish` is `<identity>/**` so a participant cannot publish at anyone
-/// else's paths. An identity that is empty after normalization or contains `*` is
+/// else's paths. An identity that is empty or contains `*` is
 /// refused, since a wildcard would let the participant publish as someone else.
 pub fn claims(room: impl moq_net::AsPath, identity: impl moq_net::AsPath) -> Result<moq_auth::Claims, crate::Error> {
 	let room = room.as_path();
@@ -33,9 +33,10 @@ mod tests {
 
 	#[test]
 	fn rejects_empty_identity() {
-		for identity in ["", "/", "///"] {
-			assert!(matches!(claims(Path::new("room").unwrap(), Path::new(identity).unwrap()), Err(crate::Error::EmptyIdentity)));
-		}
+		assert!(matches!(
+			claims(Path::new("room").unwrap(), Path::empty()),
+			Err(crate::Error::EmptyIdentity)
+		));
 	}
 
 	#[test]
@@ -54,11 +55,6 @@ mod tests {
 		assert_eq!(c.root, "meet/demo");
 		assert_eq!(c.subscribe, patterns(&["**"]));
 		assert_eq!(c.publish, patterns(&["alice/**"]));
-	}
-
-	#[test]
-	fn claims_does_not_double_a_trailing_slash() {
-		assert_eq!(claims(Path::new("meet/demo").unwrap(), Path::new("alice/").unwrap()).unwrap().publish, patterns(&["alice/**"]));
 	}
 
 	#[test]
