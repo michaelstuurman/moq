@@ -602,8 +602,8 @@ impl Publisher {
 		epoch: Option<crate::Epoch>,
 		route: kio::Consumer<Route>,
 	) {
-		let namespace = request.prefix.join(&suffix).clone();
-		let absolute = self.origin.absolute(&namespace).clone();
+		let namespace = request.prefix.join(&suffix);
+		let absolute = self.origin.absolute(&namespace);
 		let flate = self.peer_setup.get().await.flate;
 
 		// Resolving may wait on a route for the broadcast, which its going ends.
@@ -868,7 +868,7 @@ impl Publisher {
 		// An update may ask for a new group only if the PUBLISH sent DYNAMIC_GROUPS, which
 		// INCLUDE_PROPERTIES=0 leaves out.
 		let dynamic = properties.dynamic_groups;
-		let absolute = self.origin.absolute(&namespace).clone();
+		let absolute = self.origin.absolute(&namespace);
 
 		// Every wait on the peer, for a Request ID or the PUBLISH's bytes, lasts only while
 		// the track is listed and the request stands. A Request ID abandoned unsent leaves a
@@ -1909,7 +1909,7 @@ mod tests {
 				let route = kio::Producer::new(Route::Replaced);
 				let request = Request {
 					origin: h._origin.consume(),
-					prefix: crate::Path::new("").clone(),
+					prefix: crate::Path::new(""),
 					forward: true,
 					params: Params {
 						priority: crate::ietf::priority::DEFAULT_WIRE,
@@ -1924,7 +1924,7 @@ mod tests {
 				};
 				moq_clock::sim::spawn(h.publisher.clone().run_listed_broadcast(
 					request,
-					crate::Path::new("room/cam").clone(),
+					crate::Path::new("room/cam"),
 					None,
 					route.consume(),
 				));

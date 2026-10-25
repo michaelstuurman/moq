@@ -55,7 +55,7 @@ pub fn parse(path: impl Into<Path>) -> Option<Parsed> {
 		return None;
 	}
 	let kind = kind_from_segment(last)?;
-	let identity = Path::new(&parts.join("/")).clone();
+	let identity = Path::new(&parts.join("/"));
 	Some(Parsed { identity, kind })
 }
 
@@ -70,7 +70,7 @@ mod tests {
 	use super::*;
 
 	fn p(s: &str) -> Path {
-		Path::new(s).clone()
+		Path::new(s)
 	}
 
 	#[test]

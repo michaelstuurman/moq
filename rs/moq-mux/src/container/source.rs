@@ -790,14 +790,14 @@ mod tests {
 			inline: true,
 		});
 		config.container = Container::Legacy;
-		config.broadcast = broadcast.map(|b| Relative::new(b));
+		config.broadcast = broadcast.map(Relative::new);
 		config
 	}
 
 	fn audio(broadcast: Option<&str>) -> AudioConfig {
 		let mut config = AudioConfig::new(AudioCodec::Opus, 48_000, 2);
 		config.container = Container::Legacy;
-		config.broadcast = broadcast.map(|b| Relative::new(b));
+		config.broadcast = broadcast.map(Relative::new);
 		config
 	}
 

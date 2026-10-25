@@ -112,7 +112,7 @@ mod test {
 	fn fetch_sample() -> Fetch<'static> {
 		Fetch {
 			epoch: None,
-			broadcast: Path::new("room").clone(),
+			broadcast: Path::new("room"),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: None,

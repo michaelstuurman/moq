@@ -91,7 +91,8 @@ fn decode() {
 	allocs("decode/lite_mix", 10_000, 1, || messages.decode_lite(&lite));
 	allocs("decode/ietf_mix", 10_000, 1, || messages.decode_ietf(&ietf));
 
-	let shapes: [(&str, fn(u64) -> String); 3] = [
+	type Shape = (&'static str, fn(u64) -> String);
+	let shapes: [Shape; 3] = [
 		("short", |i| format!("room/{i}")),
 		("medium", |i| format!("anon/{:010x}/camera", i * 0x9E37_79B9)),
 		("long", |i| {

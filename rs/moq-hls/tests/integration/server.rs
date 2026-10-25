@@ -204,7 +204,7 @@ async fn a_disconnected_sibling_publisher_answers_404() {
 		moq_mux::catalog::Producer::new(&mut catalog_broadcast.broadcast().clone(), Default::default()).unwrap();
 	let reserved = catalog.reserve();
 	let mut config = video_config();
-	config.broadcast = Some(moq_net::path::Relative::new("./source").clone());
+	config.broadcast = Some(moq_net::path::Relative::new("./source"));
 	let track = media_broadcast.create_track(TRACK, timed()).unwrap();
 	let mut media = reserved
 		.video(

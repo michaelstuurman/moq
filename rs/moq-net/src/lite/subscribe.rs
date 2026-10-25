@@ -912,7 +912,7 @@ mod test {
 			order: crate::track::Order::Descending,
 			epoch: None,
 			id: 1,
-			broadcast: Path::new("room").clone(),
+			broadcast: Path::new("room"),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: std::time::Duration::from_millis(250),

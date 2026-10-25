@@ -890,9 +890,9 @@ mod tests {
 			level: 0x1e,
 			inline: false,
 		});
-		escaped.broadcast = Some(Relative::new("../../source").clone());
+		escaped.broadcast = Some(Relative::new("../../source"));
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source").clone());
+		sibling.broadcast = Some(Relative::new("./source"));
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.video.renditions.insert("escaped".to_string(), escaped);
@@ -938,9 +938,9 @@ mod tests {
 		let source = created(&origin);
 
 		let mut escaped = hang::catalog::TextConfig::new(hang::catalog::TextFormat::Vtt);
-		escaped.broadcast = Some(Relative::new("../../source").clone());
+		escaped.broadcast = Some(Relative::new("../../source"));
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source").clone());
+		sibling.broadcast = Some(Relative::new("./source"));
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.text.renditions.insert("escaped".to_string(), escaped);

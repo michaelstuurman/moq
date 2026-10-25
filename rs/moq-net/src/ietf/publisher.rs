@@ -1358,7 +1358,7 @@ impl Publisher {
 			};
 			let request_id = msg.request_id;
 			let track_name = msg.track_name.clone();
-			let absolute = self.origin.absolute(&msg.track_namespace).clone();
+			let absolute = self.origin.absolute(&msg.track_namespace);
 
 			tracing::debug!(id = %request_id, broadcast = %absolute, track = %track_name, "subscribe started");
 
@@ -3628,7 +3628,7 @@ impl Publisher {
 			return Ok(());
 		}
 
-		let absolute = self.origin.absolute(path).clone();
+		let absolute = self.origin.absolute(path);
 		// Only a PUBLISH_NAMESPACE request or an update to one can be refused; everything
 		// else below either rides a stream the peer already accepted or says nothing at all.
 		let mut refused = watch.refused;
@@ -4052,7 +4052,7 @@ impl Publisher {
 			return Ok(());
 		};
 		let idle = request.pending.take().is_none();
-		let absolute = self.origin.absolute(&request.path).clone();
+		let absolute = self.origin.absolute(&request.path);
 
 		// A reset stream ends only this request, like a FIN; a malformed answer is the peer's
 		// violation and still ends the loop.
@@ -4325,7 +4325,7 @@ impl Publisher {
 
 		let mut ns = Namespaces::new(peer, Target::Requests(None));
 		ns.epochs = self.peer_setup.get().await.epoch;
-		self.run_namespaces(origin.announced(), crate::Path::empty().clone(), ns, Vec::new())
+		self.run_namespaces(origin.announced(), crate::Path::empty(), ns, Vec::new())
 			.await
 	}
 
@@ -16043,7 +16043,7 @@ mod tests {
 
 		// The state a refused or failed offer leaves behind: the peer holds nothing, and
 		// the loop is coming back to it on a timer.
-		let suffix: crate::Path = crate::Path::new("from/peer").clone();
+		let suffix: crate::Path = crate::Path::new("from/peer");
 		let mut watch = Watched::new(crate::origin::Route::default().with_hops(hops));
 		watch.deferred = true;
 

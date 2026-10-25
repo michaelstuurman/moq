@@ -93,7 +93,7 @@ pub struct PathRef {
 	pub rest: Path,
 }
 
-impl<'a> PathRef {
+impl PathRef {
 	/// The whole suffix, with no base.
 	pub fn literal(rest: Path) -> Self {
 		Self { base: 0, keep: 0, rest }

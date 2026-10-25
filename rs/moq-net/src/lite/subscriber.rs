@@ -3421,7 +3421,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3493,7 +3493,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").clone(),
+			path: Path::new("room"),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3563,7 +3563,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3622,7 +3622,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room").clone(),
+			path: Path::new("room"),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3806,7 +3806,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber: subscriber.clone(),
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -3880,7 +3880,7 @@ mod tests {
 					validity: crate::model::broadcast::RequestValidity::token(Some(route.consume())),
 					route: None,
 					subscriber,
-					path: Path::new("room").clone(),
+					path: Path::new("room"),
 					epoch: None,
 					name: "video".into(),
 				};
@@ -3953,7 +3953,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room").clone(),
+					path: Path::new("room"),
 					epoch: None,
 					name: "video".to_string(),
 				},
@@ -3999,7 +3999,7 @@ mod tests {
 		let serve = SourceServe::new(
 			subscriber,
 			MintedSource {
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				source: crate::model::broadcast::SourceGuard::new(broadcast),
 				dynamic,
@@ -4127,7 +4127,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -4178,7 +4178,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").clone(),
+			path: Path::new("room/host"),
 			epoch: None,
 			name: "catalog.json".to_string(),
 		};
@@ -4245,7 +4245,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host").clone(),
+			path: Path::new("room/host"),
 			epoch: None,
 			name: "audio".to_string(),
 		};
@@ -4314,7 +4314,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room/host").clone(),
+					path: Path::new("room/host"),
 					epoch: None,
 					name: "catalog.json".to_string(),
 				},
@@ -4380,7 +4380,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4434,7 +4434,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room").clone(),
+				path: Path::new("room"),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4784,7 +4784,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		let mut announced = Announced::default();
 		assert!(
 			subscriber
@@ -4844,7 +4844,7 @@ mod tests {
 			assert!(
 				subscriber
 					.start_announce(
-						Path::new(&format!("room/{i}")).clone(),
+						Path::new(&format!("room/{i}")),
 						None,
 						crate::Hops::new(),
 						crate::origin::Cost::default(),
@@ -4892,7 +4892,7 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let path = Path::new("pool").clone();
+		let path = Path::new("pool");
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
@@ -4964,7 +4964,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("pool").clone(),
+				Path::new("pool"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::default(),
@@ -5018,7 +5018,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		let mut announced = Announced::default();
 
 		// A chain that already names us is a reflection, declined but still recorded.
@@ -5077,7 +5077,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		let mut announced = Announced::default();
 		let mut reflected = crate::Hops::new();
 		reflected.push(assigned).unwrap();
@@ -5143,7 +5143,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").clone(),
+				Path::new("room/host"),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5209,7 +5209,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").clone(),
+				Path::new("room/host"),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5268,7 +5268,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host").clone(),
+				Path::new("room/host"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5315,7 +5315,7 @@ mod tests {
 		assert!(
 			subscriber
 				.start_announce(
-					Path::new("room/host").clone(),
+					Path::new("room/host"),
 					None,
 					hops,
 					crate::origin::Cost::UNKNOWN,
@@ -5343,7 +5343,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("room/host").clone(),
+				Path::new("room/host"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5362,7 +5362,7 @@ mod tests {
 		// A reprice from the same unnamed publisher stays anonymous and in place.
 		subscriber
 			.update_announce(
-				Path::new("room/host").clone(),
+				Path::new("room/host"),
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
 				4,
@@ -5401,7 +5401,7 @@ mod tests {
 		let (mut subscriber, consumer) = restart_subscriber(SinkSession::new(Default::default()));
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5442,7 +5442,7 @@ mod tests {
 		let auth = subscriber.auth.clone();
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5501,7 +5501,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host").clone();
+		let path = Path::new("room/host");
 		let hops = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
 		let mut announced = Announced::default();
 		subscriber
@@ -5586,7 +5586,7 @@ mod tests {
 		});
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").clone(),
+			Path::new(""),
 			subscriber.origin.snapshot(""),
 		);
 		let mut cursor = consumer.announced();
@@ -5655,7 +5655,7 @@ mod tests {
 		(
 			AnnouncePrefix::new(
 				subscriber.clone(),
-				Path::new("").clone(),
+				Path::new(""),
 				subscriber.origin.snapshot(""),
 			),
 			consumer,
@@ -5834,7 +5834,7 @@ mod tests {
 		subscriber.announces = slots.clone();
 		let mut prefix = AnnouncePrefix::new(
 			subscriber.clone(),
-			Path::new("").clone(),
+			Path::new(""),
 			subscriber.origin.snapshot(""),
 		);
 
@@ -6126,7 +6126,7 @@ impl Announced {
 	/// path, answer the requester with its consumer, and hand the source to the
 	/// driver's serve machines, which own it from then on.
 	fn poll_serve(&mut self, subscriber: &Subscriber, waiter: &kio::Waiter) {
-		let root = subscriber.origin.root().clone();
+		let root = subscriber.origin.root();
 		while let Poll::Ready(Ok(path)) = self.ready.poll_pop(waiter) {
 			// A route retired since it woke has nothing left to serve.
 			let Some(Held::Attached(entry)) = self.routes.get_mut(&path) else {
@@ -6139,7 +6139,7 @@ impl Announced {
 			while let Poll::Ready(Ok(request)) = entry.dynamic.poll_requested_broadcast(route_waiter) {
 				// The request path is absolute; the wire (and our origin handle)
 				// speak paths relative to the session's root.
-				let Some(path) = request.path().strip_prefix(&root) else {
+				let Some(path) = request.path().strip_prefix(root) else {
 					// Outside our root: nothing we could name on the wire.
 					continue;
 				};

@@ -276,7 +276,7 @@ impl Publisher {
 	) -> Result<(), Error> {
 		let mut run = AnnounceRun::new(crate::Path::default(), self_origin, version);
 		run.auth = auth.map(|handle| {
-			crate::auth::Gate::new(handle, crate::Path::empty().clone(), crate::auth::Direction::Publish)
+			crate::auth::Gate::new(handle, crate::Path::empty(), crate::auth::Direction::Publish)
 		});
 		kio::wait(|waiter| run.poll(stream, origin, announced, waiter)).await
 	}
@@ -1659,7 +1659,7 @@ impl<R: Request> RequestServe<R> {
 				RequestState::Decode => {
 					let msg = ready!(stream.reader.poll_decode::<R::Message>(&mut cx))?;
 					let (broadcast, track) = R::target(&msg);
-					self.absolute = self.shared.origin.absolute(broadcast).clone();
+					self.absolute = self.shared.origin.absolute(broadcast);
 					self.track = track.to_string();
 					if R::SUBSCRIPTION {
 						self._subscription = Some(self.shared.subscriptions.hold());
@@ -2663,7 +2663,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new(""), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		drop(removed);
@@ -2705,7 +2705,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new(""), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		let auth = crate::auth::Link::new(false);
@@ -2747,7 +2747,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new(""), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		let auth = crate::auth::Link::new(false);
@@ -2803,7 +2803,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new(""), consumer.hop(), Version::Lite07);
 		let waiter = kio::Waiter::noop();
 		assert!(run.poll(&mut stream, &consumer, &mut announced, &waiter).is_pending());
 		drop(unseen);
@@ -2843,7 +2843,7 @@ mod announce_test {
 			),
 			reader: Reader::new(crate::transport::boxed::RecvStream::new(PendingRecv), Version::Lite07),
 		};
-		let mut run = AnnounceRun::new(crate::Path::new("").clone(), consumer.hop(), Version::Lite07);
+		let mut run = AnnounceRun::new(crate::Path::new(""), consumer.hop(), Version::Lite07);
 		assert!(
 			run.poll(&mut stream, &consumer, &mut announced, &kio::Waiter::noop())
 				.is_pending()

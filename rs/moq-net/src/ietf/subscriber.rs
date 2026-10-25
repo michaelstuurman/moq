@@ -6435,7 +6435,7 @@ mod tests {
 				pending: Some(request),
 				..TrackState::pending(
 					"video".to_string(),
-					crate::Path::new("bcast").clone(),
+					crate::Path::new("bcast"),
 					kio::Producer::new(Fill::Done),
 				)
 			},
@@ -6588,7 +6588,7 @@ mod tests {
 		let mut namespaces = crate::model::interest_prefixes(&subscriber.origin.allowed());
 		assert_eq!(
 			namespaces,
-			vec![crate::Path::new("cam").clone()],
+			vec![crate::Path::new("cam")],
 			"one SUBSCRIBE_NAMESPACE per permitted prefix, relative to the root",
 		);
 		let prefix = namespaces.pop().unwrap();
@@ -6946,7 +6946,7 @@ mod tests {
 			let res = subscriber
 				.run_subscribe_namespace(
 					stream,
-					crate::Path::new("").clone(),
+					crate::Path::new(""),
 					crate::model::Snapshot::landed(),
 					live,
 				)
@@ -7049,7 +7049,7 @@ mod tests {
 				.unwrap();
 			let mut run = std::pin::pin!(subscriber.run_subscribe_namespace(
 				stream,
-				crate::Path::new("").clone(),
+				crate::Path::new(""),
 				snapshot,
 				live
 			));
@@ -7077,7 +7077,7 @@ mod tests {
 			.await
 			.unwrap();
 		let mut run =
-			std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new("").clone(), snapshot, live));
+			std::pin::pin!(subscriber.run_subscribe_namespace(stream, crate::Path::new(""), snapshot, live));
 		for _ in 0..10 {
 			assert!(futures::poll!(run.as_mut()).is_pending());
 			settle().await;
@@ -7101,7 +7101,7 @@ mod tests {
 				.await
 				.unwrap();
 			let res = subscriber
-				.run_subscribe_namespace(stream, crate::Path::new("").clone(), snapshot, live)
+				.run_subscribe_namespace(stream, crate::Path::new(""), snapshot, live)
 				.await;
 			assert!(matches!(res, Err(Error::ProtocolViolation)), "{entries:?}: {res:?}");
 		}
@@ -7223,7 +7223,7 @@ mod tests {
 							*name,
 							crate::track::Info::timed(),
 						),
-						Path::new(broadcast).clone(),
+						Path::new(broadcast),
 						kio::Producer::new(Fill::Done),
 					),
 				);
@@ -7941,7 +7941,7 @@ mod tests {
 		subscriber.validity = crate::model::broadcast::RequestValidity::token(Some(route.consume()));
 		let mut gate = crate::auth::Gate::new(
 			auth.clone(),
-			Path::new("broadcast").clone(),
+			Path::new("broadcast"),
 			crate::auth::Direction::Subscribe,
 		);
 		let waiter = kio::Waiter::noop();
@@ -7988,7 +7988,7 @@ mod tests {
 				group = Some(pending);
 				accepted = Some(track);
 				Box::pin(subscriber.clone().run_group_fetch(
-					Path::new("broadcast").clone(),
+					Path::new("broadcast"),
 					"video".into(),
 					request,
 					None,
@@ -8158,7 +8158,7 @@ mod tests {
 				Allocated::TrackStatus => moq_clock::sim::spawn(async move {
 					let mut gate = crate::auth::Gate::new(
 						subscriber.auth.clone(),
-						Path::new("broadcast").clone(),
+						Path::new("broadcast"),
 						crate::auth::Direction::Subscribe,
 					);
 					assert!(
@@ -8180,7 +8180,7 @@ mod tests {
 					let group = requested.requested_fill().await.expect("group request");
 					fetch = Some((track, pending));
 					moq_clock::sim::spawn(subscriber.run_group_fetch(
-						Path::new("broadcast").clone(),
+						Path::new("broadcast"),
 						"video".into(),
 						group,
 						None,
@@ -8563,7 +8563,7 @@ mod tests {
 							"video",
 							crate::track::Info::timed(),
 						),
-						Path::new("broadcast").clone(),
+						Path::new("broadcast"),
 						kio::Producer::new(Fill::Done),
 					)
 				},
@@ -9083,8 +9083,8 @@ mod tests {
 		subscriber.announces = crate::session::Slots::new(1);
 
 		let advert = |subscriber: &Subscriber| subscriber.route(None, &cluster::Peer::default()).expect("route");
-		let a = crate::Path::new("a").clone();
-		let b = crate::Path::new("b").clone();
+		let a = crate::Path::new("a");
+		let b = crate::Path::new("b");
 		let (first, repeat, over, last) = (
 			advert(&subscriber),
 			advert(&subscriber),
@@ -9141,7 +9141,7 @@ mod tests {
 
 		let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 		subscriber
-			.start_announce(crate::Path::new("room/host").clone(), advert, Admit::Session(None))
+			.start_announce(crate::Path::new("room/host"), advert, Admit::Session(None))
 			.unwrap();
 
 		let mut announced = consumer.announced();
@@ -9201,7 +9201,7 @@ mod tests {
 		);
 		let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 		subscriber
-			.start_announce(crate::Path::new("room/host").clone(), advert, Admit::Session(None))
+			.start_announce(crate::Path::new("room/host"), advert, Admit::Session(None))
 			.unwrap();
 
 		// No announce churn: the upstream route stays the best one, on both cursors.
@@ -9241,7 +9241,7 @@ mod tests {
 			);
 			let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 			subscriber
-				.start_announce(crate::Path::new("room/host").clone(), advert, Admit::Session(None))
+				.start_announce(crate::Path::new("room/host"), advert, Admit::Session(None))
 				.unwrap();
 			subscriber
 		};
@@ -9330,7 +9330,7 @@ mod tests {
 		let mut subscriber = subscriber;
 		subscriber
 			.start_announce(
-				crate::Path::new("room/host").clone(),
+				crate::Path::new("room/host"),
 				advertised,
 				Admit::Session(None),
 			)
@@ -9434,7 +9434,7 @@ mod tests {
 		subscriber
 			.run_subscribe_namespace(
 				stream,
-				crate::Path::new("").clone(),
+				crate::Path::new(""),
 				crate::model::Snapshot::landed(),
 				live,
 			)
@@ -9524,7 +9524,7 @@ mod tests {
 			.unwrap();
 		let mut run = std::pin::pin!(subscriber.run_subscribe_namespace(
 			stream,
-			crate::Path::new("").clone(),
+			crate::Path::new(""),
 			crate::model::Snapshot::landed(),
 			live
 		));
@@ -9550,7 +9550,7 @@ mod tests {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let advert = subscriber.route(None, &cluster::Peer::default()).expect("route");
 		let id = subscriber
 			.start_announce(path.clone(), advert, Admit::Session(None))
@@ -9623,7 +9623,7 @@ mod tests {
 	async fn a_publish_namespace_done_retracts_without_faulting_the_session() {
 		const VERSION: Version = Version::Draft14;
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let log = crate::lite::test_transport::Log::default();
 		let mut writer = crate::coding::Writer::new(
 			crate::transport::boxed::SendStream::new(crate::lite::test_transport::SinkSend::new(log.clone())),
@@ -9684,7 +9684,7 @@ mod tests {
 	#[moq_clock::test]
 	async fn a_legacy_update_on_an_advertisement_is_answered() {
 		for version in [Version::Draft14, Version::Draft15] {
-			let path = crate::Path::new("room/host").clone();
+			let path = crate::Path::new("room/host");
 			// Own Request ID 10, aimed at the advertisement (0). Draft 14 carries its fixed
 			// start, end group, priority and forward before the parameters.
 			let body: &[u8] = match version {
@@ -9797,7 +9797,7 @@ mod tests {
 			Default::default(),
 		);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let stream = Stream::open(&mut crate::driver::Transport::new(session.clone()), VERSION)
 			.await
 			.unwrap();
@@ -9832,7 +9832,7 @@ mod tests {
 	async fn the_last_owner_out_decides_the_detach() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer::default();
 
 		let mut ids = Vec::new();
@@ -9929,7 +9929,7 @@ mod tests {
 	async fn cluster_update_replaces_in_place() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 
 		let first = Advertised {
 			route: crate::origin::Route::default()
@@ -9970,7 +9970,7 @@ mod tests {
 	async fn anonymous_publisher_survives_a_repricing_update() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		// A free link, so the route cost is exactly what the peer advertised.
 		let peer = cluster::Peer {
 			hop: Some(crate::Hop::new(9).unwrap()),
@@ -10020,7 +10020,7 @@ mod tests {
 	async fn a_reordered_replacement_keeps_the_new_instance() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer::default();
 		let (old, new) = (crate::Epoch::mint(), crate::Epoch::mint());
 		let advert = |subscriber: &Subscriber, epoch: &crate::Epoch| {
@@ -10068,7 +10068,7 @@ mod tests {
 	async fn a_repeat_under_another_epoch_becomes_the_newest() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer::default();
 		let (old, new) = (crate::Epoch::mint(), crate::Epoch::mint());
 		let advert = |subscriber: &Subscriber, epoch: &crate::Epoch| {
@@ -10110,7 +10110,7 @@ mod tests {
 	async fn separate_adverts_refcount_the_route() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer {
 			hop: Some(crate::Hop::new(9).unwrap()),
 			cost: None,
@@ -10148,7 +10148,7 @@ mod tests {
 	async fn pathless_adverts_never_replace_the_source() {
 		let (mut subscriber, origin) = cluster_subscriber(crate::Hop::new(1).unwrap());
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer::default();
 
 		// What a PUBLISH_NAMESPACE with no cluster parameters resolves to.
@@ -10180,7 +10180,7 @@ mod tests {
 		let self_origin = crate::Hop::new(5).unwrap();
 		let (mut subscriber, origin) = cluster_subscriber(self_origin);
 		let consumer = origin.consume();
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let peer = cluster::Peer {
 			hop: Some(crate::Hop::new(9).unwrap()),
 			cost: None,
@@ -10280,7 +10280,7 @@ mod tests {
 			Default::default(),
 		);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let advert = subscriber.route(Some(attached), peer).expect("route");
 		let id = subscriber.start_announce(path, advert, Admit::Session(None)).unwrap();
 		assert_eq!(id, 0, "the harness advertisement is the first");
@@ -10396,7 +10396,7 @@ mod tests {
 		let (mut subscriber, consumer, mut stream, log) =
 			reflected_harness(self_origin, &peer, &clean, &[looped]).await;
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		{
 			let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
@@ -10446,7 +10446,7 @@ mod tests {
 		let (mut subscriber, consumer, mut stream, _log) =
 			reflected_harness(self_origin, &peer, &clean, &[looped, clean.clone()]).await;
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		{
 			let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
@@ -10509,7 +10509,7 @@ mod tests {
 		subscriber.announces = crate::session::Slots::new(1);
 
 		// Admitted by its own token, which holds the one slot for the request's life.
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let hold: crate::auth::Hold = std::sync::Arc::new(subscriber.announces.acquire().unwrap());
 		let auth = crate::auth::Link::new(true);
 		let mut requests = auth.handle().requests();
@@ -10610,7 +10610,7 @@ mod tests {
 		std::mem::forget(driver);
 		assert_eq!(routed_now(&consumer, "room/host").expect("routed").cost.value(), 4);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		{
 			let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
@@ -10661,7 +10661,7 @@ mod tests {
 		// repriced, which is the one way an in-place update fails.
 		drop(driver);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		let mut result = None;
 		{
@@ -10716,7 +10716,7 @@ mod tests {
 			update_harness(self_origin, &peer, &clean, script).await;
 		std::mem::forget(driver);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		{
 			let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
@@ -10786,7 +10786,7 @@ mod tests {
 			update_harness(self_origin, &peer, &clean, script).await;
 		std::mem::forget(driver);
 
-		let path = crate::Path::new("room/host").clone();
+		let path = crate::Path::new("room/host");
 		let mut attached = Some(0);
 		let mut run = std::pin::pin!(subscriber.run_publish_namespace_updates(
 			&mut stream,
@@ -10824,7 +10824,7 @@ mod tests {
 
 		let mut live = std::collections::HashMap::new();
 		for path in ["room/a", "room/b"] {
-			let path = crate::Path::new(path).clone();
+			let path = crate::Path::new(path);
 			let advert = subscriber.route(None, &peer).expect("route");
 			let id = subscriber
 				.start_announce(path.clone(), advert, Admit::Session(None))
@@ -13246,7 +13246,7 @@ mod stitch_tests {
 					TrackState {
 						alias: Some(ALIAS),
 						timescale,
-						..TrackState::new(track.clone(), Path::new("broadcast").clone(), fill.clone())
+						..TrackState::new(track.clone(), Path::new("broadcast"), fill.clone())
 					},
 				);
 				insert_track_alias(&state.aliases, ALIAS, REQUEST).unwrap();
@@ -16316,7 +16316,7 @@ mod joining_fetch_tests {
 			RequestId(99),
 			TrackState::new(
 				track.clone(),
-				Path::new("broadcast").clone(),
+				Path::new("broadcast"),
 				kio::Producer::new(Fill::Requested),
 			),
 		);
@@ -16829,7 +16829,7 @@ mod joining_fetch_tests {
 		let request = dynamic.requested_fill().await.expect("group request");
 		let outcome = request.joined();
 		let mut run = Box::pin(subscriber.clone().run_group_fetch(
-			Path::new("broadcast").clone(),
+			Path::new("broadcast"),
 			"video".into(),
 			request,
 			None,
@@ -17108,7 +17108,7 @@ mod joining_fetch_tests {
 
 		subscriber
 			.clone()
-			.run_group_fetch(Path::new("broadcast").clone(), "video".into(), request, None)
+			.run_group_fetch(Path::new("broadcast"), "video".into(), request, None)
 			.await;
 
 		assert!(fetch.await.is_err(), "the accepted group was aborted");
@@ -17180,7 +17180,7 @@ mod joining_fetch_tests {
 
 				subscriber
 					.clone()
-					.run_group_fetch(Path::new("broadcast").clone(), "video".into(), request, None)
+					.run_group_fetch(Path::new("broadcast"), "video".into(), request, None)
 					.await;
 
 				assert_eq!(
@@ -17321,7 +17321,7 @@ mod joining_fetch_tests {
 		let request = dynamic.requested_fill().await.expect("no group requested");
 
 		let serving = moq_clock::sim::spawn(subscriber.clone().run_group_fetch(
-			Path::new("broadcast").clone(),
+			Path::new("broadcast"),
 			"video".into(),
 			request,
 			None,

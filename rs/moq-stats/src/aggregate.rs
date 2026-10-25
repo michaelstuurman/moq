@@ -845,7 +845,7 @@ impl<S: Shape> Merged<S> {
 				// new one starts, so its reader resolves afresh.
 				Poll::Ready(Some(moq_net::announce::Event::Restart(update))) => {
 					let mut ended = update.clone();
-					let absolute = self.announce.absolute(&update.prefix).clone();
+					let absolute = self.announce.absolute(&update.prefix);
 					ended.route.epoch = self.last_announced.get(&absolute).cloned().flatten();
 					changed |= self.apply_announce(ended, false);
 					changed |= self.apply_announce(update, true);
@@ -895,7 +895,7 @@ impl<S: Shape> Merged<S> {
 	/// leaving, does).
 	fn apply_announce(&mut self, update: moq_net::announce::Announce, active: bool) -> bool {
 		let path = update.prefix;
-		let absolute = self.announce.absolute(&path).clone();
+		let absolute = self.announce.absolute(&path);
 
 		// Only fold node-category routes; skip sibling categories a producer
 		// may publish under the same prefix. A route names a prefix, and node

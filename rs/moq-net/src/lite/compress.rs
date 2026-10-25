@@ -74,7 +74,7 @@ impl Live {
 }
 
 /// The first `keep` segments of `path`, or `None` if it has fewer.
-fn head<'a>(path: &'a Path, keep: usize) -> Option<Path> {
+fn head(path: &Path, keep: usize) -> Option<Path> {
 	if keep == 0 {
 		return Some(Path::empty());
 	}
@@ -300,7 +300,7 @@ impl AnnounceEncoder {
 		// Where the segments after `keep` start, sharing the suffix's buffer.
 		let s = suffix.as_str();
 		let start = s.match_indices('/').nth(keep - 1).map_or(s.len(), |(i, _)| i + 1);
-		let rest = suffix.slice_from(start).clone();
+		let rest = suffix.slice_from(start);
 
 		let base = next - id;
 		let keep = keep as u64;
@@ -367,7 +367,7 @@ mod tests {
 		PathRef {
 			base,
 			keep,
-			rest: Path::new(rest).clone(),
+			rest: Path::new(rest),
 		}
 	}
 
@@ -511,7 +511,7 @@ mod tests {
 	/// Encode a message with `encoder`, decode it with `decoder`, and check that the
 	/// resolved values match the input.
 	fn start(encoder: &mut AnnounceEncoder, decoder: &mut AnnounceDecoder, suffix: &str, ids: &[u64]) -> (u64, usize) {
-		let (id, wire_path, wire_hops) = encoder.start(Path::new(suffix).clone(), hops(ids));
+		let (id, wire_path, wire_hops) = encoder.start(Path::new(suffix), hops(ids));
 		let size = wire_path.encode_bytes(VERSION).unwrap().len() + wire_hops.encode_bytes(VERSION).unwrap().len();
 		let (got_path, got_hops) = decoder.start(wire_path, wire_hops).unwrap();
 		assert_eq!(got_path.as_str(), suffix);
@@ -565,7 +565,7 @@ mod tests {
 		// Shares a byte prefix with `a/b/d`, but no second segment.
 		start(&mut encoder, &mut decoder, "a/b-z", &[3]);
 
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("a/b/d").clone(), hops(&[5, 1u64 << 51]));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("a/b/d"), hops(&[5, 1u64 << 51]));
 		assert_eq!(wire_path, path(2, 2, "d"));
 		assert_eq!(wire_hops, chain(2, &[5], 1));
 	}
@@ -594,7 +594,7 @@ mod tests {
 			let suffix = format!("f{n}");
 			start(&mut encoder, &mut decoder, &suffix, &[1]);
 		}
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("again").clone(), hops(&[100]));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("again"), hops(&[100]));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[100])));
 		let (got_path, got_hops) = decoder.start(wire_path, wire_hops).unwrap();
 		assert_eq!(got_path.as_str(), "again");
@@ -606,7 +606,7 @@ mod tests {
 		let mut encoder = AnnounceEncoder::new(VERSION);
 		let mut decoder = AnnounceDecoder::default();
 		start(&mut encoder, &mut decoder, "a", &[1]);
-		let (_, wire_path, wire_hops) = encoder.start(Path::new("b").clone(), hops(&[2]));
+		let (_, wire_path, wire_hops) = encoder.start(Path::new("b"), hops(&[2]));
 		assert_eq!(wire_path, PathRef::literal(Path::new("b")));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[2])));
 	}
@@ -614,9 +614,9 @@ mod tests {
 	#[test]
 	fn lite06_assigns_ids_without_bases() {
 		let mut encoder = AnnounceEncoder::new(Version::Lite06);
-		let (id, _, _) = encoder.start(Path::new("a/b").clone(), hops(&[1]));
+		let (id, _, _) = encoder.start(Path::new("a/b"), hops(&[1]));
 		assert_eq!(id, Some(0));
-		let (id, wire_path, wire_hops) = encoder.start(Path::new("a/c").clone(), hops(&[1]));
+		let (id, wire_path, wire_hops) = encoder.start(Path::new("a/c"), hops(&[1]));
 		assert_eq!(id, Some(1));
 		assert_eq!(wire_path, PathRef::literal(Path::new("a/c")));
 		assert_eq!(wire_hops, HopsRef::literal(hops(&[1])));
@@ -632,11 +632,11 @@ mod tests {
 	fn golden() -> Vec<crate::fuzz::Announced> {
 		use crate::fuzz::Announced;
 		vec![
-			Announced::Start(Path::new("room/a/cam").clone(), hops(&[0x1111, 0x2222])),
-			Announced::Start(Path::new("room/a/mic").clone(), hops(&[0x3333, 0x2222])),
+			Announced::Start(Path::new("room/a/cam"), hops(&[0x1111, 0x2222])),
+			Announced::Start(Path::new("room/a/mic"), hops(&[0x3333, 0x2222])),
 			Announced::Update(0, hops(&[0x4444, 0x2222])),
 			Announced::End(1),
-			Announced::Start(Path::new("room/b").clone(), hops(&[0x5555, 0x2222])),
+			Announced::Start(Path::new("room/b"), hops(&[0x5555, 0x2222])),
 		]
 	}
 

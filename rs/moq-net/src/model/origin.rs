@@ -1561,7 +1561,7 @@ impl TableCursor {
 		}
 
 		if let Some(relative) = prefix.strip_prefix(&self.root) {
-			return Some(relative.clone());
+			return Some(relative);
 		}
 		self.root.has_prefix(prefix).then(Path::default)
 	}
@@ -1839,7 +1839,7 @@ impl Default for OriginScope {
 pub(crate) fn interest_prefixes(allowed: &Patterns) -> Vec<Path> {
 	let mut heads: Vec<Path> = allowed
 		.iter()
-		.map(|pattern| Path::new(pattern.head()).clone())
+		.map(|pattern| Path::new(pattern.head()))
 		.collect();
 	heads.sort();
 	heads.dedup();
@@ -2248,7 +2248,7 @@ impl Producer {
 		validity: crate::model::broadcast::RequestValidity,
 	) -> broadcast::Producer {
 		let path: Path = path.into();
-		let full = self.root.join(&path).clone();
+		let full = self.root.join(&path);
 		let ingress = self.stats.ingress(&full);
 		broadcast::Info {
 			pool: self.pool.clone(),
@@ -4372,7 +4372,7 @@ impl Listener {
 			} else if relative.has_prefix(head) {
 				let reaches = Pattern::subtree(prefix.as_str()).is_ok_and(|subtree| self.allowed.overlaps(&subtree));
 				return match reaches {
-					true => vec![relative.clone()],
+					true => vec![relative],
 					false => Vec::new(),
 				};
 			}
@@ -6351,7 +6351,7 @@ impl Consumer {
 		// the announce guards. Hiding narrows discovery, not lookup, so a hidden path
 		// follows like any other.
 		let announced = consumer.untagged().with_hidden(true).announced();
-		Ok(crate::announce::Follow::new(announced, path.clone()))
+		Ok(crate::announce::Follow::new(announced, path))
 	}
 
 	/// Resolve `path` to a broadcast: [`Self::request_broadcast`], retried
@@ -6409,7 +6409,7 @@ impl Consumer {
 		let follow = self.follow(&path)?;
 		Ok(AnnouncedBroadcast::new(
 			self.clone(),
-			path.clone(),
+			path,
 			epoch.into(),
 			follow,
 		))
@@ -6489,12 +6489,12 @@ impl Consumer {
 		// The path as this handle names it, absolute: what its scope authorizes and
 		// what its egress is counted under, so a read through a mount bills where
 		// the reader asked.
-		let named = self.root.join(&path).clone();
+		let named = self.root.join(&path);
 		let scope = self.stats.egress(&named);
 		// The resolved handle is named by what *this* cursor asked for, not by the absolute
 		// path: a rooted cursor cannot name anything above its own root, so that is what a
 		// catalog it reads may reference.
-		let requested = path.clone();
+		let requested = path;
 
 		// Routes only cover paths within this consumer's scope.
 		if !self.scope.permits(&named) {
@@ -6503,7 +6503,7 @@ impl Consumer {
 
 		// Key requests by the absolute path on the origin, past any mount, so scoped,
 		// rooted, and mounted consumers and handlers agree on the same entry and front.
-		let Some(absolute) = self.scope.resolve(&named).map(|path| path.clone()) else {
+		let Some(absolute) = self.scope.resolve(&named) else {
 			return kio::Pending::new(Requesting::failed(BoundsExceeded.into()));
 		};
 
@@ -8100,7 +8100,7 @@ mod tests {
 			let table = producer.shared.read();
 			(0..PATHS)
 				.map(|i| {
-					let path = Path::new(&format!("pool/job-{i}")).clone();
+					let path = Path::new(&format!("pool/job-{i}"));
 					let entry = table
 						.best_route(&path, Horizon::default(), &HashSet::new(), |_| true)
 						.expect("the pool serves every path");
@@ -9317,7 +9317,7 @@ mod tests {
 		let producer = origin(1).produce();
 		let consumer = producer.consume();
 		let _published = producer.publish("room/alice", Route::default()).unwrap();
-		let path = consumer.absolute("room/alice").clone();
+		let path = consumer.absolute("room/alice");
 		let broadcast = broadcast::Info::new().produce();
 		// Held, so the front waits on its holder rather than retiring on its own.
 		let holder = broadcast.consume();
@@ -11464,7 +11464,7 @@ mod tests {
 			matches!(pinned.await, Err(Error::Unroutable)),
 			"a request pinned to the old epoch resolved"
 		);
-		let cached = dynamic.state.lock().served.get(&Path::new("room/alice").clone());
+		let cached = dynamic.state.lock().served.get(&Path::new("room/alice"));
 		assert!(
 			cached.is_some_and(|cached| cached.consume().is_clone(&fresh.consume())),
 			"the old answer was cached"

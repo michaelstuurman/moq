@@ -196,7 +196,7 @@ mod test {
 	fn the_request_roundtrips() {
 		let epoch: crate::Epoch = "01900000-0000-7000-8000-000000000001".parse().unwrap();
 		let msg = Tracks {
-			broadcast: Path::new("room/alice").clone(),
+			broadcast: Path::new("room/alice"),
 			epoch: Some(epoch.clone()),
 		};
 		let buf = msg.encode_bytes(Version::Lite07).unwrap();
@@ -208,7 +208,7 @@ mod test {
 	#[test]
 	fn older_versions_have_no_tracks_stream() {
 		let msg = Tracks {
-			broadcast: Path::new("room").clone(),
+			broadcast: Path::new("room"),
 			epoch: None,
 		};
 		assert!(msg.encode_bytes(Version::Lite06).is_err());

@@ -1213,11 +1213,10 @@ impl Registry {
 		if self.exclude.matches(path.as_str()) {
 			return None;
 		}
-		let owned = path.clone();
 		let mut entries = shared.entries.lock();
 		Some(
 			entries
-				.entry(owned)
+				.entry(path)
 				.or_insert_with(|| Arc::new(BroadcastEntry::new()))
 				.clone(),
 		)

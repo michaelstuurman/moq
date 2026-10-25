@@ -2448,7 +2448,7 @@ mod tests {
 		let token = handle.present(Bytes::from_static(b"new"), false).unwrap();
 		let mut gate = Gate::new(
 			handle.clone(),
-			crate::Path::new("room").clone(),
+			crate::Path::new("room"),
 			Direction::Subscribe,
 		);
 		let waiter = kio::Waiter::noop();
@@ -2472,7 +2472,7 @@ mod tests {
 		let busy = Error::Session(SessionError::TooManyRequests);
 		assert_eq!(handle.retry(id, &busy), Some(RETRY_INITIAL));
 
-		let mut gate = Gate::new(handle.clone(), crate::Path::new("room").clone(), Direction::Publish);
+		let mut gate = Gate::new(handle.clone(), crate::Path::new("room"), Direction::Publish);
 		let waiter = kio::Waiter::noop();
 		assert!(
 			gate.poll_ready(&waiter).is_pending(),
@@ -2495,7 +2495,7 @@ mod tests {
 		let route = kio::Producer::<()>::default();
 		let mut gate = Gate::announced(
 			handle,
-			crate::Path::new("room").clone(),
+			crate::Path::new("room"),
 			Direction::Subscribe,
 			route.consume(),
 		);
@@ -2510,7 +2510,7 @@ mod tests {
 	fn an_empty_token_never_holds_a_request() {
 		let handle = Link::new(true);
 		let _setup = handle.present(Bytes::new(), true).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").clone(), Direction::Subscribe);
+		let mut gate = Gate::new(handle, crate::Path::new("room"), Direction::Subscribe);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 
@@ -2520,7 +2520,7 @@ mod tests {
 		let first = handle.present(Bytes::from_static(b"first"), false).unwrap();
 		handle.granted(first.presented.id, Grant::all());
 		let _unanswered = handle.present(Bytes::from_static(b"renewal"), false).unwrap();
-		let mut gate = Gate::new(handle, crate::Path::new("room").clone(), Direction::Subscribe);
+		let mut gate = Gate::new(handle, crate::Path::new("room"), Direction::Subscribe);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_ready());
 	}
 
@@ -2942,7 +2942,7 @@ mod tests {
 		assert_eq!(link.retry(id, &lost), Some(RETRY_INITIAL));
 		assert_eq!(auth.grant().peek(), None, "the lost stream's grant is gone");
 		assert_eq!(link.token(&auth).as_deref(), Some(&b"jwt"[..]));
-		let mut gate = Gate::new(link.clone(), crate::Path::new("room").clone(), Direction::Publish);
+		let mut gate = Gate::new(link.clone(), crate::Path::new("room"), Direction::Publish);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_pending());
 
 		assert_eq!(link.reopen(id).unwrap().as_ref(), b"jwt");
@@ -3023,7 +3023,7 @@ mod request_token_tests {
 	}
 
 	fn subscribe_path() -> crate::Path {
-		crate::Path::new("room/alice").clone()
+		crate::Path::new("room/alice")
 	}
 
 	/// A request token reaches the app's acceptor like any other token, and the grant the

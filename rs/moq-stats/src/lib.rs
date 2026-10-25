@@ -304,7 +304,7 @@ pub fn parse_node_path(prefix: impl Into<Path>, path: impl Into<Path>) -> Option
 		"" => "",
 		node => node.strip_prefix('/')?,
 	};
-	Some(Path::new(node).clone())
+	Some(Path::new(node))
 }
 
 /// Errors produced while publishing or consuming stats.
@@ -331,13 +331,13 @@ mod tests {
 	fn parse_node_path_variants() {
 		let parse = |path| parse_node_path(".stats", path);
 
-		assert_eq!(parse(".stats/node/sjc"), Some(Path::new("sjc").clone()));
+		assert_eq!(parse(".stats/node/sjc"), Some(Path::new("sjc")));
 		assert_eq!(
 			parse(".stats/node/sjc/1"),
-			Some(Path::new("sjc/1").clone()),
+			Some(Path::new("sjc/1")),
 			"multi-segment node"
 		);
-		assert_eq!(parse(".stats/node"), Some(Path::empty().clone()), "nodeless path");
+		assert_eq!(parse(".stats/node"), Some(Path::empty()), "nodeless path");
 
 		// Not ours: wrong prefix, a sibling category, or anything between.
 		assert_eq!(parse("other/node/sjc"), None);

@@ -483,7 +483,7 @@ mod test {
 	fn track_request_roundtrips_on_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").clone(),
+			broadcast: Path::new("room"),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();
@@ -499,7 +499,7 @@ mod test {
 	fn track_request_errors_before_lite05() {
 		let msg = Track {
 			epoch: None,
-			broadcast: Path::new("room").clone(),
+			broadcast: Path::new("room"),
 			track: Cow::Borrowed("video"),
 		};
 		let mut buf = Vec::new();

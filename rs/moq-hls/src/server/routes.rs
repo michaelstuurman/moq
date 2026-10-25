@@ -528,7 +528,7 @@ mod tests {
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), Default::default()).unwrap();
 		let reserved = catalog.reserve();
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("./source").clone());
+		config.broadcast = Some(moq_net::path::Relative::new("./source"));
 		let mut allowed = reserved
 			.video(
 				source.create_track("video0", timed()).unwrap(),
@@ -537,7 +537,7 @@ mod tests {
 			)
 			.unwrap();
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("./secret").clone());
+		config.broadcast = Some(moq_net::path::Relative::new("./secret"));
 		let mut denied = reserved
 			.video(
 				secret.create_track("video1", timed()).unwrap(),
