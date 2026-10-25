@@ -15,7 +15,20 @@ import { BoyUI } from "./ui/element.tsx";
 const OBSERVED = ["url", "prefix", "prefix-game", "prefix-viewer"] as const;
 type Observed = (typeof OBSERVED)[number];
 
-const DEFAULT_PREFIX = "boy";
+const DEFAULT_PREFIX = Moq.Path.from("boy");
+
+// Parse a path attribute, warning and returning `fallback` when it has an empty segment.
+function parsePrefix<T>(name: Observed, value: string | null, fallback: T): Moq.Path.Valid | T {
+	if (value === null) return fallback;
+	try {
+		return Moq.Path.from(value);
+	} catch {
+		console.warn(
+			`moq-boy: invalid ${name}="${value}", expected a path without a leading, trailing, or doubled "/"`,
+		);
+		return fallback;
+	}
+}
 
 const cleanup = new FinalizationRegistry<Moq.Signals.Effect>((signals) => signals.close());
 
@@ -44,9 +57,9 @@ export default class MoqBoy extends HTMLElement {
 
 	readonly #signals = new Moq.Signals.Effect();
 	readonly #enabled = new Moq.Signals.Signal(false);
-	readonly #prefix = new Moq.Signals.Signal(DEFAULT_PREFIX);
-	readonly #gamePrefixOverride = new Moq.Signals.Signal<string | undefined>(undefined);
-	readonly #viewerPrefixOverride = new Moq.Signals.Signal<string | undefined>(undefined);
+	readonly #prefix = new Moq.Signals.Signal<Moq.Path.Valid>(DEFAULT_PREFIX);
+	readonly #gamePrefixOverride = new Moq.Signals.Signal<Moq.Path.Valid | undefined>(undefined);
+	readonly #viewerPrefixOverride = new Moq.Signals.Signal<Moq.Path.Valid | undefined>(undefined);
 	readonly #sessions = new Map<string, Game>();
 	#dispose?: () => void;
 
@@ -89,13 +102,13 @@ export default class MoqBoy extends HTMLElement {
 				this.connection.url.set(newValue ? new URL(newValue) : undefined);
 				break;
 			case "prefix":
-				this.#prefix.set(newValue ?? DEFAULT_PREFIX);
+				this.#prefix.set(parsePrefix(name, newValue, DEFAULT_PREFIX));
 				break;
 			case "prefix-game":
-				this.#gamePrefixOverride.set(newValue ?? undefined);
+				this.#gamePrefixOverride.set(parsePrefix(name, newValue, undefined));
 				break;
 			case "prefix-viewer":
-				this.#viewerPrefixOverride.set(newValue ?? undefined);
+				this.#viewerPrefixOverride.set(parsePrefix(name, newValue, undefined));
 				break;
 		}
 	}
@@ -115,7 +128,7 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	set prefixPath(value: string) {
-		this.#prefix.set(value);
+		this.#prefix.set(Moq.Path.from(value));
 	}
 
 	/** The path prefix for game broadcasts, mirrored by the `prefix-game` attribute. */
@@ -124,7 +137,7 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	set prefixGame(value: string) {
-		this.#gamePrefixOverride.set(value);
+		this.#gamePrefixOverride.set(Moq.Path.from(value));
 	}
 
 	/** The path prefix for viewer broadcasts, mirrored by the `prefix-viewer` attribute. */
@@ -133,18 +146,17 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	set prefixViewer(value: string) {
-		this.#viewerPrefixOverride.set(value);
+		this.#viewerPrefixOverride.set(Moq.Path.from(value));
 	}
 
 	#runDiscovery(effect: Moq.Signals.Effect) {
 		const base = effect.get(this.#prefix);
 		const gamePrefix = effect.get(this.#gamePrefixOverride) ?? Moq.Path.from(base, "game");
 		const viewerPrefix = effect.get(this.#viewerPrefixOverride) ?? Moq.Path.from(base, "viewer");
-		const prefix = Moq.Path.from(gamePrefix);
 
 		// The origin's stream spans reconnects: entries retract when the session dies and
 		// return when the next one re-announces them, so this loop never needs to restart.
-		const announced = this.origin.consume().announced(Moq.Path.Pattern.parse("*").rooted(prefix));
+		const announced = this.origin.consume().announced(Moq.Path.Pattern.parse("*").rooted(gamePrefix));
 		effect.cleanup(() => announced.close());
 
 		effect.spawn(async () => {
