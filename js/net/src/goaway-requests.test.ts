@@ -261,7 +261,7 @@ test("announcing and subscribing after GOAWAY still open streams", async () => {
 			nextRequestId() {
 				return Promise.resolve(0n);
 			},
-			spendRequest() {
+			checkRequestId() {
 				throw new Error("unexpected incoming request");
 			},
 			close() {},

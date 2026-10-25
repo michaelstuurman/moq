@@ -160,7 +160,6 @@ test.each(Object.values(Ietf.ALPN))("%s sends no update when the last subscriber
 
 // An update that fails to encode is a bug, not a publisher that stopped reading, so it ends the
 // track with the error rather than leaving it at a stale priority. Nothing reaches the wire.
-// Drafts 14 and 15 require the next request ID, so the one the update spent ends the session.
 test.each(Object.values(Ietf.ALPN))("%s ends the track when an update fails to encode", async (protocol) => {
 	const origin = new OriginProducer();
 	const broadcast = origin.createBroadcast(path);

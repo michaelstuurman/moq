@@ -459,7 +459,7 @@ export class Connection implements Established {
 
 	/** Spend a request's ID, closing the session if it was already used. */
 	#spend(requestId: bigint) {
-		this.#session.spendRequest(requestId);
+		this.#session.checkRequestId(requestId);
 	}
 
 	/** Refuse a request MALFORMED_AUTH_TOKEN, ending its stream. Mirrors Rust's `token::reject`. */

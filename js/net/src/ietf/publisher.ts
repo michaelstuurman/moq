@@ -1488,7 +1488,7 @@ export class Publisher {
 					const update = next.update;
 					updating = undefined;
 					if (!update) continue;
-					this.#session.spendRequest(update.requestId);
+					this.#session.checkRequestId(update.requestId);
 					if (update.refused || (update.prefix !== undefined && Namespace.reserved(update.prefix, version))) {
 						await refuseUpdate(request.writer, version, "subscribe_namespace", {
 							condition: update.refused ?? "does_not_exist",
@@ -2168,7 +2168,7 @@ export class Publisher {
 				if (!framed) return request.ended;
 				if (framed.type !== 0x02) throw new ProtocolViolation("expected SUBSCRIBE_TRACKS update");
 				await Message.decode(framed.reader, async (body) => {
-					this.#session.spendRequest(await body.u62());
+					this.#session.checkRequestId(await body.u62());
 					await Parameters.decode(body, version, "tracks-update");
 				});
 				refusal = { condition: "not_supported", reasonPhrase: "SUBSCRIBE_TRACKS updates are not supported" };
@@ -2684,7 +2684,7 @@ export class Publisher {
 	async #subscriptionUpdate(framed: Framed): Promise<Parameters> {
 		const version = this.#session.version;
 		const params = await Message.decode(framed.reader, async (body) => {
-			this.#session.spendRequest(await body.u62());
+			this.#session.checkRequestId(await body.u62());
 			return Parameters.decode(body, version, "request-update");
 		});
 		if (params.trackPropertyFilter)

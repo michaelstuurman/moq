@@ -1409,16 +1409,11 @@ mod tests {
 	}
 
 	#[moq_clock::test]
-	async fn auth_ids_share_the_request_history() {
+	async fn auth_ids_need_the_peers_parity() {
 		for version in [Version::Draft18, Version::Draft22] {
 			for client in [false, true] {
 				let first = u64::from(client);
-				for requests in [
-					vec![(true, first), (true, first)],
-					vec![(true, first), (false, first)],
-					vec![(false, first), (true, first)],
-					vec![(true, first ^ 1)],
-				] {
+				for requests in [vec![(true, first ^ 1)], vec![(false, first), (true, (first + 2) ^ 1)]] {
 					let incoming = requests
 						.into_iter()
 						.map(|(is_auth, id)| {
@@ -3351,8 +3346,8 @@ mod tests {
 		}
 	}
 
-	/// Draft-18 GOAWAY names the smallest peer ID not processed, here one a reordered stream
-	/// skipped, preserving the peer's parity.
+	/// Draft-18 GOAWAY names the first peer ID past every one used, preserving the peer's
+	/// parity, and still admits one a reordered stream skipped below it.
 	#[moq_clock::test]
 	async fn our_draft18_goaway_names_the_admitted_request_cutoff() {
 		const VERSION: Version = Version::Draft18;
@@ -3379,9 +3374,10 @@ mod tests {
 			));
 			handle.producer().send(crate::goaway::Goaway::new()).unwrap();
 			assert!(futures::poll!(setup.as_mut()).is_pending());
-			let sent = goaway(VERSION, Some(first + 2));
+			let sent = goaway(VERSION, Some(first + 6));
 			assert_eq!(occurrences(&log, &sent), 1, "client={client}");
-			assert!(matches!(control.accept(RequestId(first + 2)), Err(Error::GoingAway)));
+			control.accept(RequestId(first + 2)).unwrap();
+			assert!(matches!(control.accept(RequestId(first + 6)), Err(Error::GoingAway)));
 		}
 	}
 

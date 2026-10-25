@@ -1377,11 +1377,6 @@ impl crate::transport::Error for NoError {
 	}
 }
 
-/// Admit request IDs for the history benchmark, returning the accepted count.
-pub fn request_history(ids: &[u64]) -> usize {
-	ietf::request_history(ids)
-}
-
 /// A source-selection watch for the private request-lifetime benchmark.
 pub struct RequestValidity(crate::model::broadcast::RequestValidity);
 

@@ -83,12 +83,6 @@ use subscriber::*;
 pub use track::*;
 pub use version::Version;
 
-#[cfg(all(feature = "async", any(test, feature = "fuzz")))]
-pub(crate) fn request_history(ids: &[u64]) -> usize {
-	let control = Control::new(false);
-	ids.iter().filter(|id| control.accept(RequestId(**id)).is_ok()).count()
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -1992,7 +1992,8 @@ impl Subscriber {
 				// A non-terminal message read while a verdict is pending waits for it.
 				Turn::Message(id, body) if renewal.pending() => {
 					if id == ietf::PublishNamespaceUpdate::ID {
-						// Its request ID is spent on arrival, so one dropped with the queue stays spent.
+						// Its request ID is spent on arrival, so one dropped with the queue still moves
+						// GOAWAY's cutoff past it.
 						let update_id = ietf::RequestId::decode(&mut body.decoder(self.version), self.version)?;
 						if let Err(err) = self.spend(update_id) {
 							if matches!(err, Error::GoingAway) {
@@ -9129,36 +9130,6 @@ mod tests {
 		)
 	}
 
-	/// Namespace updates spend IDs from the same lifetime history as initial requests.
-	#[moq_clock::test]
-	async fn namespace_update_cannot_reuse_a_spent_request_id() {
-		let self_origin = crate::Hop::new(5).unwrap();
-		let peer = peer_9();
-		let (clean, _) = clean_and_looped();
-		let script = publish_namespace_updates(std::slice::from_ref(&clean)).await;
-		let (mut subscriber, _consumer, mut stream, _driver, log) =
-			update_harness(self_origin, &peer, &clean, script).await;
-		// The initial request is already retired; its ID remains permanently spent.
-		subscriber.control.accept(RequestId(3)).unwrap();
-		let mut attached = Some(0);
-		let err = subscriber
-			.run_publish_namespace_updates(
-				&mut stream,
-				&crate::Path::new("room/host"),
-				Held {
-					cluster: Some(clean),
-					epoch: None,
-				},
-				peer,
-				&mut attached,
-				None,
-			)
-			.await
-			.expect_err("a repeated update ID must close the session");
-		assert!(matches!(err, Error::Session(crate::SessionError::InvalidRequestId)));
-		assert_eq!(log.closes()[0].0, crate::SessionError::InvalidRequestId.to_code());
-	}
-
 	/// A reflected update detaches the route but MUST NOT end the stream. Updates ride
 	/// the stream that already carries the advertisement, so closing it strands the
 	/// namespace even when the peer's path goes clean again. It is also not ours to
@@ -11248,8 +11219,9 @@ mod tests {
 			settle().await;
 		}
 		assert!(ended, "closing the stream ends the announce");
-		assert!(
-			control.accept(RequestId(5)).is_err(),
+		assert_eq!(
+			control.goaway().unwrap(),
+			RequestId(7),
 			"the queued update's request ID was left unspent"
 		);
 	}

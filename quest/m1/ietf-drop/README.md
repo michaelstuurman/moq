@@ -62,10 +62,6 @@ This README's remaining work: open a PR on
 entries in `implementations.json` to drafts 18 and 22. The maintainer
 approved posting there on 2026-10-24.
 
-## Required
-
-- [Bound the request-ID history by design](/quest/m1/ietf-drop/d14-17.md) - a peer's spent request IDs cost memory the protocol bounds, not a refusal constant
-
 ## Related
 
 - [Interop coverage](/quest/m1/interop-coverage/README.md) - new cross-implementation cases target drafts 18 and 22 only

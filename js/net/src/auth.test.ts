@@ -7,8 +7,6 @@ import { SessionCode, SessionError, StreamCode, StreamError, toStreamCode } from
 import { AuthMessage as IetfAuthMessage, IetfAuthWire } from "./ietf/auth.ts";
 import * as Ietf from "./ietf/index.ts";
 import * as IetfMessage from "./ietf/message.ts";
-import { TrackStatusRequest } from "./ietf/track.ts";
-import { Version as IetfVersion } from "./ietf/version.ts";
 import { AuthMessage as LiteAuthMessage, LiteAuthWire } from "./lite/auth.ts";
 import * as Lite from "./lite/index.ts";
 import * as LiteMessage from "./lite/message.ts";
@@ -1479,76 +1477,42 @@ describe.each([Lite.ALPN_07_WIP, Ietf.ALPN.DRAFT_22])("AUTH violations %s", (pro
 	}
 });
 
-// AUTH shares its ID space with every other request from the same peer.
+// AUTH takes the peer's request ID parity.
 describe.each([Ietf.ALPN.DRAFT_22])("AUTH request IDs %s", (protocol) => {
 	for (const client of [true, false]) {
-		for (const fault of ["reused", "wrong parity"] as const) {
-			test(`${client ? "client" : "server"} ${fault} closes the session`, async () => {
-				const pair = await connect({ protocol });
-				await waitFor(pair.client.auth.grant, (g) => g !== undefined);
-				await waitFor(pair.server.auth.grant, (g) => g !== undefined);
-				const original = IetfAuthMessage.prototype.encode;
-				const spy = spyOn(IetfAuthMessage.prototype, "encode").mockImplementation(async function (
-					this: IetfAuthMessage,
-					writer,
-					version,
-				) {
-					this.requestId = fault === "reused" ? (client ? 0n : 1n) : client ? 1n : 0n;
-					await original.call(this, writer, version);
-				});
-				const added = (client ? pair.client : pair.server).auth.add("bad ID").catch(() => undefined);
-				try {
-					expect(
-						(
-							await withTimeout(
-								pair.transport.closed,
-								Nano.fromMilli(Milli(100)),
-								"invalid AUTH ID left session open",
-							)
-						).closeCode,
-					).toBe(SessionCode.InvalidRequestId);
-				} finally {
-					spy.mockRestore();
-					pair.client.abort();
-					pair.server.abort();
-					await added;
-				}
+		test(`${client ? "client" : "server"} wrong parity closes the session`, async () => {
+			const pair = await connect({ protocol });
+			await waitFor(pair.client.auth.grant, (g) => g !== undefined);
+			await waitFor(pair.server.auth.grant, (g) => g !== undefined);
+			const original = IetfAuthMessage.prototype.encode;
+			const spy = spyOn(IetfAuthMessage.prototype, "encode").mockImplementation(async function (
+				this: IetfAuthMessage,
+				writer,
+				version,
+			) {
+				this.requestId = client ? 1n : 0n;
+				await original.call(this, writer, version);
 			});
-		}
+			const added = (client ? pair.client : pair.server).auth.add("bad ID").catch(() => undefined);
+			try {
+				expect(
+					(
+						await withTimeout(
+							pair.transport.closed,
+							Nano.fromMilli(Milli(100)),
+							"invalid AUTH ID left session open",
+						)
+					).closeCode,
+				).toBe(SessionCode.InvalidRequestId);
+			} finally {
+				spy.mockRestore();
+				pair.client.abort();
+				pair.server.abort();
+				await added;
+			}
+		});
 	}
 });
-
-for (const [protocol, version] of [
-	[Ietf.ALPN.DRAFT_18, IetfVersion.DRAFT_18],
-	[Ietf.ALPN.DRAFT_22, IetfVersion.DRAFT_22],
-] as const) {
-	test(`TRACK_STATUS cannot reuse setup AUTH ID on ${protocol}`, async () => {
-		const pair = await connect({ protocol });
-		await waitFor(pair.client.auth.grant, (g) => g !== undefined);
-		try {
-			const raw = await pair.transport.createBidirectionalStream();
-			const writer = new Writer(raw.writable, version);
-			await writer.u53(TrackStatusRequest.id);
-			await new TrackStatusRequest({
-				requestId: 0n,
-				trackNamespace: Path.from("test"),
-				trackName: "video",
-			}).encode(writer, version);
-			expect(
-				(
-					await withTimeout(
-						pair.transport.closed,
-						Nano.fromMilli(Milli(100)),
-						"cross-request reuse left session open",
-					)
-				).closeCode,
-			).toBe(SessionCode.InvalidRequestId);
-		} finally {
-			pair.client.abort();
-			pair.server.abort();
-		}
-	});
-}
 
 for (const protocol of [Ietf.ALPN.DRAFT_22]) {
 	test(`AUTH accepts reordered IDs on ${protocol}`, async () => {

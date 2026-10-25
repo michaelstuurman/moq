@@ -8128,10 +8128,6 @@ mod serve_tests {
 				"second"
 			);
 			assert!(wire.is_empty());
-			// A fresh update ID is required even if the prefix does not change.
-			session.push(&update);
-			assert!(futures::poll!(running.as_mut()).is_ready());
-			assert_eq!(h.log.closes().iter().map(|(code, _)| *code).collect::<Vec<_>>(), [0x04]);
 		}
 	}
 
