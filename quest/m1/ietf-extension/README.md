@@ -56,12 +56,9 @@ cannot answer unambiguously is refused.
   until the largest group advances, so dynamic groups are no longer part of
   the private carve-out below.
 - **Immutable properties** keep their serialized inner bytes, and the track
-  its ingress moq-transport version, including across relay hops. Refuse forwarding between
-  the absolute-key/QUIC-varint drafts 14/15, delta-key/QUIC-varint draft 16,
-  and delta-key/leading-ones-varint drafts 17+ when immutable properties
-  are present. Draft 17 is a separate family because it forbids 7-byte varints.
-  Rewriting them would violate immutability; forwarding unchanged
-  across those families would change their meaning.
+  its ingress moq-transport version, including across relay hops. Every
+  supported draft shares the delta-key, leading-ones-varint layout, so the
+  bytes forward unchanged between them.
 - **Crate-private on purpose.** These fields never become public API
   ([moq-transport stays private](/quest/m1/api-audit/ietf-private.md)); a
   relay that is not moq-relay drops them, as plain lite does.

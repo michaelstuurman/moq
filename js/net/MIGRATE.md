@@ -4,6 +4,12 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### moq-transport drafts 14 through 17 are removed
+
+The `"moq-transport-14"` through `"moq-transport-17"` version names now throw a `TypeError`, and a peer offering only those versions fails the handshake.
+The moql SETUP (no ALPN, or `moql`) negotiates only lite-01 and lite-02.
+Peers must speak moq-transport draft 18 or later, or moq-lite.
+
 ### Published names refuse navigation segments
 
 Broadcast creation and route publication now refuse literal `.` and `..` segments, including segments in the producer's root.

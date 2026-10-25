@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { SessionCode, SessionError } from "../error.ts";
-import { SpentIds } from "./adapter.ts";
+import { SpentIds } from "./session.ts";
 
 function code(ids: SpentIds, id: bigint): SessionCode | undefined {
 	try {

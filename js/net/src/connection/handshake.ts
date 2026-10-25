@@ -39,15 +39,15 @@ export async function exchangeSetup(
 }> {
 	const params = new Ietf.SetupOptions();
 	Ietf.implementationIntoSetup(params, implementation);
-	Extensions.intoSetup(params, extensions, version);
+	Extensions.intoSetup(params, extensions);
 	Ietf.hiddenIntoSetup(params);
 	Ietf.maxAgeIntoSetup(params);
-	Ietf.activeCountIntoSetup(params, version);
+	Ietf.activeCountIntoSetup(params);
 
 	// One id per session, like the moq-lite connection: nothing in this process forwards
 	// between sessions, so there is nothing for a shared id to detect.
 	const self = randomHop();
-	Ietf.Cluster.intoSetup(params, self, version);
+	Ietf.Cluster.intoSetup(params, self);
 
 	const setupMsg = new Ietf.Setup({ parameters: params });
 
@@ -153,7 +153,7 @@ async function receiveSetup(
 	}
 	// Nothing here uses the peer's token, but one that cannot be decoded still closes the
 	// session (draft-21 section 8.9).
-	Ietf.tokenFromSetup(setup.parameters, version);
+	Ietf.tokenFromSetup(setup.parameters);
 
 	return {
 		reader,
@@ -161,24 +161,10 @@ async function receiveSetup(
 		solicit: Ietf.solicitFromSetup(setup.parameters),
 		hidden: Ietf.hiddenFromSetup(setup.parameters),
 		maxAge: Ietf.maxAgeFromSetup(setup.parameters),
-		activeCount: Ietf.activeCountFromSetup(setup.parameters, version),
-		cluster: Ietf.Cluster.fromSetup(setup.parameters, version),
-		auth: Ietf.Auth.fromSetup(setup.parameters, version) === true,
-		epoch: Ietf.Epoch.fromSetup(setup.parameters, version),
+		activeCount: Ietf.activeCountFromSetup(setup.parameters),
+		cluster: Ietf.Cluster.fromSetup(setup.parameters),
+		auth: Ietf.Auth.fromSetup(setup.parameters) === true,
+		epoch: Ietf.Epoch.fromSetup(setup.parameters),
 		implementation: Ietf.implementationFromSetup(setup.parameters),
 	};
-}
-
-/**
- * The implementation a moq-transport draft-14 to 16 peer advertised in its bidi SETUP. A malformed one
- * closes the session as a protocol violation, the way {@link exchangeSetup} refuses one.
- */
-export function legacyPeerImplementation(transport: WebTransport, params: Ietf.SetupOptions): string | undefined {
-	try {
-		return Ietf.implementationFromSetup(params);
-	} catch (err) {
-		if (err instanceof ProtocolViolation)
-			transport.close({ closeCode: err.code, reason: closeReason(err.message) });
-		throw err;
-	}
 }

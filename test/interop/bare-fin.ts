@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { ProtocolViolation } from "../../js/net/src/error.ts";
 import { randomHop } from "../../js/net/src/hop.ts";
-import { NativeSession } from "../../js/net/src/ietf/adapter.ts";
 import { PublishDone } from "../../js/net/src/ietf/publish.ts";
+import { NativeSession } from "../../js/net/src/ietf/session.ts";
 import { Subscribe as IetfSubscribe, SubscribeOk } from "../../js/net/src/ietf/subscribe.ts";
 import { Subscriber as IetfSubscriber } from "../../js/net/src/ietf/subscriber.ts";
 import { Version as IetfVersion } from "../../js/net/src/ietf/version.ts";

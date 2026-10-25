@@ -1,5 +1,4 @@
 import * as Ietf from "../ietf/index.ts";
-import * as Message from "../ietf/message.ts";
 import { IMPLEMENTATION } from "../implementation.ts";
 import * as Lite from "../lite/index.ts";
 import type { Consumer as OriginConsumer, Producer as OriginProducer } from "../origin.ts";
@@ -7,7 +6,7 @@ import { Stream } from "../stream.ts";
 import type { Established } from "./established.ts";
 import * as Extensions from "./extensions.ts";
 import { DISCOVERY_REMOVED, forwardAnnounced } from "./forward.ts";
-import { exchangeSetup, legacyPeerImplementation } from "./handshake.ts";
+import { exchangeSetup } from "./handshake.ts";
 
 /** Options for {@link accept}. */
 export interface AcceptProps {
@@ -16,7 +15,7 @@ export interface AcceptProps {
 	/** The request URL associated with the transport. */
 	url: URL;
 
-	/** Version to select during SETUP negotiation (for non-ALPN paths). */
+	/** The moq-lite 01/02 version to select in a `moql` SETUP, instead of the client's first. */
 	version?: number;
 
 	/**
@@ -93,12 +92,6 @@ async function acceptInner(
 		return acceptAlpn(transport, url, Ietf.Version.DRAFT_19, wiring);
 	} else if (protocol === Ietf.ALPN.DRAFT_18) {
 		return acceptAlpn(transport, url, Ietf.Version.DRAFT_18, wiring);
-	} else if (protocol === Ietf.ALPN.DRAFT_17) {
-		return acceptAlpn(transport, url, Ietf.Version.DRAFT_17, wiring);
-	} else if (protocol === Ietf.ALPN.DRAFT_16) {
-		return acceptSetup(transport, url, Ietf.Version.DRAFT_16, wiring);
-	} else if (protocol === Ietf.ALPN.DRAFT_15) {
-		return acceptSetup(transport, url, Ietf.Version.DRAFT_15, wiring);
 	} else if (protocol === Lite.ALPN_07_WIP) {
 		return new Lite.Connection({ url, quic: transport, version: Lite.Version.DRAFT_07, ...wiring });
 	} else if (protocol === Lite.ALPN_06) {
@@ -117,7 +110,7 @@ async function acceptInner(
 }
 
 /**
- * Draft-17+ accept: ALPN already pinned the version. SETUP is exchanged over
+ * Moq-transport accept: ALPN already pinned the version. SETUP is exchanged over
  * a pair of uni streams using stream type 0x2F00.
  */
 async function acceptAlpn(
@@ -140,136 +133,29 @@ async function acceptAlpn(
 		url,
 		quic: transport,
 		...setup,
-		// v17+ uses NativeSession which manages its own request IDs; maxRequestId is unused.
-		maxRequestId: 0n,
 		version,
 	});
 }
 
-/**
- * Legacy accept (draft-15/16): ALPN pinned the version, but the SETUP message
- * is still exchanged over a bidi stream wrapped in the moq-lite compat envelope.
- */
-async function acceptSetup(
-	transport: WebTransport,
-	url: URL,
-	version: Ietf.IetfVersion,
-	wiring: SessionProps,
-): Promise<Established> {
-	// Accept bidi, read ClientSetup, write ServerSetup
-	const stream = await Stream.accept(transport, version);
-	if (!stream) throw new Error("no incoming bidi stream for SETUP");
-
-	const clientCompat = await stream.reader.u53();
-	if (clientCompat !== Lite.StreamId.ClientCompat) {
-		throw new Error(`unexpected client message type: 0x${clientCompat.toString(16)}`);
-	}
-
-	const client = await Ietf.ClientSetup.decode(stream.reader, version);
-	const peerImplementation = legacyPeerImplementation(transport, client.parameters);
-
-	const params = new Ietf.SetupOptions();
-	params.setVarint(Ietf.SetupOption.MaxRequestId, Ietf.initialMaxRequestId(true));
-	Ietf.implementationIntoSetup(params, wiring.implementation);
-	Extensions.intoSetup(params, wiring.extensions, version);
-	Ietf.hiddenIntoSetup(params);
-	Ietf.maxAgeIntoSetup(params);
-	Ietf.activeCountIntoSetup(params, version);
-
-	const server = new Ietf.ServerSetup({ version, parameters: params });
-	await Message.write(stream.writer, Lite.StreamId.ServerCompat, server, version);
-
-	const maxRequestId = client.parameters.getVarint(Ietf.SetupOption.MaxRequestId) ?? 0n;
-
-	// The IETF session code loads on demand, since most sessions negotiate lite.
-	const { Connection } = await import("../ietf/connection.ts");
-	return new Connection({
-		...wiring,
-		client: false,
-		url,
-		quic: transport,
-		control: stream,
-		maxRequestId,
-		version,
-		solicit: Ietf.solicitFromSetup(client.parameters),
-		hidden: Ietf.hiddenFromSetup(client.parameters),
-		maxAge: Ietf.maxAgeFromSetup(client.parameters),
-		activeCount: Ietf.activeCountFromSetup(client.parameters, version),
-		peerImplementation,
-	});
-}
-
+/** `moql`, or no subprotocol: negotiate moq-lite 01/02 in SETUP. */
 async function acceptNegotiated(
 	transport: WebTransport,
 	url: URL,
 	wiring: SessionProps,
 	version?: number,
 ): Promise<Established> {
-	const setupVersion = Ietf.Version.DRAFT_14;
-
-	const stream = await Stream.accept(transport, setupVersion);
+	// Lite 01 and 02 frame the SETUP identically, so either reads it.
+	const stream = await Stream.accept(transport, Lite.Version.DRAFT_02);
 	if (!stream) throw new Error("no incoming bidi stream for SETUP");
 
-	const clientCompat = await stream.reader.u53();
-	if (clientCompat !== Lite.StreamId.ClientCompat) {
-		throw new Error(`unexpected client message type: 0x${clientCompat.toString(16)}`);
+	const client = await Lite.ClientSetup.decode(stream.reader);
+	const selected = version ?? client.versions.find(Lite.isNegotiated);
+	if (selected === undefined || !Lite.isNegotiated(selected)) {
+		throw new Error(
+			`no common version found; client offered: ${client.versions.map((v) => v.toString(16)).join(", ")}`,
+		);
 	}
 
-	const client = await Ietf.ClientSetup.decode(stream.reader, setupVersion);
-
-	// Pick the requested version, or first matching version from client's list
-	const allVersions = [...Object.values(Lite.Version), ...Object.values(Ietf.Version)] as number[];
-	let selectedVersion: number;
-	if (version !== undefined) {
-		selectedVersion = version;
-	} else {
-		const match = client.versions.find((v) => allVersions.includes(v));
-		if (match === undefined) {
-			throw new Error(
-				`no common version found; client offered: ${client.versions.map((v) => v.toString(16)).join(", ")}`,
-			);
-		}
-		selectedVersion = match;
-	}
-
-	const params = new Ietf.SetupOptions();
-	params.setVarint(Ietf.SetupOption.MaxRequestId, Ietf.initialMaxRequestId(true));
-	Ietf.implementationIntoSetup(params, wiring.implementation);
-	Extensions.intoSetup(params, wiring.extensions, setupVersion);
-	Ietf.hiddenIntoSetup(params);
-	Ietf.maxAgeIntoSetup(params);
-	Ietf.activeCountIntoSetup(params, setupVersion);
-
-	const server = new Ietf.ServerSetup({ version: selectedVersion, parameters: params });
-	await Message.write(stream.writer, Lite.StreamId.ServerCompat, server, setupVersion);
-
-	if (Object.values(Lite.Version).includes(selectedVersion as Lite.Version)) {
-		return new Lite.Connection({
-			url,
-			quic: transport,
-			version: selectedVersion as Lite.Version,
-			session: stream,
-			...wiring,
-		});
-	} else if (Object.values(Ietf.Version).includes(selectedVersion as Ietf.Version)) {
-		const maxRequestId = client.parameters.getVarint(Ietf.SetupOption.MaxRequestId) ?? 0n;
-		// The IETF session code loads on demand, since most sessions negotiate lite.
-		const { Connection } = await import("../ietf/connection.ts");
-		return new Connection({
-			...wiring,
-			client: false,
-			url,
-			quic: transport,
-			control: stream,
-			maxRequestId,
-			version: selectedVersion as Ietf.IetfVersion,
-			solicit: Ietf.solicitFromSetup(client.parameters),
-			hidden: Ietf.hiddenFromSetup(client.parameters),
-			maxAge: Ietf.maxAgeFromSetup(client.parameters),
-			activeCount: Ietf.activeCountFromSetup(client.parameters, selectedVersion as Ietf.IetfVersion),
-			peerImplementation: legacyPeerImplementation(transport, client.parameters),
-		});
-	} else {
-		throw new Error(`unsupported version: ${selectedVersion.toString(16)}`);
-	}
+	await new Lite.ServerSetup(selected).encode(stream.writer);
+	return new Lite.Connection({ url, quic: transport, version: selected, session: stream, ...wiring });
 }

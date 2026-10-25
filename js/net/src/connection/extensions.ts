@@ -27,8 +27,8 @@ export function offered(extensions?: Extensions): Offered {
 }
 
 /** Write the options for the offered extensions into a SETUP. */
-export function intoSetup(params: Ietf.SetupOptions, extensions: Offered, version: Ietf.IetfVersion) {
+export function intoSetup(params: Ietf.SetupOptions, extensions: Offered) {
 	if (extensions.solicit) Ietf.solicitIntoSetup(params);
-	if (extensions.auth) Ietf.Auth.intoSetup(params, version);
-	if (extensions.epoch) Ietf.Epoch.intoSetup(params, version);
+	if (extensions.auth) Ietf.Auth.intoSetup(params);
+	if (extensions.epoch) Ietf.Epoch.intoSetup(params);
 }

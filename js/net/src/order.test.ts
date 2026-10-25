@@ -136,7 +136,7 @@ test("lite-06 serves an ascending subscription newest first", async () => {
 // moq-transport joins at the live edge, so the groups arrive live, one at a time.
 test.each(["ascending", "descending"] as const)("ietf serves GROUP_ORDER %s", async (order) => {
 	const origin = new OriginProducer();
-	const { client, server, transport } = await session(Ietf.ALPN.DRAFT_17, origin);
+	const { client, server, transport } = await session(Ietf.ALPN.DRAFT_18, origin);
 
 	const broadcast = origin.createBroadcast(Path.from("test"));
 	broadcast.announce();
@@ -199,7 +199,7 @@ function holdFins(transport: MockTransport): { closing: Promise<void>; release: 
 // the groups behind it are promoted to tie with it.
 test("ietf keeps a closing group stream ranked until it settles", async () => {
 	const origin = new OriginProducer();
-	const { client, server, transport } = await session(Ietf.ALPN.DRAFT_17, origin);
+	const { client, server, transport } = await session(Ietf.ALPN.DRAFT_18, origin);
 	const fins = holdFins(transport);
 
 	const broadcast = origin.createBroadcast(Path.from("test"));

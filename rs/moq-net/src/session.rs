@@ -893,7 +893,7 @@ pub struct Limits {
 }
 
 impl Default for Limits {
-	/// Generous enough for a relay mesh carrying a large origin; lower them for untrusted peers.
+	/// Generous enough for a relay mesh carrying a large origin; lower it for untrusted peers.
 	fn default() -> Self {
 		Self { announces: 100_000 }
 	}

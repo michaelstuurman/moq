@@ -19,8 +19,7 @@ narrower request open under a broader one on every version.
 
 - At a peer that declared no Solicit, a broader watch closes the narrower
   requests beneath it, and its SUBSCRIBE_NAMESPACE goes out only once each
-  has left the wire: UNSUBSCRIBE_NAMESPACE written on drafts 14/15, the peer's
-  half closed from draft 16.
+  has left the wire, with the peer's half closed.
 - `forward.ts` needs the session to say when a request is off the wire; the
   announced consumer reports only its local close today.
 

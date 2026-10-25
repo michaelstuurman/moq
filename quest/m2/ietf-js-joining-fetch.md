@@ -39,10 +39,8 @@ Three parts, which only work together:
    FETCH_OK. Then it writes FETCH_OK (end `{G, k + 1}`, not end of track) and
    a fetch stream named by the FETCH's own request ID, reusing
    `#writeFillGroup`. It is not one of the subscription's counted streams.
-   Codec work: `Fetch` keeps the joining fields; a `FetchOk` encoder for
-   drafts 14 to 19 (request ID through 16, GROUP_ORDER on 14, empty
-   parameters, Track Properties from 15); `FetchFrame` writes draft-14's
-   explicit object layout and the status after an empty payload on 14 and 15.
+   Codec work: `Fetch` keeps the joining fields, and a `FetchOk` encoder for
+   drafts 18 and 19 writes empty parameters and Track Properties.
 3. **Answer a FETCH after the subscription ends.** In the tail test the track
    is finished before SUBSCRIBE_OK goes out, so PUBLISH_DONE follows at once
    and the FETCH arrives to no subscription. Keep a finished subscription's

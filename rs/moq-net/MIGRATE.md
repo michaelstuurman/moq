@@ -4,6 +4,13 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### moq-transport drafts 14 through 17 are removed
+
+`ietf::Version::Draft14` through `Draft17` are gone, and a peer offering only those versions, by ALPN or in the moql SETUP, fails the handshake.
+Peers must speak moq-transport draft 18 or later, or moq-lite.
+The moql SETUP (no ALPN, or `moql`) now negotiates only lite-01 and lite-02.
+`session::Limits::requests` is removed: stream credit bounds every peer request, so drop the field and keep `announces`.
+
 ### `stats::Refusal` is `stats::RefusalKind`, and `time::now` is gone (#6510)
 
 Rename `moq_net::stats::Refusal` to `moq_net::stats::RefusalKind`, so it no longer shares a name with `moq_auth::Refusal`; its variants and `Refusals` are unchanged.
@@ -23,7 +30,7 @@ Path normalization, relative references, and subscription paths retain their sem
 
 ### `Version::uses_setup_negotiation` is removed ([#6483](https://github.com/moq-dev/moq/pull/6483))
 
-Match the version yourself: lite-01, lite-02, and moq-transport draft 14 negotiate the version in SETUP; every other version negotiates it through ALPN.
+Match the version yourself: lite-01 and lite-02 negotiate the version in SETUP; every other version negotiates it through ALPN.
 
 ### Sessions box their transport (#6176)
 
@@ -445,7 +452,7 @@ Treat both like `NotFound` if you match on errors.
 ### Sessions cap peer requests (#4820)
 
 A peer past the session's announce bound loses the session with `TooManyRequests`.
-Stream credit bounds its subscriptions and FETCHes, except on moq-transport drafts 14 to 16, where the request window sized by `announces` and `requests` does.
+Stream credit bounds its subscriptions and FETCHes.
 Raise the defaults for a large relay mesh.
 
 ```rust

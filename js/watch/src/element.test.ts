@@ -50,7 +50,7 @@ for (const [attribute, value, expected] of [
 }
 
 for (const [value, expected] of [
-	["moq-transport-14", ["moq-transport-14"]],
+	["moq-transport-18", ["moq-transport-18"]],
 	[" moq-lite-06 , moq-transport-22 ", ["moq-lite-06", "moq-transport-22"]],
 	["", undefined],
 	[" , ", undefined],

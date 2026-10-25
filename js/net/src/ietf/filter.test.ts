@@ -9,14 +9,7 @@ const OLD = Version.DRAFT_19;
 const NEW = Version.DRAFT_20;
 
 test("legacy live joins do not exclude the prefix without a joining FETCH", () => {
-	for (const version of [
-		Version.DRAFT_14,
-		Version.DRAFT_15,
-		Version.DRAFT_16,
-		Version.DRAFT_17,
-		Version.DRAFT_18,
-		Version.DRAFT_19,
-	]) {
+	for (const version of [Version.DRAFT_18, Version.DRAFT_19]) {
 		expect([...Filter.encode(joinFilter(version), version)]).toEqual([3, 0, 0]);
 	}
 	expect([...Filter.encode(joinFilter(NEW), NEW)]).toEqual([1]);

@@ -29,7 +29,7 @@ subscription, so the subscriber loses the Largest group. Short or
 already-finished tracks hit this often.
 
 It flakes the pinned-pass interop `tail` cells with a Rust publisher, about
-one run in six on draft 14 (seen 2026-10-22 while landing
+one run in six (seen 2026-10-22 while landing
 [moq-dev/moq#6407](https://github.com/moq-dev/moq/pull/6407)): the tail test
 finishes its track before SUBSCRIBE_OK, so PUBLISH_DONE follows within
 milliseconds. The relay's settle grace (about a second) ends long before the

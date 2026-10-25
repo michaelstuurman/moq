@@ -686,6 +686,21 @@ mod tests {
 		assert!(result.is_err());
 	}
 
+	/// Moxygen's interop client sends filter type 250 by default; only 0x1-0x4 are registered.
+	#[test]
+	fn test_subscribe_rejects_unregistered_filter_type() {
+		let subscribe = |filter_type: &[u8]| {
+			let mut bytes = vec![0x00]; // request_id
+			bytes.extend_from_slice(b"\x01\x0bnonexistent\x0dno-such-track"); // namespace, name
+			bytes.extend_from_slice(&[0x01, 0x21, filter_type.len() as u8]); // one SUBSCRIPTION_FILTER
+			bytes.extend_from_slice(filter_type);
+			decode_message::<Subscribe>(&bytes, Version::Draft18)
+		};
+
+		assert!(matches!(subscribe(&[0x80, 0xfa]), Err(DecodeError::InvalidValue)));
+		assert_eq!(subscribe(&[0x02]).unwrap().filter, Filter::NextObject);
+	}
+
 	/// SUBSCRIBER_PRIORITY is a parameter whose omission means 128, not this
 	/// stack's unset 127, so a relay forwards it unchanged.
 	#[test]
