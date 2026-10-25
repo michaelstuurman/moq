@@ -3710,6 +3710,7 @@ impl Subscriber {
 		let validity = self.validity.start();
 		let work = async move {
 			let res = async {
+				// This subscription owns its joining fetch, so wait for stream credit.
 				// No ID is spent while opening a stream, so dropping a blocked open
 				// cannot leave a gap in the peer's sequential request IDs.
 				let mut opening = this.session.clone();
@@ -3718,7 +3719,7 @@ impl Subscriber {
 					if let Poll::Ready(err) = track.poll_closed(waiter) {
 						return Poll::Ready(Err(err));
 					}
-					Stream::poll_open_request(&mut opening, this.version, &mut waiter.context())
+					Stream::poll_open(&mut opening, this.version, &mut waiter.context())
 				})
 				.await?;
 				stream = stream.with_stats(this.origin.stats());
@@ -4881,13 +4882,18 @@ impl Subscriber {
 
 		// The owning subscribe/linger loop enforces its admitted gate, including a
 		// token-authorized announce outside the session scope. Its abort ends this job.
+		// The fill is already owned by waiting readers; credit backpressures it until
+		// their demand leaves instead of refusing accepted work.
 		let mut opening = self.session.clone();
 		let mut stream = match kio::wait(|waiter| {
 			validity.check(waiter)?;
 			if let Poll::Ready(err) = request.poll_closed(waiter) {
 				return Poll::Ready(Err(err));
 			}
-			Stream::poll_open_request(&mut opening, self.version, &mut waiter.context())
+			if request.poll_unused(waiter).is_ready() {
+				return Poll::Ready(Err(Error::Cancel));
+			}
+			Stream::poll_open(&mut opening, self.version, &mut waiter.context())
 		})
 		.await
 		{
@@ -14156,8 +14162,7 @@ mod joining_fetch_tests {
 	async fn invalid_joining_open_is_refused() {
 		for version in JOINING_DRAFTS {
 			for retired in [false, true] {
-				let gate = kio::Producer::new(false);
-				let session = ScriptedSession::gated_open(Vec::new(), gate.consume());
+				let session = ScriptedSession::new(Vec::new()).without_credit();
 				let log = session.log.clone();
 				let (mut subscriber, track, _tasks) =
 					pending_join(crate::driver::Transport::new(session.clone()), version);
@@ -14178,6 +14183,23 @@ mod joining_fetch_tests {
 				assert_eq!(subscriber.control.next_request_id(), RequestId(1));
 				assert_eq!(log.bi_opens(), 0);
 			}
+		}
+	}
+
+	#[moq_clock::test]
+	async fn a_joining_fetch_waits_for_stream_credit() {
+		for version in JOINING_DRAFTS {
+			let session = ScriptedSession::new(Vec::new()).without_credit();
+			let (subscriber, track, _tasks) = pending_join(crate::driver::Transport::new(session.clone()), version);
+			let mut joining = subscriber.start_joining_fetch(RequestId(99), &track).unwrap();
+			assert!(
+				joining.poll(&kio::Waiter::noop()).is_pending(),
+				"{version}: a subscription owns its joining FETCH"
+			);
+			assert_eq!(session.log.bi_opens(), 0);
+			session.grant_credit();
+			assert!(joining.poll(&kio::Waiter::noop()).is_pending());
+			assert_eq!(session.log.bi_opens(), 1, "{version}: credit releases the FETCH");
 		}
 	}
 
@@ -14397,6 +14419,9 @@ mod joining_fetch_tests {
 
 	#[derive(Clone, Copy, PartialEq, Eq)]
 	enum FetchStage {
+		Credit,
+		CreditRetired,
+		CreditGranted,
 		Unanswered,
 		Retired,
 		Accepted,
@@ -14411,7 +14436,12 @@ mod joining_fetch_tests {
 	async fn abandon_group_fetch(version: Version, stage: FetchStage) {
 		const GROUP: u64 = 4;
 		let complete = matches!(stage, FetchStage::Complete | FetchStage::CompleteReset);
+		let waiting = matches!(
+			stage,
+			FetchStage::Credit | FetchStage::CreditRetired | FetchStage::CreditGranted
+		);
 		let session = ScriptedSession::new(Vec::new());
+		let session = if waiting { session.without_credit() } else { session };
 		let (tasks, _task_set) = TaskSet::new();
 		let mut subscriber = Subscriber::new(
 			crate::time::sim(),
@@ -14446,6 +14476,30 @@ mod joining_fetch_tests {
 			None,
 		));
 		assert!(futures::poll!(run.as_mut()).is_pending());
+		if waiting {
+			assert_eq!(session.log.bi_opens(), 0, "{version}: waits before opening");
+			assert!(subscriber.state.lock().group_fetches.is_empty());
+			if stage == FetchStage::CreditGranted {
+				session.grant_credit();
+				assert!(futures::poll!(run.as_mut()).is_pending());
+				assert_eq!(session.log.bi_opens(), 1, "{version}: credit releases the FETCH");
+			}
+			if stage == FetchStage::CreditRetired {
+				drop(route);
+			} else {
+				drop(fetch);
+			}
+			assert!(
+				futures::poll!(run.as_mut()).is_ready(),
+				"{version}: releases owned work"
+			);
+			assert!(subscriber.state.lock().group_fetches.is_empty());
+			assert!(matches!(
+				outcome.read().refused(GROUP).cloned(),
+				Some(Error::Cancel | Error::Unroutable)
+			));
+			return;
+		}
 		let slot = subscriber.state.lock().group_fetches[&RequestId(1)].clone();
 
 		if matches!(stage, FetchStage::Unanswered | FetchStage::Retired) {
@@ -14597,6 +14651,15 @@ mod joining_fetch_tests {
 	async fn a_complete_group_fetch_survives_a_request_reset() {
 		for version in JOINING_DRAFTS {
 			abandon_group_fetch(version, FetchStage::CompleteReset).await;
+		}
+	}
+
+	#[moq_clock::test]
+	async fn a_claimed_fetch_waits_only_while_wanted() {
+		for version in JOINING_DRAFTS {
+			for stage in [FetchStage::Credit, FetchStage::CreditRetired, FetchStage::CreditGranted] {
+				abandon_group_fetch(version, stage).await;
+			}
 		}
 	}
 
