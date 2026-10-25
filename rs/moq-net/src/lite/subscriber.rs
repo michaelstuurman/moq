@@ -1835,7 +1835,6 @@ impl AnnouncePrefix {
 
 /// A source the announce half minted for one requested path, for the driver to serve.
 struct MintedSource {
-	validity: crate::model::broadcast::RequestValidity,
 	path: PathOwned,
 	/// The publisher instance the route announced, asked for on every request.
 	epoch: Option<crate::Epoch>,
@@ -1847,12 +1846,12 @@ struct MintedSource {
 }
 
 /// Serves the origin's track requests for one minted source until it closes: its
-/// route goes, nothing holds it any more, or the session dies. A closed source
+/// route goes, the peer stops selecting its instance, nothing holds it any more, or
+/// the session dies. A closed source
 /// takes no new tracks but lets those in flight run to their own end (moq-lite:
 /// retraction does not disturb subscriptions already in flight); the session
 /// dying drops them.
 struct SourceServe {
-	validity: crate::model::broadcast::RequestValidity,
 	subscriber: Subscriber,
 	path: PathOwned,
 	epoch: Option<crate::Epoch>,
@@ -1970,7 +1969,6 @@ impl SourceServe {
 				.expect("only the source answers its broadcast's listings"),
 			listing: None,
 			subscriber,
-			validity: minted.validity,
 			path: minted.path,
 			epoch: minted.epoch,
 			source: minted.source,
@@ -2009,7 +2007,7 @@ impl SourceServe {
 							crate::auth::Direction::Subscribe,
 						),
 						admitted: false,
-						validity: self.validity.start(),
+						validity: self.dynamic.validity().start(),
 					});
 				}
 				Some(_) if self.lister.poll_unused(waiter).is_ready() => {
@@ -2061,7 +2059,7 @@ impl kio::Task for SourceServe {
 			match self.dynamic.poll_requested_track(waiter) {
 				Poll::Ready(Ok(request)) => {
 					let serve = TrackServe {
-						validity: self.validity.clone(),
+						validity: self.dynamic.validity().clone(),
 						route: Some(self.route.clone()),
 						subscriber: self.subscriber.clone(),
 						path: self.path.clone(),
@@ -3991,14 +3989,13 @@ mod tests {
 			going_away: Default::default(),
 			auth,
 		});
-		let broadcast = crate::broadcast::Info::new().produce();
+		let broadcast = crate::broadcast::Info::new().produce().with_validity(validity);
 		let consumer = broadcast.consume();
 		let dynamic = broadcast.dynamic();
 		let route = kio::Producer::new(());
 		let serve = SourceServe::new(
 			subscriber,
 			MintedSource {
-				validity,
 				path: Path::new("room").to_owned(),
 				epoch: None,
 				source: crate::model::broadcast::SourceGuard::new(broadcast),
@@ -4037,7 +4034,7 @@ mod tests {
 	}
 
 	/// An instance retired while its listing waits for a token lists nothing: a TRACKS
-	/// request without an epoch would list its replacement.
+	/// request without an epoch would list its replacement. The source ends with it.
 	#[moq_clock::test]
 	async fn a_listing_of_a_retired_instance_never_reaches_the_wire() {
 		let auth = crate::auth::Link::new(true);
@@ -4052,7 +4049,7 @@ mod tests {
 		assert!(kio::Task::poll(&mut serve, &kio::Waiter::noop()).is_pending());
 		drop(selected);
 		drop(token);
-		assert!(kio::Task::poll(&mut serve, &kio::Waiter::noop()).is_pending());
+		assert!(kio::Task::poll(&mut serve, &kio::Waiter::noop()).is_ready());
 		assert!(matches!(tracks.next().now_or_never(), Some(Err(Error::Unroutable))));
 		assert_eq!(session.log.bi_opens(), 0);
 	}
@@ -6064,20 +6061,21 @@ impl Announced {
 					continue;
 				};
 				let path = path.to_owned();
-				let source = subscriber.origin.create_source(&path);
-				// The handler exists before the requester sees the source, so a track it
-				// asks for before the serve machine first runs queues instead of failing
-				// `NotFound`. Accepted before the push, so the requester holds the source
-				// before its serve machine can see it unheld.
-				let dynamic = source.dynamic();
+				// A request naming the epoch reaches only that instance, so only a source
+				// without one must stop once the peer no longer selects what minted it.
 				let validity = if entry.route.epoch.is_some() {
 					Default::default()
 				} else {
 					crate::model::broadcast::RequestValidity::for_source(&entry.dynamic, request.path())
 				};
+				let source = subscriber.origin.create_source(&path, validity);
+				// The handler exists before the requester sees the source, so a track it
+				// asks for before the serve machine first runs queues instead of failing
+				// `NotFound`. Accepted before the push, so the requester holds the source
+				// before its serve machine can see it unheld.
+				let dynamic = source.dynamic();
 				request.accept(&source);
 				let _ = subscriber.sources.try_push(MintedSource {
-					validity,
 					path,
 					epoch: entry.route.epoch.clone(),
 					source: crate::model::broadcast::SourceGuard::new(source),
