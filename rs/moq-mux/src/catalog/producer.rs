@@ -797,7 +797,7 @@ impl<E: CatalogExt> Producer<E> {
 	}
 
 	/// Build the media [`container::Producer`](crate::container::Producer) for `track`,
-	/// enrolling it for HLS records when [`Config::with_hls`] enabled them.
+	/// enrolling a video or audio track for HLS records when [`Config::with_hls`] enabled them.
 	pub(super) fn media<C, R>(
 		&self,
 		track: moq_net::track::Producer,
@@ -811,7 +811,15 @@ impl<E: CatalogExt> Producer<E> {
 		R: super::RenditionConfig<E>,
 		crate::Error: From<C::Error>,
 	{
-		let recorder = self.enroll(track.name(), hls_hint)?;
+		// Only video and audio renditions advertise records, and a sparse role (text) enrolled
+		// first would pace them, holding their segments open between its groups.
+		let role = std::any::TypeId::of::<R>();
+		let recorded = role == std::any::TypeId::of::<hang::catalog::VideoConfig>()
+			|| role == std::any::TypeId::of::<hang::catalog::AudioConfig>();
+		let recorder = match recorded {
+			true => self.enroll(track.name(), hls_hint)?,
+			false => None,
+		};
 		let sent = self.sent(rendition.name());
 		let mut producer = crate::container::Producer::with_rendition(track, container, rendition)
 			.with_recorder(recorder)
@@ -869,7 +877,7 @@ impl<E: CatalogExt> Producer<E> {
 	/// Enroll `track` for HLS records when [`Config::with_hls`] enabled them, advertising them in its
 	/// rendition's `hls` field once the nominal duration is known.
 	///
-	/// The role-specific track constructors call this for you. fMP4 passthrough calls it directly
+	/// The video and audio track constructors call this for you. fMP4 passthrough calls it directly
 	/// because it writes groups by hand instead of using a [`container::Producer`](crate::container::Producer).
 	pub(crate) fn enroll(
 		&self,
@@ -2070,6 +2078,29 @@ mod test {
 		catalog.retire("video0").unwrap();
 		assert_eq!(catalog.hls_tracks(), 0);
 		assert!(matches!(reader.poll_finished(&waiter), std::task::Poll::Ready(Ok(_))));
+	}
+
+	#[test]
+	fn a_text_track_neither_records_nor_paces() {
+		let mut broadcast = moq_net::broadcast::Info::new().produce();
+		let catalog = Producer::new(&mut broadcast, hls()).unwrap();
+		let net = broadcast
+			.create_track("text0", catalog.track_info(hang::catalog::PRIORITY.text))
+			.unwrap();
+		let _text = catalog
+			.text(
+				net,
+				crate::catalog::hang::Container::Legacy(crate::container::Kind::Data),
+				hang::catalog::TextConfig::new(hang::catalog::TextFormat::Vtt),
+			)
+			.unwrap();
+		assert_eq!(catalog.hls_tracks(), 0);
+
+		// The video enrolled after it paces its own segments.
+		let _video = video0(&mut broadcast, &catalog, &[0, 4_000, 8_000]);
+		assert_eq!(catalog.hls_tracks(), 1);
+		let snapshot = catalog.snapshot();
+		assert!(snapshot.video.renditions["video0"].hls.is_some());
 	}
 
 	#[test]
