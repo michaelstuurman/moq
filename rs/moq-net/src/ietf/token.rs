@@ -12,11 +12,11 @@ use crate::driver::Transport;
 
 use crate::{
 	DecodeError, Error, SessionError,
-	coding::{Decode as _, Decoder, EncodeError, Encoder},
+	coding::{Decoder, EncodeError, Encoder},
 	setup::Token,
 };
 
-use super::{Param, ParameterBytes, Parameters, RequestId, Version, error::request};
+use super::{Param, ParameterBytes, Parameters, Version, error::request};
 
 /// Retire a registered alias.
 const DELETE: u64 = 0x0;
@@ -107,27 +107,16 @@ pub(super) fn reason(err: &DecodeError) -> &'static str {
 /// Refuse a request whose tokens decoded to `err`, one [`refuses_request`] accepts, ending
 /// its stream.
 ///
-/// Section 8.9 rejects the message rather than the session. Every request starts with its
-/// Request ID, so it is read from the undecoded `body`.
+/// Section 8.9 rejects the message rather than the session.
 #[cfg(feature = "async")]
 pub(super) async fn reject(
 	mut stream: Stream<Transport, Version>,
 	kind: request::Kind,
-	body: super::Body,
 	err: DecodeError,
 	version: Version,
 ) -> Result<(), Error> {
-	let request_id = RequestId::decode(&mut body.decoder(version), version)?;
 	let reason = reason(&err);
-	super::request_stream::write_error(
-		&mut stream.writer,
-		kind,
-		request_id,
-		&Error::Decode(err),
-		reason,
-		version,
-	)
-	.await?;
+	super::request_stream::write_error(&mut stream.writer, kind, &Error::Decode(err), reason, version).await?;
 	// The peer dropping the stream once it has the rejection is a normal end.
 	let _ = stream.writer.close().await;
 	Ok(())
@@ -214,10 +203,6 @@ mod tests {
 	}
 
 	const VERSIONS: [Version; 9] = [
-		Version::Draft14,
-		Version::Draft15,
-		Version::Draft16,
-		Version::Draft17,
 		Version::Draft18,
 		Version::Draft19,
 		Version::Draft20,
@@ -339,9 +324,7 @@ mod tests {
 
 			let key = u64::from(ParameterBytes::AuthorizationToken);
 			let (count, keys): (Option<u64>, [u64; 2]) = match version {
-				Version::Draft14 | Version::Draft15 => (Some(2), [key, key]),
 				// Delta-encoded from draft-16, so the repeat is a delta of zero.
-				Version::Draft16 => (Some(2), [key, 0]),
 				_ => (None, [key, 0]),
 			};
 			let mut raw = Vec::new();

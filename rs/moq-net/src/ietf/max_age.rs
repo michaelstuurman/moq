@@ -30,7 +30,7 @@ mod tests {
 	use super::*;
 	#[test]
 	fn negotiated_separately_and_bounded() {
-		for version in [Version::Draft14, Version::Draft16, Version::Draft22] {
+		for version in [Version::Draft22] {
 			let mut params = Parameters::default();
 			assert!(!from_setup(&params, version));
 			into_setup(&mut params, version);

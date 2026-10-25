@@ -1,11 +1,11 @@
-//! IETF moq-transport subscribe messages (v14 + v15)
+//! IETF moq-transport subscribe messages
 
 use std::borrow::Cow;
 
 use crate::{
 	Path,
 	coding::*,
-	ietf::{Fill, Filter, GroupOrder, Location, Opaque, Parameters, Properties, RequestId},
+	ietf::{Fill, Filter, GroupOrder, Location, Opaque, Properties, RequestId},
 };
 
 use super::token::RequestToken;
@@ -42,26 +42,21 @@ pub struct Subscribe<'a> {
 	/// The `AUTHORIZATION TOKEN` (0x03) this request presents. At most one is
 	/// accepted: decoding refuses a repeated or second token.
 	pub authorization_token: Option<RequestToken>,
-	/// NEW_GROUP_REQUEST (0x32, draft-15+): the subscriber's largest known Group ID plus
-	/// one, or 0 when it knows none. Never encoded where the draft has no such parameter.
+	/// NEW_GROUP_REQUEST (0x32): the subscriber's largest known Group ID plus one, or 0
+	/// when it knows none.
 	pub new_group: Option<u64>,
 	/// Subscriber max age in milliseconds (MoQ Timestamp), if negotiated.
 	pub max_age: Option<u64>,
-	/// The publisher instance the subscriber expects (MoQ Epoch, draft-17+). Only on a
+	/// The publisher instance the subscriber expects (MoQ Epoch). Only on a
 	/// session that negotiated it; the session refuses one that arrives otherwise.
 	pub epoch: Option<crate::Epoch>,
-}
-
-/// NEW_GROUP_REQUEST (0x32) and DYNAMIC_GROUPS (0x30) arrived in draft-15.
-pub(super) fn has_new_group_request(version: Version) -> bool {
-	version != Version::Draft14
 }
 
 /// The Range Filters (0x25-0x29) arrived in draft-19.
 pub(super) fn has_range_filters(version: Version) -> bool {
 	!matches!(
 		version,
-		Version::Draft14 | Version::Draft15 | Version::Draft16 | Version::Draft17 | Version::Draft18
+		Version::Draft18
 	)
 }
 
@@ -70,158 +65,99 @@ impl Message for Subscribe<'_> {
 
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
 		let request_id = RequestId::decode(r, version)?;
-		if version == Version::Draft17 {
-			let _required_request_id_delta = r.varint()?;
-		}
 		let (track_namespace, track_name) = decode_track(r)?;
 		let track_name = Cow::Owned(track_name);
 
-		match version {
-			Version::Draft14 => {
-				let subscriber_priority = r.u8()?;
-				let group_order = GroupOrder::decode(r, version)?;
+			decode_params!(r, version,
+				0x02 => _object_delivery_timeout: Option<u64>,
+				0x03 => authorization_token: Vec<super::token::RequestToken>,
+				0x04 => rendezvous_timeout: Option<u64>,
+				0x06 => _subgroup_delivery_timeout: Option<u64>,
+				0x10 => forward: Option<bool>,
+				0x20 => subscriber_priority: Option<u8>,
+				0x21 => filter: Option<Filter>,
+				0x22 => group_order: Option<GroupOrder>,
+				0x23 => fill: Option<Fill> where Filter::is_draft20(version),
+				0x25 => subgroup_filter: Vec<Opaque> where has_range_filters(version),
+				0x26 => object_id_filter: Vec<Opaque> where has_range_filters(version),
+				0x27 => priority_filter: Vec<Opaque> where has_range_filters(version),
+				0x28 => object_property_filter: Vec<Opaque> where has_range_filters(version),
+				0x32 => new_group: Option<u64>,
+				0x35 => include_properties: Option<bool> where Filter::is_draft20(version),
+				epoch::EPOCH_PARAM => epoch: Option<crate::Epoch>,
+				super::max_age::PARAMETER => max_age: Option<u64>,
+			);
+			let authorization_token = super::token::single(authorization_token)?;
 
-				let forward = r.bool()?;
-				let filter = Filter::decode(r, version)?;
+			let range_filters = [
+				subgroup_filter,
+				object_id_filter,
+				priority_filter,
+				object_property_filter,
+			]
+			.iter()
+			.any(|filter| !filter.is_empty());
 
-				decode_params!(r, version,
-					0x03 => tokens: Vec<super::token::RequestToken>,
-					super::max_age::PARAMETER => max_age: Option<u64>,
-				);
-				let authorization_token = super::token::single(tokens)?;
+			// Defaults to 1, so an absent parameter means the subscriber wants them.
+			let properties_wanted = include_properties.unwrap_or(true);
 
-				Ok(Self {
-					request_id,
-					track_namespace,
-					track_name,
-					subscriber_priority,
-					group_order,
-					filter,
-					fill: None,
-					properties_wanted: true,
-					forward,
-					rendezvous: false,
-					range_filters: false,
-					authorization_token,
-					new_group: None,
-					max_age: super::max_age::validate(max_age)?,
-					epoch: None,
-				})
-			}
-			_ => {
-				decode_params!(r, version,
-					0x02 => _object_delivery_timeout: Option<u64>,
-					0x03 => authorization_token: Vec<super::token::RequestToken>,
-					// 0x04 is MAX_CACHE_DURATION in draft-15 (a publisher parameter) and not a
-					// message parameter at all in draft-16. RENDEZVOUS_TIMEOUT arrives in draft-17.
-					0x04 => rendezvous_timeout: Option<u64> where !matches!(version, Version::Draft15 | Version::Draft16),
-					0x06 => _subgroup_delivery_timeout: Option<u64> where !matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16 | Version::Draft17),
-					0x10 => forward: Option<bool>,
-					0x20 => subscriber_priority: Option<u8>,
-					0x21 => filter: Option<Filter>,
-					0x22 => group_order: Option<GroupOrder>,
-					0x23 => fill: Option<Fill> where Filter::is_draft20(version),
-					0x25 => subgroup_filter: Vec<Opaque> where has_range_filters(version),
-					0x26 => object_id_filter: Vec<Opaque> where has_range_filters(version),
-					0x27 => priority_filter: Vec<Opaque> where has_range_filters(version),
-					0x28 => object_property_filter: Vec<Opaque> where has_range_filters(version),
-					0x32 => new_group: Option<u64> where has_new_group_request(version),
-					0x35 => include_properties: Option<bool> where Filter::is_draft20(version),
-					epoch::EPOCH_PARAM => epoch: Option<crate::Epoch> where epoch::supported(version),
-					super::max_age::PARAMETER => max_age: Option<u64>,
-				);
-				let authorization_token = super::token::single(authorization_token)?;
+			// A zero cap still distinguishes a requested wait from an immediate miss.
+			let rendezvous = rendezvous_timeout.is_some_and(|millis| millis > 0);
 
-				let range_filters = [
-					subgroup_filter,
-					object_id_filter,
-					priority_filter,
-					object_property_filter,
-				]
-				.iter()
-				.any(|filter| !filter.is_empty());
+			let subscriber_priority = subscriber_priority.unwrap_or(super::priority::DEFAULT_WIRE);
+			let group_order = group_order.unwrap_or(GroupOrder::Descending);
+			// An absent LOCATION_FILTER means the subscription is unfiltered.
+			let filter = filter.unwrap_or(Filter::Unfiltered);
 
-				// Defaults to 1, so an absent parameter means the subscriber wants them.
-				let properties_wanted = include_properties.unwrap_or(true);
-
-				// A zero cap still distinguishes a requested wait from an immediate miss.
-				let rendezvous = rendezvous_timeout.is_some_and(|millis| millis > 0);
-
-				let subscriber_priority = subscriber_priority.unwrap_or(super::priority::DEFAULT_WIRE);
-				let group_order = group_order.unwrap_or(GroupOrder::Descending);
-				// An absent LOCATION_FILTER means the subscription is unfiltered.
-				let filter = filter.unwrap_or(Filter::Unfiltered);
-
-				Ok(Self {
-					request_id,
-					track_namespace,
-					track_name,
-					subscriber_priority,
-					group_order,
-					filter,
-					fill,
-					properties_wanted,
-					// Absent means 1.
-					forward: forward.unwrap_or(true),
-					rendezvous,
-					range_filters,
-					authorization_token,
-					new_group,
-					max_age: super::max_age::validate(max_age)?,
-					epoch,
-				})
-			}
-		}
+			Ok(Self {
+				request_id,
+				track_namespace,
+				track_name,
+				subscriber_priority,
+				group_order,
+				filter,
+				fill,
+				properties_wanted,
+				// Absent means 1.
+				forward: forward.unwrap_or(true),
+				rendezvous,
+				range_filters,
+				authorization_token,
+				new_group,
+				max_age: super::max_age::validate(max_age)?,
+				epoch,
+			})
 	}
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
 		self.request_id.encode(w, version)?;
-		if version == Version::Draft17 {
-			w.varint(0)?; // required_request_id_delta = 0 (draft-17 only, removed in draft-18 per #1615)
-		}
 		encode_namespace(w, &self.track_namespace)?;
 		w.string(&self.track_name)?;
 
-		match version {
-			Version::Draft14 => {
-				w.u8(self.subscriber_priority);
-				self.group_order.encode(w, version)?;
-				w.bool(self.forward);
+			// FILL_PARAMETERS arrived in draft-20. Sending it to an older peer would be an
+			// unknown parameter, which is a protocol violation, so it is dropped instead.
+			// A subscriber there simply joins mid-group, which is what it did all along.
+			let fill = self.fill.filter(|_| Filter::is_draft20(version));
 
-				self.filter.encode(w, version)?;
-				encode_params!(w, version,
-					0x03 => self.authorization_token.clone(),
-					super::max_age::PARAMETER => self.max_age,
-				);
-			}
-			_ => {
-				// FILL_PARAMETERS arrived in draft-20. Sending it to an older peer would be an
-				// unknown parameter, which is a protocol violation, so it is dropped instead.
-				// A subscriber there simply joins mid-group, which is what it did all along.
-				let fill = self.fill.filter(|_| Filter::is_draft20(version));
+			// INCLUDE_PROPERTIES defaults to 1, so only the opt-out is worth bytes. It
+			// arrived in draft-20, and an older peer would read it as an unknown
+			// parameter, which is a protocol violation.
+			let include_properties = (!self.properties_wanted && Filter::is_draft20(version)).then_some(false);
+			// Only a session that negotiated MoQ Epoch names one.
+			let epoch = self.epoch.clone();
 
-				// INCLUDE_PROPERTIES defaults to 1, so only the opt-out is worth bytes. It
-				// arrived in draft-20, and an older peer would read it as an unknown
-				// parameter, which is a protocol violation.
-				let include_properties = (!self.properties_wanted && Filter::is_draft20(version)).then_some(false);
-				let new_group = self.new_group.filter(|_| has_new_group_request(version));
-				// Only a session that negotiated MoQ Epoch names one, and it exists from draft-17.
-				let epoch = self.epoch.clone().filter(|_| epoch::supported(version));
-
-				encode_params!(w, version,
-					0x03 => self.authorization_token.clone(),
-					0x10 => self.forward,
-					0x20 => self.subscriber_priority,
-					0x21 => self.filter,
-					0x22 => self.group_order,
-					0x23 => fill,
-					0x32 => new_group,
-					0x35 => include_properties,
-					epoch::EPOCH_PARAM => epoch,
-					super::max_age::PARAMETER => self.max_age,
-				);
-			}
-		}
+			encode_params!(w, version,
+				0x03 => self.authorization_token.clone(),
+				0x10 => self.forward,
+				0x20 => self.subscriber_priority,
+				0x21 => self.filter,
+				0x22 => self.group_order,
+				0x23 => fill,
+				0x32 => self.new_group,
+				0x35 => include_properties,
+				epoch::EPOCH_PARAM => epoch,
+				super::max_age::PARAMETER => self.max_age,
+			);
 
 		Ok(())
 	}
@@ -230,14 +166,13 @@ impl Message for Subscribe<'_> {
 /// SubscribeOk message (0x04)
 #[derive(Clone, Debug)]
 pub struct SubscribeOk {
-	pub request_id: Option<RequestId>,
 	pub track_alias: u64,
 
 	/// The largest Location in the track (LARGEST_OBJECT, 0x09), which the spec requires
 	/// once the track has content. It is what a subscriber sizes a fill against.
 	pub largest: Option<Location>,
 
-	/// Metadata about the track, sent as Track Properties (draft-17+).
+	/// Metadata about the track, sent as Track Properties.
 	pub properties: Properties,
 }
 
@@ -245,113 +180,34 @@ impl Message for SubscribeOk {
 	const ID: u64 = 0x04;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		if matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16) {
-			self.request_id
-				.expect("request_id required for draft14-16")
-				.encode(w, version)?;
-		} else {
-			assert!(self.request_id.is_none(), "request_id must be None for draft17+");
-		}
 		w.varint(self.track_alias)?;
 
-		match version {
-			Version::Draft14 => {
-				w.varint(0)?; // expires = 0
-				self.properties
-					.group_order
-					.unwrap_or(GroupOrder::Ascending)
-					.encode(w, version)?;
-				w.bool(self.largest.is_some());
-				if let Some(largest) = self.largest {
-					largest.encode(w, version)?;
-				}
-				w.u8(0); // no parameters
-			}
-			_ => {
-				// GROUP_ORDER is a legal SUBSCRIBE_OK parameter only through draft-15; a later
-				// peer closes the session with PROTOCOL_VIOLATION when it sees one. The
-				// publisher's preference is a DEFAULT_PUBLISHER_GROUP_ORDER track property
-				// instead, which we write from draft-17 on. Draft-16 gets neither form; see
-				// Properties::encode.
-				let group_order = match version {
-					Version::Draft15 => self.properties.group_order,
-					_ => None,
-				};
-				// Draft-15 has no properties block, so DYNAMIC_GROUPS is a parameter there.
-				let dynamic_groups = (version == Version::Draft15 && self.properties.dynamic_groups).then_some(1u64);
+		// GROUP_ORDER is not a legal SUBSCRIBE_OK parameter; a peer closes the session with
+		// PROTOCOL_VIOLATION when it sees one. The publisher's preference is a
+		// DEFAULT_PUBLISHER_GROUP_ORDER track property instead.
+		encode_params!(w, version,
+			0x09 => self.largest,
+		);
 
-				encode_params!(w, version,
-					0x09 => self.largest,
-					0x22 => group_order,
-					0x30 => dynamic_groups,
-				);
-
-				// Track Properties are the final field, so nothing may follow.
-				self.properties.encode(w, version)?;
-			}
-		}
+		// Track Properties are the final field, so nothing may follow.
+		self.properties.encode(w, version)?;
 
 		Ok(())
 	}
 
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		let request_id = if matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16) {
-			Some(RequestId::decode(r, version)?)
-		} else {
-			None
-		};
 		let track_alias = r.varint()?;
-		let mut properties = Properties::default();
-		let mut largest = None;
 
-		match version {
-			Version::Draft14 => {
-				// EXPIRES is when the publisher expects to end the subscription. That end
-				// arrives as PUBLISH_DONE regardless, so there is nothing to act on.
-				let _expires = r.varint()?;
-
-				properties.group_order = Some(GroupOrder::decode(r, version)?.any_to_descending());
-
-				if r.bool()? {
-					largest = Some(Location::decode(r, version)?);
-				}
-
-				properties.max_cache_duration = Parameters::skip_response(r)?.map(std::time::Duration::from_millis);
-			}
-			_ => {
-				// GROUP_ORDER and MAX_CACHE_DURATION are legal here only in draft-15. Draft-16
-				// still knows GROUP_ORDER, so one on this message is ignored. From draft-17
-				// it closes the session. LARGEST_OBJECT is required once the track has
-				// content, so rejecting it would tear down a session over a parameter
-				// compliant publishers must send. EXPIRES is ignored, as on draft-14.
-				decode_params!(r, version,
-					0x04 => max_cache_duration: Option<u64> where version == Version::Draft15,
-					0x08 => _expires: Option<u64>,
-					0x09 => largest: Option<Location>,
-					0x22 => group_order: Option<GroupOrder> where version == Version::Draft15,
-					0x30 => dynamic_groups: Option<u64> where version == Version::Draft15,
-				);
-				properties = Properties::decode(r, version)?;
-				properties.group_order = properties.group_order.or(group_order);
-				if version == Version::Draft15 {
-					properties.max_cache_duration = max_cache_duration.map(std::time::Duration::from_millis);
-					properties.dynamic_groups = dynamic_groups
-						.map(super::properties::dynamic_groups)
-						.transpose()?
-						.unwrap_or(false);
-				}
-
-				return Ok(Self {
-					request_id,
-					track_alias,
-					largest,
-					properties,
-				});
-			}
-		}
+		// GROUP_ORDER closes the session. LARGEST_OBJECT is required once the track has
+		// content, so rejecting it would tear down a session over a parameter compliant
+		// publishers must send. EXPIRES is ignored.
+		decode_params!(r, version,
+			0x08 => _expires: Option<u64>,
+			0x09 => largest: Option<Location>,
+		);
+		let properties = Properties::decode(r, version)?;
 
 		Ok(Self {
-			request_id,
 			track_alias,
 			largest,
 			properties,
@@ -359,77 +215,20 @@ impl Message for SubscribeOk {
 	}
 }
 
-/// SubscribeError message (0x05)
-#[derive(Clone, Debug)]
-pub struct SubscribeError<'a> {
-	pub request_id: RequestId,
-	pub error_code: u64,
-	pub reason_phrase: Cow<'a, str>,
-}
-
-impl Message for SubscribeError<'_> {
-	const ID: u64 = 0x05;
-
-	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		self.request_id.encode(w, version)?;
-		w.varint(self.error_code)?;
-		w.string(&self.reason_phrase)?;
-		Ok(())
-	}
-
-	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		let request_id = RequestId::decode(r, version)?;
-		let error_code = r.varint()?;
-		let reason_phrase = Cow::Owned(r.string()?);
-
-		Ok(Self {
-			request_id,
-			error_code,
-			reason_phrase,
-		})
-	}
-}
-
-/// Unsubscribe message (0x0a)
-#[derive(Clone, Debug)]
-pub struct Unsubscribe {
-	pub request_id: RequestId,
-}
-
-impl Message for Unsubscribe {
-	const ID: u64 = 0x0a;
-
-	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		self.request_id.encode(w, version)?;
-		Ok(())
-	}
-
-	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		let request_id = RequestId::decode(r, version)?;
-		Ok(Self { request_id })
-	}
-}
-
 /// SubscribeUpdate message (0x02)
 #[derive(Clone, Debug)]
 pub struct SubscribeUpdate {
 	pub request_id: RequestId,
-	pub subscription_request_id: Option<RequestId>,
-	/// Draft-14's fixed start, which a peer must not see decrease; unused on later drafts.
-	pub start_location: Location,
-	/// Draft-14's fixed end group (0 for open-ended); unused on later drafts.
-	pub end_group: u64,
-	/// `None` leaves the priority as it is. Draft-14 cannot omit it, so `None` sends the
-	/// default there.
+	/// `None` leaves the priority as it is.
 	pub subscriber_priority: Option<u8>,
 	/// `None` leaves forwarding as it is, as for the priority.
 	pub forward: Option<bool>,
-	/// The new LOCATION_FILTER (draft-15+); `None` keeps the subscription's own range.
+	/// The new LOCATION_FILTER; `None` keeps the subscription's own range.
 	pub filter: Option<Filter>,
 	/// The `AUTHORIZATION TOKEN` (0x03) renewing the request's credential, if any. At
 	/// most one is accepted: decoding refuses a repeated or second token.
 	pub authorization_token: Option<RequestToken>,
-	/// NEW_GROUP_REQUEST (0x32, draft-16+), as on [`Subscribe::new_group`].
+	/// NEW_GROUP_REQUEST (0x32), as on [`Subscribe::new_group`].
 	pub new_group: Option<u64>,
 	/// Subscriber max age in milliseconds (MoQ Timestamp), if negotiated.
 	pub max_age: Option<u64>,
@@ -442,156 +241,53 @@ impl Message for SubscribeUpdate {
 	const ID: u64 = 0x02;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		match version {
-			Version::Draft14 => {
-				self.request_id.encode(w, version)?;
-				self.subscription_request_id
-					.expect("subscription_request_id required for draft14")
-					.encode(w, version)?;
-				self.start_location.encode(w, version)?;
-				w.varint(self.end_group)?;
-				w.u8(self.subscriber_priority.unwrap_or(super::priority::DEFAULT_WIRE));
-				w.bool(self.forward.unwrap_or(true));
-				encode_params!(w, version,
-					0x03 => self.authorization_token.clone(),
-					super::max_age::PARAMETER => self.max_age,
-				);
-			}
-			Version::Draft15 | Version::Draft16 => {
-				self.request_id.encode(w, version)?;
-				self.subscription_request_id
-					.expect("subscription_request_id required for draft15-16")
-					.encode(w, version)?;
-				encode_params!(w, version,
-					0x03 => self.authorization_token.clone(),
-					0x10 => self.forward,
-					0x20 => self.subscriber_priority,
-					0x21 => self.filter,
-					0x32 => self.new_group.filter(|_| has_new_group_request(version)),
-					super::max_age::PARAMETER => self.max_age,
-				);
-			}
-			_ => {
-				assert!(
-					self.subscription_request_id.is_none(),
-					"subscription_request_id must be None for draft17+"
-				);
-				// REQUEST_UPDATE
-				self.request_id.encode(w, version)?;
-				if matches!(version, Version::Draft17) {
-					w.varint(0)?; // required_request_id_delta = 0 (draft-17 only, removed in draft-18 per #1615)
-				}
-				encode_params!(w, version,
-					0x03 => self.authorization_token.clone(),
-					0x10 => self.forward,
-					0x20 => self.subscriber_priority,
-					0x21 => self.filter,
-					0x23 => self.fill.filter(|_| Filter::is_draft20(version)),
-					0x32 => self.new_group,
-					super::max_age::PARAMETER => self.max_age,
-				);
-			}
-		}
+		// REQUEST_UPDATE
+		self.request_id.encode(w, version)?;
+		encode_params!(w, version,
+			0x03 => self.authorization_token.clone(),
+			0x10 => self.forward,
+			0x20 => self.subscriber_priority,
+			0x21 => self.filter,
+			0x23 => self.fill.filter(|_| Filter::is_draft20(version)),
+			0x32 => self.new_group,
+			super::max_age::PARAMETER => self.max_age,
+		);
 
 		Ok(())
 	}
 
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		match version {
-			Version::Draft14 => {
-				let request_id = RequestId::decode(r, version)?;
-				let subscription_request_id = Some(RequestId::decode(r, version)?);
-				let start_location = Location::decode(r, version)?;
-				let end_group = r.varint()?;
-				let subscriber_priority = Some(r.u8()?);
-				let forward = Some(r.bool()?);
-				decode_params!(r, version,
-					0x03 => tokens: Vec<super::token::RequestToken>,
-					super::max_age::PARAMETER => max_age: Option<u64>,
-				);
-				let authorization_token = super::token::single(tokens)?;
+			// REQUEST_UPDATE
+			let request_id = RequestId::decode(r, version)?;
+			// Nothing reads an update's Range Filters yet; they are
+			// consumed so a legal update does not fail the session.
+			decode_params!(r, version,
+				0x02 => _object_delivery_timeout: Option<u64>,
+				0x03 => authorization_token: Vec<RequestToken>,
+				0x06 => _subgroup_delivery_timeout: Option<u64>,
+				0x10 => forward: Option<bool>,
+				0x20 => subscriber_priority: Option<u8>,
+				0x21 => filter: Option<Filter>,
+				0x23 => fill: Option<Fill> where Filter::is_draft20(version),
+				0x25 => _subgroup_filter: Vec<Opaque> where has_range_filters(version),
+				0x26 => _object_id_filter: Vec<Opaque> where has_range_filters(version),
+				0x27 => _priority_filter: Vec<Opaque> where has_range_filters(version),
+				0x28 => _object_property_filter: Vec<Opaque> where has_range_filters(version),
+				0x29 => _track_property_filter: Vec<Opaque> where has_range_filters(version),
+				0x32 => new_group: Option<u64>,
+				super::max_age::PARAMETER => max_age: Option<u64>,
+			);
 
-				Ok(Self {
-					request_id,
-					subscription_request_id,
-					start_location,
-					end_group,
-					subscriber_priority,
-					forward,
-					filter: None,
-					authorization_token,
-					new_group: None,
-					max_age: super::max_age::validate(max_age)?,
-					fill: None,
-				})
-			}
-			Version::Draft15 | Version::Draft16 => {
-				let request_id = RequestId::decode(r, version)?;
-				let subscription_request_id = Some(RequestId::decode(r, version)?);
-				decode_params!(r, version,
-					0x02 => _object_delivery_timeout: Option<u64>,
-					0x03 => authorization_token: Vec<RequestToken>,
-					0x10 => forward: Option<bool>,
-					0x20 => subscriber_priority: Option<u8>,
-					0x21 => filter: Option<Filter>,
-					0x32 => new_group: Option<u64> where has_new_group_request(version),
-					super::max_age::PARAMETER => max_age: Option<u64>,
-				);
-
-				Ok(Self {
-					request_id,
-					subscription_request_id,
-					start_location: Location { group: 0, object: 0 },
-					end_group: 0,
-					subscriber_priority,
-					forward,
-					filter,
-					authorization_token: super::token::single(authorization_token)?,
-					new_group,
-					max_age: super::max_age::validate(max_age)?,
-					fill: None,
-				})
-			}
-			_ => {
-				// REQUEST_UPDATE
-				let request_id = RequestId::decode(r, version)?;
-				if matches!(version, Version::Draft17) {
-					let _required_request_id_delta = r.varint()?;
-				}
-				// Nothing reads an update's Range Filters yet; they are
-				// consumed so a legal update does not fail the session.
-				decode_params!(r, version,
-					0x02 => _object_delivery_timeout: Option<u64>,
-					0x03 => authorization_token: Vec<RequestToken>,
-					0x06 => _subgroup_delivery_timeout: Option<u64> where !matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16 | Version::Draft17),
-					0x10 => forward: Option<bool>,
-					0x20 => subscriber_priority: Option<u8>,
-					0x21 => filter: Option<Filter>,
-					0x23 => fill: Option<Fill> where Filter::is_draft20(version),
-					0x25 => _subgroup_filter: Vec<Opaque> where has_range_filters(version),
-					0x26 => _object_id_filter: Vec<Opaque> where has_range_filters(version),
-					0x27 => _priority_filter: Vec<Opaque> where has_range_filters(version),
-					0x28 => _object_property_filter: Vec<Opaque> where has_range_filters(version),
-					0x29 => _track_property_filter: Vec<Opaque> where has_range_filters(version),
-					0x32 => new_group: Option<u64>,
-					super::max_age::PARAMETER => max_age: Option<u64>,
-				);
-
-				Ok(Self {
-					request_id,
-					subscription_request_id: None,
-					start_location: Location { group: 0, object: 0 },
-					end_group: 0,
-					subscriber_priority,
-					forward,
-					filter,
-					authorization_token: super::token::single(authorization_token)?,
-					new_group,
-					max_age: super::max_age::validate(max_age)?,
-					fill,
-				})
-			}
-		}
+			Ok(Self {
+				request_id,
+				subscriber_priority,
+				forward,
+				filter,
+				authorization_token: super::token::single(authorization_token)?,
+				new_group,
+				max_age: super::max_age::validate(max_age)?,
+				fill,
+			})
 	}
 }
 
@@ -614,10 +310,6 @@ mod tests {
 	#[test]
 	fn subscriber_max_age_round_trips() {
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -647,10 +339,6 @@ mod tests {
 				let update = SubscribeUpdate {
 					max_age,
 					request_id: RequestId(2),
-					subscription_request_id: matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
-						.then_some(RequestId(0)),
-					start_location: Location { group: 0, object: 0 },
-					end_group: 0,
 					subscriber_priority: None,
 					forward: None,
 					filter: None,
@@ -724,10 +412,6 @@ mod tests {
 
 	/// Build a SUBSCRIBE body carrying a single RENDEZVOUS_TIMEOUT parameter.
 	const VERSIONS: [Version; 9] = [
-		Version::Draft14,
-		Version::Draft15,
-		Version::Draft16,
-		Version::Draft17,
 		Version::Draft18,
 		Version::Draft19,
 		Version::Draft20,
@@ -765,10 +449,6 @@ mod tests {
 				new_group: Some(7),
 				max_age: None,
 				request_id: RequestId(3),
-				subscription_request_id: matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
-					.then_some(RequestId(1)),
-				start_location: Location { group: 0, object: 0 },
-				end_group: 0,
 				subscriber_priority: None,
 				forward: None,
 				filter: None,
@@ -785,9 +465,6 @@ mod tests {
 			let mut buf = Vec::new();
 			let w = &mut Encoder::new(&mut buf, version.into());
 			RequestId(1).encode(w, version)?;
-			if version == Version::Draft17 {
-				w.varint(0)?; // required_request_id_delta
-			}
 			encode_namespace(w, &Path::new("test"))?;
 			w.string("video")?;
 			encode_params!(w, version,
@@ -805,7 +482,7 @@ mod tests {
 	/// SUBSCRIBE.
 	#[test]
 	fn rendezvous_timeout_retains_whether_a_wait_was_requested() {
-		for version in [Version::Draft17, Version::Draft18, Version::Draft19, Version::Draft20] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			for millis in [0, 5000] {
 				let encoded = subscribe_with_rendezvous(millis, version);
 				let msg: Subscribe = decode_message(&encoded, version)
@@ -838,9 +515,6 @@ mod tests {
 	fn first_param_key(encoded: &[u8], version: Version) -> Option<u64> {
 		let r = &mut Decoder::new(encoded, version.into());
 		RequestId::decode(r, version).unwrap();
-		if version == Version::Draft17 {
-			r.varint().unwrap();
-		}
 		decode_track(r).unwrap();
 
 		// draft-14/15 write absolute keys, draft-16+ deltas, but the first is absolute either way.
@@ -869,7 +543,7 @@ mod tests {
 			epoch: None,
 		};
 
-		for version in [Version::Draft17, Version::Draft18, Version::Draft19, Version::Draft20] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			// The reader has to be able to see a 0x04, or its absence below proves nothing.
 			assert_eq!(
 				first_param_key(&subscribe_with_rendezvous(5000, version), version),
@@ -914,7 +588,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok() {
 		let msg = SubscribeOk {
-			request_id: Some(RequestId(42)),
 			track_alias: 42,
 			largest: None,
 			properties: Properties::default(),
@@ -930,7 +603,7 @@ mod tests {
 	fn test_subscribe_ok_accepts_largest_object() {
 		// request_id=4, track_alias=4, one LARGEST_OBJECT parameter at {5, 0}.
 		let payload = [0x04, 0x04, 0x01, 0x09, 0x02, 0x05, 0x00];
-		for version in [Version::Draft15, Version::Draft16] {
+		for version in [Version::Draft16] {
 			let decoded: SubscribeOk = decode_message(&payload, version).unwrap();
 
 			assert_eq!(decoded.request_id, Some(RequestId(4)));
@@ -945,7 +618,7 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_accepts_largest_object_draft17_on() {
 		let payload = [0x04, 0x01, 0x09, 0x05, 0x00];
-		for version in [Version::Draft17, Version::Draft18, Version::Draft19, Version::Draft20] {
+		for version in [Version::Draft18, Version::Draft19, Version::Draft20] {
 			let decoded: SubscribeOk = decode_message(&payload, version).unwrap();
 
 			assert_eq!(decoded.request_id, None, "{version}");
@@ -988,7 +661,6 @@ mod tests {
 			(Version::Draft20, &[42, 1, 0x09, 0x09, 0x03][..]),
 		] {
 			let msg = SubscribeOk {
-				request_id: matches!(version, Version::Draft14 | Version::Draft16).then_some(RequestId(7)),
 				track_alias: 42,
 				largest,
 				properties: Properties::default(),
@@ -1004,7 +676,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v15() {
 		let msg = SubscribeOk {
-			request_id: Some(RequestId(42)),
 			track_alias: 42,
 			largest: None,
 			properties: Properties::default(),
@@ -1144,9 +815,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_omitted_priority_is_128() {
 		for version in [
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -1154,9 +822,6 @@ mod tests {
 			Version::Draft22,
 		] {
 			let mut bytes = vec![0x00]; // request_id
-			if version == Version::Draft17 {
-				bytes.push(0x00); // required_request_id_delta
-			}
 			bytes.extend_from_slice(b"\x01\x0bnonexistent\x0dno-such-track"); // namespace, name
 			bytes.push(0x00); // no parameters
 			let msg = decode_message::<Subscribe>(&bytes, version).unwrap();
@@ -1171,8 +836,6 @@ mod tests {
 			max_age: None,
 			request_id: RequestId(10),
 			subscription_request_id: Some(RequestId(5)),
-			start_location: Location { group: 0, object: 0 },
-			end_group: 0,
 			subscriber_priority: Some(200),
 			forward: Some(true),
 			filter: Some(Filter::NextObject),
@@ -1290,7 +953,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v17_round_trip() {
 		let msg = SubscribeOk {
-			request_id: None,
 			track_alias: 42,
 			largest: None,
 			properties: Properties::default(),
@@ -1309,9 +971,6 @@ mod tests {
 			new_group: None,
 			max_age: None,
 			request_id: RequestId(10),
-			subscription_request_id: None,
-			start_location: Location { group: 0, object: 0 },
-			end_group: 0,
 			subscriber_priority: Some(200),
 			forward: Some(true),
 			filter: Some(Filter::NextObject),
@@ -1360,7 +1019,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v18_round_trip() {
 		let msg = SubscribeOk {
-			request_id: None,
 			track_alias: 42,
 			largest: None,
 			properties: Properties::default(),
@@ -1378,10 +1036,6 @@ mod tests {
 	#[test]
 	fn subscribe_ok_priority_property_bytes_on_every_draft() {
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -1389,8 +1043,6 @@ mod tests {
 			Version::Draft22,
 		] {
 			let mut msg = SubscribeOk {
-				request_id: matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
-					.then_some(RequestId(7)),
 				track_alias: 42,
 				largest: None,
 				properties: Properties::default(),
@@ -1398,18 +1050,14 @@ mod tests {
 			let baseline = encode_message(&msg, version);
 			msg.properties.priority = Some(37);
 			let encoded = encode_message(&msg, version);
-			if matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16) {
-				assert_eq!(encoded, baseline, "{version}");
-			} else {
-				assert_eq!(encoded, [baseline, vec![0x0e, 37]].concat(), "{version}");
-				assert_eq!(
-					decode_message::<SubscribeOk>(&encoded, version)
-						.unwrap()
-						.properties
-						.priority,
-					Some(37)
-				);
-			}
+			assert_eq!(encoded, [baseline, vec![0x0e, 37]].concat(), "{version}");
+			assert_eq!(
+				decode_message::<SubscribeOk>(&encoded, version)
+					.unwrap()
+					.properties
+					.priority,
+				Some(37)
+			);
 		}
 	}
 
@@ -1420,7 +1068,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v18_group_order_is_a_property() {
 		let msg = SubscribeOk {
-			request_id: None,
 			track_alias: 42,
 			largest: None,
 			properties: Properties {
@@ -1452,7 +1099,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v15_group_order_is_a_parameter() {
 		let msg = SubscribeOk {
-			request_id: Some(RequestId(7)),
 			track_alias: 42,
 			largest: None,
 			properties: Properties {
@@ -1484,7 +1130,6 @@ mod tests {
 	#[test]
 	fn test_subscribe_ok_v15_dynamic_groups_is_a_parameter() {
 		let msg = SubscribeOk {
-			request_id: Some(RequestId(7)),
 			track_alias: 42,
 			largest: None,
 			properties: Properties {
@@ -1534,7 +1179,7 @@ mod tests {
 		buf.extend_from_slice(&body);
 
 		let mut bytes = bytes::Bytes::from(buf);
-		let decoded = crate::coding::decode_buf(&mut bytes, Version::Draft16, SubscribeOk::decode).unwrap();
+		let decoded = crate::coding::decode_buf(&mut bytes, SubscribeOk::decode).unwrap();
 		assert_eq!(decoded.track_alias, 42);
 		assert_eq!(decoded.properties.group_order, Some(GroupOrder::Descending));
 	}
@@ -1562,9 +1207,6 @@ mod tests {
 			new_group: None,
 			max_age: None,
 			request_id: RequestId(10),
-			subscription_request_id: None,
-			start_location: Location { group: 0, object: 0 },
-			end_group: 0,
 			subscriber_priority: Some(200),
 			forward: Some(true),
 			filter: Some(Filter::NextObject),
@@ -1590,9 +1232,6 @@ mod tests {
 			new_group: None,
 			max_age: None,
 			request_id: RequestId(10),
-			subscription_request_id: None,
-			start_location: Location { group: 0, object: 0 },
-			end_group: 0,
 			subscriber_priority: Some(200),
 			forward: Some(true),
 			filter: Some(Filter::NextObject),
@@ -1717,10 +1356,6 @@ mod tests {
 	#[test]
 	fn subscribe_decodes_forward_zero() {
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -1757,18 +1392,11 @@ mod tests {
 			0x03, 0x03, 0x03, 0x00, 0xAA, // AUTHORIZATION TOKEN
 		]);
 		for version in [
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
 		] {
 			let mut body = body.clone();
-			if version == Version::Draft17 {
-				// Required Request ID Delta, draft-17 only.
-				body.insert(1, 0x00);
-			}
 			let wire = body;
 			let mut buf = Decoder::new(&wire, version.into());
 			Subscribe::decode_msg(&mut buf, version).unwrap_or_else(|e| panic!("{version}: {e}"));
@@ -1851,10 +1479,6 @@ mod cache_duration_tests {
 	#[test]
 	fn max_cache_duration_is_read_in_each_drafts_field() {
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -1862,12 +1486,7 @@ mod cache_duration_tests {
 			Version::Draft22,
 		] {
 			for age in [0u64, 30_000] {
-				let mut payload = match version {
-					Version::Draft14 => vec![0, 0, 0, 1, 0, 1, 4],
-					Version::Draft15 => vec![0, 0, 1, 4],
-					Version::Draft16 => vec![0, 0, 0, 4],
-					_ => vec![0, 0, 4],
-				};
+				let mut payload = vec![0, 0, 4];
 				Encoder::new(&mut payload, version.into()).varint(age).unwrap();
 				let got = crate::coding::decode_buf(&mut payload.as_slice(), version, SubscribeOk::decode_msg).unwrap();
 				assert_eq!(
@@ -1882,17 +1501,13 @@ mod cache_duration_tests {
 	#[test]
 	fn legacy_never_sends_cache_duration_and_modern_preserves_optional_value() {
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
 			Version::Draft21,
 			Version::Draft22,
 		] {
-			let legacy = matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16);
+			let legacy = false;
 			for age in [None, Some(Duration::ZERO), Some(Duration::from_secs(30))] {
 				let ok = SubscribeOk {
 					request_id: legacy.then_some(RequestId(0)),

@@ -51,9 +51,6 @@ impl Message for SubscribeTracks<'_> {
 	const ID: u64 = 0x51;
 
 	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		if !has_subscribe_tracks(version) {
-			return Err(EncodeError::Version);
-		}
 		self.request_id.encode(w, version)?;
 		encode_namespace(w, &self.prefix)?;
 		// Absent means 1, so only a paused listing writes it.
@@ -77,9 +74,6 @@ impl Message for SubscribeTracks<'_> {
 	}
 
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		if !has_subscribe_tracks(version) {
-			return Err(DecodeError::Version);
-		}
 		let request_id = RequestId::decode(r, version)?;
 		let prefix = decode_namespace(r)?;
 		// From draft-19 any parameter a SUBSCRIBE takes is legal here (section 10.19.1);
@@ -133,18 +127,10 @@ impl Message for SubscribeTracks<'_> {
 	}
 }
 
-/// Whether `version` defines SUBSCRIBE_TRACKS: draft-18 split it off SUBSCRIBE_NAMESPACE.
-pub(crate) fn has_subscribe_tracks(version: Version) -> bool {
-	!matches!(
-		version,
-		Version::Draft14 | Version::Draft15 | Version::Draft16 | Version::Draft17
-	)
-}
-
 /// PUBLISH_SKIPPED (0x0F): a track under a SUBSCRIBE_TRACKS prefix the publisher will
 /// not PUBLISH, sent on that request's stream. The subscriber may SUBSCRIBE to it instead.
 ///
-/// Drafts 17 and 18 name it PUBLISH_BLOCKED and send it only when the publisher has run
+/// Draft-18 names it PUBLISH_BLOCKED and send it only when the publisher has run
 /// out of streams for PUBLISH; draft-19 renamed it and allows it for any reason.
 #[derive(Clone, Debug)]
 pub struct PublishSkipped<'a> {
@@ -156,29 +142,17 @@ pub struct PublishSkipped<'a> {
 impl Message for PublishSkipped<'_> {
 	const ID: u64 = 0x0F;
 
-	fn encode_msg(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		if !has_publish_skipped(version) {
-			return Err(EncodeError::Version);
-		}
+	fn encode_msg(&self, w: &mut Encoder<'_>, _: Version) -> Result<(), EncodeError> {
 		encode_namespace(w, &self.suffix)?;
 		w.string(&self.track_name)?;
 		Ok(())
 	}
 
-	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		if !has_publish_skipped(version) {
-			return Err(DecodeError::Version);
-		}
+	fn decode_msg(r: &mut Decoder<'_>, _: Version) -> Result<Self, DecodeError> {
 		let suffix = decode_namespace(r)?;
 		let track_name = Cow::Owned(r.string()?);
 		Ok(Self { suffix, track_name })
 	}
-}
-
-/// Whether `version` defines [`PublishSkipped`], under either name. Draft-16 and older
-/// had no message 0x0F.
-fn has_publish_skipped(version: Version) -> bool {
-	!matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
 }
 
 #[cfg(test)]
@@ -316,7 +290,7 @@ mod tests {
 
 	#[test]
 	fn publish_skipped_round_trips() {
-		for version in [Version::Draft17, Version::Draft18, Version::Draft22] {
+		for version in [Version::Draft18, Version::Draft22] {
 			let msg = PublishSkipped {
 				suffix: Path::new("cam"),
 				track_name: "video".into(),

@@ -413,11 +413,6 @@ impl<S: RecvStream, V: StreamCodes> Reader<S, V> {
 		Poll::Ready(Ok(bytes))
 	}
 
-	/// Read exactly the given number of bytes from the stream.
-	pub async fn read_exact(&mut self, size: usize) -> Result<Bytes, Error> {
-		std::future::poll_fn(|cx| self.poll_read_exact(cx, size)).await
-	}
-
 	/// Poll until the stream is closed, erroring if there are any additional bytes.
 	pub fn poll_closed(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Error>> {
 		if ready!(self.poll_has_more(cx))? {
@@ -777,7 +772,6 @@ mod tests {
 		for version in [
 			Version::Lite(lite::Version::Lite01),
 			Version::Lite(lite::Version::Lite02),
-			Version::Ietf(ietf::Version::Draft14),
 		] {
 			let prefix: &'static [u8] = if version.is_lite() { &[0x20, 0] } else { &[0x20, 0, 0] };
 			refuses_frame::<setup::Client, _>(prefix, version, false);

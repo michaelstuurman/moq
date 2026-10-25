@@ -77,11 +77,7 @@ impl Filter {
 	pub(crate) fn is_draft20(version: Version) -> bool {
 		!matches!(
 			version,
-			Version::Draft14
-				| Version::Draft15
-				| Version::Draft16
-				| Version::Draft17
-				| Version::Draft18
+			Version::Draft18
 				| Version::Draft19
 		)
 	}
@@ -293,19 +289,12 @@ impl Param for Filter {
 	fn param_encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
 		// Inner varints use the draft-15 leading-ones encoding on the drafts that predate
 		// the switch, matching the other length-prefixed parameters.
-		let sv = match version {
-			Version::Draft14 | Version::Draft15 | Version::Draft16 => Version::Draft15,
-			_ => version,
-		};
+		let sv = version;
 
 		let mut buf = Vec::new();
 		let mut inner = Encoder::new(&mut buf, sv.into());
 		match version {
-			Version::Draft14
-			| Version::Draft15
-			| Version::Draft16
-			| Version::Draft17
-			| Version::Draft18
+			Version::Draft18
 			| Version::Draft19 => self.encode_tag(&mut inner, sv)?,
 			Version::Draft20 | Version::Draft21 => self.encode_fields(&mut inner)?,
 			// Draft-22 drops the Length, since the Location Filter Type says which fields follow.
@@ -317,8 +306,7 @@ impl Param for Filter {
 
 	fn param_decode(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
 		let sv = match version {
-			Version::Draft14 | Version::Draft15 | Version::Draft16 => Version::Draft15,
-			Version::Draft17 | Version::Draft18 | Version::Draft19 => version,
+			Version::Draft18 | Version::Draft19 => version,
 			// The field count is what carries the meaning, so the value is consumed whole.
 			Version::Draft20 | Version::Draft21 => {
 				return Self::decode_fields(&mut Decoder::new(r.bytes()?, version.into()));

@@ -24,21 +24,14 @@ pub const EPOCH: u64 = 0x40B68;
 /// value is length-prefixed.
 pub const EPOCH_PARAM: u64 = 0x40B69;
 
-/// Whether a version negotiates this extension: draft-17+, like MoQ Cluster.
-pub fn supported(version: Version) -> bool {
-	!matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
-}
-
 /// Whether the peer declared the option.
-pub fn from_setup(params: &super::Parameters, version: Version) -> bool {
-	supported(version) && params.get_varint(super::ParameterVarInt::Epoch).is_some()
+pub fn from_setup(params: &super::Parameters) -> bool {
+	params.get_varint(super::ParameterVarInt::Epoch).is_some()
 }
 
 /// Declare that we understand the EPOCH parameter.
-pub fn into_setup(params: &mut super::Parameters, version: Version) {
-	if supported(version) {
-		params.set_varint(super::ParameterVarInt::Epoch, 1);
-	}
+pub fn into_setup(params: &mut super::Parameters) {
+	params.set_varint(super::ParameterVarInt::Epoch, 1);
 }
 
 impl Param for Epoch {
@@ -66,13 +59,11 @@ mod tests {
 	}
 
 	#[test]
-	fn only_draft17_and_later_negotiate() {
-		for version in [Version::Draft14, Version::Draft16, Version::Draft17, Version::Draft22] {
-			let mut params = super::super::Parameters::default();
-			assert!(!from_setup(&params, version));
-			into_setup(&mut params, version);
-			assert_eq!(from_setup(&params, version), supported(version), "{version:?}");
-		}
+	fn declared_option_negotiates() {
+		let mut params = super::super::Parameters::default();
+		assert!(!from_setup(&params));
+		into_setup(&mut params);
+		assert!(from_setup(&params));
 	}
 
 	#[test]

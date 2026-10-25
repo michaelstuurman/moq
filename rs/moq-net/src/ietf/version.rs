@@ -4,10 +4,6 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Version {
-	Draft14,
-	Draft15,
-	Draft16,
-	Draft17,
 	Draft18,
 	Draft19,
 	Draft20,
@@ -18,10 +14,6 @@ pub enum Version {
 impl fmt::Display for Version {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::Draft14 => write!(f, "moq-transport-14"),
-			Self::Draft15 => write!(f, "moq-transport-15"),
-			Self::Draft16 => write!(f, "moq-transport-16"),
-			Self::Draft17 => write!(f, "moq-transport-17"),
 			Self::Draft18 => write!(f, "moq-transport-18"),
 			Self::Draft19 => write!(f, "moq-transport-19"),
 			Self::Draft20 => write!(f, "moq-transport-20"),

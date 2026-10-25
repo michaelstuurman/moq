@@ -206,11 +206,11 @@ pub(crate) fn decode_properties(body: &[u8], framing: super::Framing, framed: bo
 }
 
 /// Decode the END_OF_GROUP record's body on a track `framing` describes. It is a status
-/// object, so a block needs a draft that lets one carry properties.
+/// object, so it may not carry properties.
 #[cfg(feature = "async")]
 pub(crate) fn decode_end(body: &[u8], framing: super::Framing) -> Result<Decoded, DecodeError> {
 	let decoded = decode_properties(body, framing, false)?;
-	if decoded.properties.block.is_some() && !framing.ietf.is_some_and(crate::ietf::object::status_has_properties) {
+	if decoded.properties.block.is_some() {
 		return Err(DecodeError::InvalidValue);
 	}
 	Ok(decoded)
@@ -341,9 +341,6 @@ impl Message for TrackProperties {
 			return Err(DecodeError::InvalidValue);
 		};
 		// Track Properties start at draft-16.
-		if matches!(version, crate::ietf::Version::Draft14 | crate::ietf::Version::Draft15) && !r.is_empty() {
-			return Err(DecodeError::InvalidValue);
-		}
 		let properties = crate::model::object::TrackProperties {
 			version,
 			values: decode_list(r, version)?,
@@ -417,7 +414,7 @@ pub(crate) fn decode_datagram(
 		return Err(DecodeError::InvalidValue);
 	}
 	// A track published over moq-lite has no moq-transport state.
-	let version = framing.ietf.ok_or(DecodeError::InvalidValue)?;
+	framing.ietf.ok_or(DecodeError::InvalidValue)?;
 	let object_id = (state & OBJECT_ID != 0).then(|| r.varint()).transpose()?;
 	let priority = (state & PRIORITY != 0).then(|| r.u8()).transpose()?;
 	let status = (state & STATUS != 0).then(|| r.varint()).transpose()?;
@@ -433,7 +430,7 @@ pub(crate) fn decode_datagram(
 		properties,
 	};
 	// A relay holds and forwards it, so it must be one its publisher's draft could send.
-	if !wire.defined(version) {
+	if !wire.defined() {
 		return Err(DecodeError::InvalidValue);
 	}
 	Ok(Some(wire))
@@ -565,7 +562,7 @@ mod tests {
 	/// after a large first ID, crosses the hop byte for byte and is held at its wire size.
 	#[test]
 	fn a_full_block_crosses_at_its_wire_size() {
-		for version in [Draft::Draft16, Draft::Draft22] {
+		for version in [Draft::Draft22] {
 			let mut list = Vec::new();
 			let e = &mut Encoder::new(&mut list, version.into());
 			// A Timestamp, then IDs from 2^40 on, each repeated as a two-byte zero delta.
@@ -626,7 +623,7 @@ mod tests {
 		assert_eq!(decoded.0.as_deref(), Some(&properties));
 
 		// Drafts 14 and 15 have no Track Properties, but their objects may have properties.
-		for version in [Draft::Draft14, Draft::Draft22] {
+		for version in [Draft::Draft22] {
 			let bare = crate::model::object::TrackProperties {
 				version,
 				values: Vec::new(),
@@ -677,7 +674,7 @@ mod tests {
 			decode(&wire(&[opaque(0x40)], 0)).is_err(),
 			"properties on a moq-lite track"
 		);
-		for version in [Draft::Draft14, Draft::Draft15] {
+		for version in [Draft::Draft15] {
 			assert!(decode(&wire(&[], code(version))).is_ok(), "{version}");
 			assert!(
 				decode(&wire(&[opaque(0x40)], code(version))).is_err(),
@@ -730,7 +727,7 @@ mod tests {
 	/// message would no longer fit a lite one.
 	#[test]
 	fn track_properties_cross_at_their_wire_size() {
-		for version in [Draft::Draft16, Draft::Draft17, Draft::Draft22] {
+		for version in [Draft::Draft22] {
 			// As many repeats of an ID from 2^60 as moq-transport forwards, then one value
 			// that fills the rest of a lite message beside its Version.
 			let id = (1 << 60) + 1;
@@ -971,7 +968,7 @@ mod tests {
 	#[cfg(feature = "async")]
 	#[test]
 	fn an_end_record_block_needs_a_draft_that_carries_one() {
-		for version in [Draft::Draft14, Draft::Draft15, Draft::Draft16, Draft::Draft22] {
+		for version in [Draft::Draft22] {
 			let framing = from(version, None);
 			assert_eq!(
 				decode_end(&[0x20, 1], framing).is_ok(),
@@ -987,10 +984,6 @@ mod tests {
 	#[test]
 	fn a_datagram_block_needs_a_draft_that_sends_its_shape() {
 		let drafts = [
-			Draft::Draft14,
-			Draft::Draft15,
-			Draft::Draft16,
-			Draft::Draft17,
 			Draft::Draft22,
 		];
 		for (status, carried) in [

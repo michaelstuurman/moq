@@ -82,16 +82,6 @@ pub struct Properties {
 }
 
 impl Properties {
-	/// Whether [`Self::encode`] writes a TIMESCALE on this version.
-	///
-	/// Drafts 14-16 do not. 14 and 15 have no properties block, and 16's Track Extensions
-	/// predate the TIMESCALE registration; an older peer rejects trailing bytes it does not
-	/// parse. A Timestamp on those drafts would have no units. Draft-16 is still read, so a
-	/// peer that sends the block is understood.
-	pub(crate) fn sends_timescale(version: Version) -> bool {
-		!matches!(version, Version::Draft14 | Version::Draft15 | Version::Draft16)
-	}
-
 	/// The properties a relay states for a track it serves, from the `info` it acts on.
 	///
 	/// We serve the newest group first by default, matching moq-lite.
@@ -119,9 +109,6 @@ impl Properties {
 	/// A property the publisher sealed inside Immutable Properties travels there, so it is
 	/// not restated in the mutable list.
 	pub fn encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		if matches!(version, Version::Draft14 | Version::Draft15) {
-			return Ok(());
-		}
 
 		let int = |id, value| Property {
 			id,
@@ -129,20 +116,18 @@ impl Properties {
 		};
 		let mut known = Vec::new();
 
-		if Self::sends_timescale(version) {
-			if let Some(age) = self.max_cache_duration {
-				let millis = u64::try_from(age.as_millis()).map_err(|_| EncodeError::BoundsExceeded)?;
-				known.push(int(MAX_CACHE_DURATION, millis));
-			}
-			if let Some(timescale) = self.timescale {
-				known.push(int(TIMESCALE, u64::from(timescale)));
-			}
-			if let Some(priority) = self.priority {
-				known.push(int(DEFAULT_PUBLISHER_PRIORITY, u64::from(priority)));
-			}
-			if let Some(group_order) = self.group_order {
-				known.push(int(DEFAULT_PUBLISHER_GROUP_ORDER, u64::from(u8::from(group_order))));
-			}
+		if let Some(age) = self.max_cache_duration {
+			let millis = u64::try_from(age.as_millis()).map_err(|_| EncodeError::BoundsExceeded)?;
+			known.push(int(MAX_CACHE_DURATION, millis));
+		}
+		if let Some(timescale) = self.timescale {
+			known.push(int(TIMESCALE, u64::from(timescale)));
+		}
+		if let Some(priority) = self.priority {
+			known.push(int(DEFAULT_PUBLISHER_PRIORITY, u64::from(priority)));
+		}
+		if let Some(group_order) = self.group_order {
+			known.push(int(DEFAULT_PUBLISHER_GROUP_ORDER, u64::from(u8::from(group_order))));
 		}
 
 		// Omitted means 0, so only support is worth bytes.
@@ -150,7 +135,7 @@ impl Properties {
 			known.push(int(DYNAMIC_GROUPS, 1));
 		}
 
-		if self.compress && super::flate::supported(version) {
+		if self.compress {
 			known.push(int(super::flate::COMPRESSION, 1));
 		}
 
@@ -190,10 +175,7 @@ impl Properties {
 
 		// Draft-16 calls the block Track Extensions, draft-17+ Track Properties. Same encoding,
 		// so read either rather than faulting the message for trailing bytes.
-		match version {
-			Version::Draft14 | Version::Draft15 => return Ok(properties),
-			_ => {}
-		}
+		{}
 
 		let mut prev_type: u64 = 0;
 		let mut i: u64 = 0;
@@ -311,9 +293,6 @@ pub(crate) const MAX_FORWARDED: usize = MAX_PROPERTIES as usize - UNDERSTOOD.len
 /// [`Properties::decode`] does.
 pub(crate) fn check_immutable(block: &[u8], version: Version) -> Result<(), DecodeError> {
 	// Track Properties start at draft-16.
-	if matches!(version, Version::Draft14 | Version::Draft15) {
-		return Err(DecodeError::InvalidValue);
-	}
 	sealed(
 		&mut Decoder::new(block, version.into()),
 		&mut Properties::default(),
@@ -449,7 +428,7 @@ mod tests {
 	fn test_skip_empty_properties() {
 		let mut buf = bytes::Bytes::new();
 		assert_eq!(
-			crate::coding::decode_buf(&mut buf, Version::Draft17, Properties::decode).unwrap(),
+			crate::coding::decode_buf(&mut buf, Properties::decode).unwrap(),
 			Properties::default()
 		);
 	}
@@ -461,7 +440,7 @@ mod tests {
 		Encoder::new(&mut buf, Version::Draft17.into()).varint(0x02u64).unwrap(); // delta type
 		Encoder::new(&mut buf, Version::Draft17.into()).varint(5000u64).unwrap(); // value
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Version::Draft17, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -473,7 +452,7 @@ mod tests {
 		Encoder::new(&mut buf, Version::Draft17.into()).varint(3u64).unwrap(); // length
 		buf.extend_from_slice(&[0x03, 0x01, 0x2A]); // sealed type 0x03, one byte
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Version::Draft17, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -492,7 +471,7 @@ mod tests {
 		buf.extend_from_slice(&[0x02, 0x2A]); // sealed type 0x02 = 42
 
 		let mut bytes = bytes::Bytes::from(buf);
-		crate::coding::decode_buf(&mut bytes, Version::Draft17, Properties::decode).unwrap();
+		crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
 		assert!(bytes.is_empty());
 	}
 
@@ -524,8 +503,6 @@ mod tests {
 	#[test]
 	fn publisher_priority_is_bounded_to_a_byte() {
 		for version in [
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 			Version::Draft19,
 			Version::Draft20,
@@ -563,7 +540,7 @@ mod tests {
 		Encoder::new(&mut buf, Version::Draft16.into()).varint(2u64).unwrap();
 
 		let mut bytes = bytes::Bytes::from(buf);
-		let properties = crate::coding::decode_buf(&mut bytes, Version::Draft16, Properties::decode).unwrap();
+		let properties = crate::coding::decode_buf(&mut bytes, Properties::decode).unwrap();
 		assert_eq!(properties.group_order, Some(GroupOrder::Descending));
 		assert!(bytes.is_empty());
 	}
@@ -582,7 +559,7 @@ mod tests {
 			group_order: None,
 		};
 
-		for version in [Version::Draft14, Version::Draft15, Version::Draft16, Version::Draft17] {
+		for version in [Version::Draft15] {
 			let mut buf = Vec::new();
 			properties
 				.encode(&mut Encoder::new(&mut buf, version.into()), version)
@@ -703,7 +680,7 @@ mod tests {
 	/// in order among the ones we write ourselves.
 	#[test]
 	fn unknown_properties_round_trip() {
-		for version in [Version::Draft16, Version::Draft22] {
+		for version in [Version::Draft22] {
 			// 0x02 = 5000, 0x0b = { 0x02 = 42 }, 0x3801 = "hi"
 			let mut block = Vec::new();
 			let mut w = Encoder::new(&mut block, version.into());

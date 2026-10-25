@@ -96,10 +96,6 @@ const LITE_VERSIONS: &[lite::Version] = &[
 
 /// The moq-transport drafts a target decodes at, selected by the input's first byte.
 const IETF_VERSIONS: &[ietf::Version] = &[
-	ietf::Version::Draft14,
-	ietf::Version::Draft15,
-	ietf::Version::Draft16,
-	ietf::Version::Draft17,
 	ietf::Version::Draft18,
 	ietf::Version::Draft19,
 	ietf::Version::Draft20,
@@ -630,15 +626,6 @@ pub fn ietf_wire(data: &[u8]) -> bool {
 		38 => roundtrip::<ietf::PublishNamespaceUpdate, _>(rest, version),
 		39 => roundtrip::<ietf::ObjectDatagram, _>(rest, version),
 		40 => roundtrip::<ietf::SubscribeTracks<'static>, _>(rest, version),
-		// The unified SETUP replaced the client/server pair at draft-17. The pair refuses a
-		// later draft itself, but the unified one treats an earlier draft as unreachable.
-		41 if matches!(
-			version,
-			ietf::Version::Draft14 | ietf::Version::Draft15 | ietf::Version::Draft16
-		) =>
-		{
-			false
-		}
 		41 => setup::<crate::setup::Setup>(rest, version, |setup| &setup.parameters),
 		42 => setup::<crate::setup::Client>(rest, version, |setup| &setup.parameters),
 		43 => setup::<crate::setup::Server>(rest, version, |setup| &setup.parameters),
@@ -785,7 +772,6 @@ impl Default for Messages {
 			},
 			// Draft-17+ carries the request id in the control message framing instead.
 			ietf_ok: ietf::SubscribeOk {
-				request_id: None,
 				track_alias: 5,
 				largest: Some(ietf::Location {
 					group: 1_000,
@@ -1086,29 +1072,7 @@ pub fn seeds() -> Vec<Seed> {
 	for (index, version) in IETF_VERSIONS.iter().enumerate() {
 		let outer = crate::Version::Ietf(*version);
 		let parameters = ietf::Parameters::default().encode_bytes(*version).unwrap();
-		let messages = match version {
-			ietf::Version::Draft14 | ietf::Version::Draft15 | ietf::Version::Draft16 => vec![
-				(
-					42,
-					crate::setup::Client {
-						versions: coding::Versions::from([outer.into()]),
-						parameters: parameters.clone(),
-					}
-					.encode_bytes(outer)
-					.unwrap(),
-				),
-				(
-					43,
-					crate::setup::Server {
-						version: outer.into(),
-						parameters,
-					}
-					.encode_bytes(outer)
-					.unwrap(),
-				),
-			],
-			_ => vec![(41, crate::setup::Setup { parameters }.encode_bytes(outer).unwrap())],
-		};
+		let messages = vec![(41, crate::setup::Setup { parameters }.encode_bytes(outer).unwrap())];
 		for (kind, message) in messages {
 			let mut data = vec![index as u8, kind];
 			data.extend(message);
@@ -1166,11 +1130,6 @@ pub fn seeds() -> Vec<Seed> {
 	// valid parameter count followed by a Location, so build it from the encoder.
 	for (index, version) in IETF_VERSIONS.iter().enumerate() {
 		let subscribe_ok = ietf::SubscribeOk {
-			request_id: matches!(
-				version,
-				ietf::Version::Draft14 | ietf::Version::Draft15 | ietf::Version::Draft16
-			)
-			.then_some(ietf::RequestId(0)),
 			track_alias: 0,
 			largest: Some(ietf::Location { group: 427, object: 0 }),
 			properties: Default::default(),
@@ -1414,11 +1373,6 @@ impl crate::transport::Error for NoError {
 /// Admit modern request IDs for the history benchmark, returning the accepted count.
 pub fn request_history(ids: &[u64]) -> usize {
 	ietf::request_history(ids)
-}
-
-/// Admit a draft-16 window for the request-ID benchmark, returning the accepted count.
-pub fn request_ids(window: u64, ids: &[u64]) -> usize {
-	ietf::request_ids(window, ids)
 }
 
 /// A source-selection watch for the private request-lifetime benchmark.

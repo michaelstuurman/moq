@@ -253,10 +253,6 @@ fn ietf_datagram_interop() {
 	use crate::{Timescale, Timestamp};
 
 	let all = [
-		ietf::Version::Draft14,
-		ietf::Version::Draft15,
-		ietf::Version::Draft16,
-		ietf::Version::Draft17,
 		ietf::Version::Draft18,
 		ietf::Version::Draft19,
 		ietf::Version::Draft20,
@@ -264,13 +260,10 @@ fn ietf_datagram_interop() {
 		ietf::Version::Draft22,
 	];
 	for (draft, version) in (14..).zip(all) {
-		let legacy = matches!(
-			version,
-			ietf::Version::Draft14 | ietf::Version::Draft15 | ietf::Version::Draft16
-		);
+		let legacy = false;
 		let mut properties = Vec::new();
 		let mut w = Encoder::new(&mut properties, version.into());
-		ietf::encode_object_time(&mut w, Timestamp::from_millis(1234).unwrap(), Timescale::MILLI, version).unwrap();
+		ietf::encode_object_time(&mut w, Timestamp::from_millis(1234).unwrap(), Timescale::MILLI).unwrap();
 
 		// What a publisher sends: Object 0, explicit priority, ending its group, stamped.
 		let mut datagrams = vec![ietf::ObjectDatagram {
@@ -291,17 +284,15 @@ fn ietf_datagram_interop() {
 			properties: None,
 			body: ietf::DatagramBody::Status(0),
 		});
-		if version != ietf::Version::Draft14 {
-			datagrams.push(ietf::ObjectDatagram {
-				track_alias: (1 << 40) + 1,
-				group_id: (1 << 50) + 1,
-				object_id: Some(1 << 20),
-				publisher_priority: None,
-				end_of_group: true,
-				properties: None,
-				body: ietf::DatagramBody::Payload(bytes::Bytes::new()),
-			});
-		}
+		datagrams.push(ietf::ObjectDatagram {
+			track_alias: (1 << 40) + 1,
+			group_id: (1 << 50) + 1,
+			object_id: Some(1 << 20),
+			publisher_priority: None,
+			end_of_group: true,
+			properties: None,
+			body: ietf::DatagramBody::Payload(bytes::Bytes::new()),
+		});
 		if legacy {
 			datagrams.push(ietf::ObjectDatagram {
 				track_alias: 1,
@@ -445,10 +436,6 @@ fn ietf_track_status_interop() {
 	use crate::ietf::error::request;
 
 	let all = [
-		ietf::Version::Draft14,
-		ietf::Version::Draft15,
-		ietf::Version::Draft16,
-		ietf::Version::Draft17,
 		ietf::Version::Draft18,
 		ietf::Version::Draft19,
 		ietf::Version::Draft20,
@@ -456,10 +443,7 @@ fn ietf_track_status_interop() {
 		ietf::Version::Draft22,
 	];
 	for (draft, version) in (14..).zip(all) {
-		let legacy = matches!(
-			version,
-			ietf::Version::Draft14 | ietf::Version::Draft15 | ietf::Version::Draft16
-		);
+		let legacy = false;
 		let request = |id: u64, namespace: &str, wanted: bool| {
 			let mut buf = Vec::new();
 			let mut w = Encoder::new(&mut buf, version.into());
@@ -485,17 +469,12 @@ fn ietf_track_status_interop() {
 
 		for (index, wanted) in [true, false].into_iter().enumerate() {
 			let mut r = Decoder::new(&responses[index], version.into());
-			assert_eq!(r.varint().unwrap(), ietf::TrackStatusOk::id(version), "{version}");
+			assert_eq!(r.varint().unwrap(), ietf::TrackStatusOk::ID, "{version}");
 			let ok = ietf::TrackStatusOk::decode(&mut r, version).unwrap();
 			assert!(r.is_empty(), "{version}: trailing bytes");
 
 			let expected = match version {
 				// GROUP_ORDER is a field on draft-14 and a parameter on draft-15.
-				ietf::Version::Draft14 | ietf::Version::Draft15 => ietf::Properties {
-					group_order: Some(ietf::GroupOrder::Descending),
-					..Default::default()
-				},
-				ietf::Version::Draft16 | ietf::Version::Draft17 => ietf::Properties::default(),
 				// Only draft-20 can carry the opt-out.
 				_ if !wanted && ietf::Filter::is_draft20(version) => ietf::Properties::default(),
 				_ => ietf::Properties {
@@ -522,10 +501,7 @@ fn ietf_track_status_interop() {
 
 		let mut r = Decoder::new(&responses[2], version.into());
 		let code = match r.varint().unwrap() {
-			ietf::TRACK_STATUS_ERROR_14 if version == ietf::Version::Draft14 => {
-				ietf::SubscribeError::decode(&mut r, version).unwrap().error_code
-			}
-			id if id == <ietf::RequestError as ietf::Message>::ID && version != ietf::Version::Draft14 => {
+			id if id == <ietf::RequestError as ietf::Message>::ID => {
 				ietf::RequestError::decode(&mut r, version).unwrap().error_code
 			}
 			id => panic!("{version}: unexpected refusal type {id}"),

@@ -876,9 +876,8 @@ impl Drop for Withdrawing {
 
 /// Bounds on what one peer can make a session hold, where its transport does not already.
 ///
-/// Each moq-lite request, and each moq-transport request from draft 17 on, holds a stream
-/// of its own, so the transport's stream credit bounds those. A peer that announces past
-/// `announces`, or overruns the drafts 14 to 16 request window, loses the session, closed with
+/// Each request holds a stream of its own, so the transport's stream credit bounds those.
+/// A peer that announces past `announces` loses the session, closed with
 /// `TOO_MANY_REQUESTS`. The stats sessions rows report announcement and subscription peaks.
 ///
 /// ```
@@ -891,32 +890,12 @@ impl Drop for Withdrawing {
 pub struct Limits {
 	/// Broadcasts (moq-lite) or namespaces (moq-transport) the peer may have announced to us.
 	pub announces: usize,
-	/// Other moq-transport requests the peer may hold at once, such as SUBSCRIBE and FETCH.
-	///
-	/// On drafts 14 to 16 this and `announces` size the request window, which every request
-	/// counts against. Later drafts still refuse a reused request ID, so a peer may leave at
-	/// most twice the sum of both runs of skipped IDs; one more closes the session with
-	/// `INTERNAL_ERROR` rather than forgetting any. moq-lite ignores it.
-	pub requests: usize,
 }
 
 impl Default for Limits {
 	/// Generous enough for a relay mesh carrying a large origin; lower them for untrusted peers.
 	fn default() -> Self {
-		Self {
-			announces: 100_000,
-			requests: 20_000,
-		}
-	}
-}
-
-impl Limits {
-	/// How many requests a moq-transport peer may hold open at once (drafts 14 to 16).
-	///
-	/// Twice what the limits admit, so a peer within them is never blocked by request IDs
-	/// still waiting to be granted back.
-	pub(crate) fn window(&self) -> u64 {
-		(self.announces.saturating_add(self.requests) as u64).saturating_mul(2)
+		Self { announces: 100_000 }
 	}
 }
 

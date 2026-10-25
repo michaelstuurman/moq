@@ -2,37 +2,14 @@ use crate::coding::{Decode, DecodeError, Decoder, Encode, EncodeError, Encoder};
 
 use super::Version;
 
-pub(super) fn control(id: u64, version: Version) -> crate::stats::Control {
+pub(super) fn control(id: u64) -> crate::stats::Control {
 	use super::*;
 	use crate::stats::Control;
-	// Draft 14 reuses later drafts' NAMESPACE_DONE type for TRACK_STATUS_OK.
-	if version == Version::Draft14 && (id == TrackStatusOk::ID_14 || id == TRACK_STATUS_ERROR_14) {
-		return Control::TrackInfo;
-	}
-	// Before draft 16, 0x02 updates only a subscription; later it is the shared REQUEST_UPDATE.
-	if matches!(version, Version::Draft14 | Version::Draft15) && id == SubscribeUpdate::ID {
-		return Control::Subscribe;
-	}
 	match id {
-		PublishNamespace::ID
-		| PublishNamespaceError::ID
-		| PublishNamespaceDone::ID
-		| PublishNamespaceCancel::ID
-		| SubscribeNamespace::ID
-		| SubscribeNamespaceLegacy::ID
-		| SubscribeNamespaceOk::ID
-		| SubscribeNamespaceError::ID
-		| UnsubscribeNamespace::ID
-		| NamespaceDone::ID => Control::Announce,
+		PublishNamespace::ID | SubscribeNamespace::ID | Namespace::ID | NamespaceDone::ID => Control::Announce,
 		TrackStatus::ID | SubscribeTracks::ID | PublishSkipped::ID => Control::TrackInfo,
-		Subscribe::ID
-		| SubscribeOk::ID
-		| Unsubscribe::ID
-		| Publish::ID
-		| PublishOk::ID
-		| PublishError::ID
-		| PublishDone::ID => Control::Subscribe,
-		Fetch::ID | FetchOk::ID | FetchError::ID | FetchCancel::ID => Control::Fetch,
+		Subscribe::ID | SubscribeOk::ID | Publish::ID | PublishOk::ID | PublishDone::ID => Control::Subscribe,
+		Fetch::ID | FetchOk::ID => Control::Fetch,
 		auth::Auth::ID | auth::AuthOk::ID | auth::AuthError::ID => Control::Auth,
 		GoAway::ID => Control::Goaway,
 		_ => Control::Other,
@@ -58,7 +35,7 @@ impl<T: Message> Encode<Version> for T {
 		let prefix = w.prefix_u16();
 		self.encode_msg(w, version)?;
 		w.fill(prefix)?;
-		w.control = Some(control(T::ID, version));
+		w.control = Some(control(T::ID));
 		Ok(())
 	}
 }
@@ -112,7 +89,7 @@ impl<T: Message> Decode<Version> for T {
 			Err(err) => tracing::warn!(%err, "decode failed"),
 		}
 		if result.is_ok() {
-			r.control = Some(control(T::ID, version));
+			r.control = Some(control(T::ID));
 		}
 		result
 	}
@@ -123,23 +100,11 @@ mod tests {
 	use super::*;
 	use crate::stats::Control;
 
-	/// Draft 14's track-status replies reuse type IDs later drafts give other classes.
 	#[test]
-	fn draft14_track_status_ids_are_track_info() {
-		for id in [super::super::TrackStatusOk::ID_14, super::super::TRACK_STATUS_ERROR_14] {
-			assert_eq!(control(id, Version::Draft14), Control::TrackInfo);
-		}
-		assert_eq!(
-			control(super::super::NamespaceDone::ID, Version::Draft16),
-			Control::Announce
-		);
-		assert_eq!(
-			control(super::super::SubscribeUpdate::ID, Version::Draft15),
-			Control::Subscribe
-		);
-		// Shared replies and updates identify no request class.
+	fn shared_replies_identify_no_request_class() {
+		assert_eq!(control(super::super::NamespaceDone::ID), Control::Announce);
 		for id in [super::super::RequestOk::ID, super::super::SubscribeUpdate::ID] {
-			assert_eq!(control(id, Version::Draft16), Control::Other);
+			assert_eq!(control(id), Control::Other);
 		}
 	}
 }

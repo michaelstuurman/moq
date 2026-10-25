@@ -18,7 +18,7 @@
 
 use std::{collections::VecDeque, task::Poll};
 
-use super::{RequestId, Version};
+use super::Version;
 use crate::{Error, SessionError, auth};
 
 /// MAX_REQUEST_UPDATES Setup Option (Option Type 0x08). Even, so the value is a bare varint.
@@ -42,7 +42,7 @@ pub const UNNEGOTIATED_GUARD: usize = 64;
 pub fn supported(version: Version) -> bool {
 	!matches!(
 		version,
-		Version::Draft14 | Version::Draft15 | Version::Draft16 | Version::Draft17 | Version::Draft18
+		Version::Draft18
 	)
 }
 
@@ -53,7 +53,7 @@ pub fn supported(version: Version) -> bool {
 /// behind a pending verdict waits here until the verdict ahead of it resolves. The queue is
 /// bounded by MAX_REQUEST_UPDATES, counting the one being verified.
 pub(super) struct Renewal<T> {
-	pending: Option<(auth::RequestVerdict, RequestId)>,
+	pending: Option<auth::RequestVerdict>,
 	queued: VecDeque<T>,
 }
 
@@ -80,10 +80,10 @@ impl<T> Renewal<T> {
 		self.pending.is_some()
 	}
 
-	/// Wait on `verdict`, the renewal the update with `request_id` carried.
-	pub fn verify(&mut self, verdict: auth::RequestVerdict, request_id: RequestId) {
+	/// Wait on `verdict`, the renewal an update carried.
+	pub fn verify(&mut self, verdict: auth::RequestVerdict) {
 		debug_assert!(self.pending.is_none(), "one renewal is verified at a time");
-		self.pending = Some((verdict, request_id));
+		self.pending = Some(verdict);
 	}
 
 	/// Queue `update` behind the pending verdict, counting it against the bound.
@@ -111,16 +111,12 @@ impl<T> Renewal<T> {
 
 	/// `Ready` with the pending verdict once it resolves.
 	pub fn poll(&mut self, waiter: &kio::Waiter) -> Poll<Verdict> {
-		let Some((verdict, _)) = &self.pending else {
+		let Some(verdict) = &self.pending else {
 			return Poll::Pending;
 		};
 		let grant = std::task::ready!(verdict.poll_grant(waiter));
-		let (verdict, request_id) = self.pending.take().expect("a pending renewal");
-		Poll::Ready(Verdict {
-			verdict,
-			grant,
-			request_id,
-		})
+		let verdict = self.pending.take().expect("a pending renewal");
+		Poll::Ready(Verdict { verdict, grant })
 	}
 }
 
@@ -130,8 +126,6 @@ pub(super) struct Verdict {
 	pub verdict: auth::RequestVerdict,
 	/// The acceptor's grant, or its refusal.
 	pub grant: Result<auth::Grant, auth::Refusal>,
-	/// The update that carried the renewal, which the answer names before draft 17.
-	pub request_id: RequestId,
 }
 
 /// Close `session` for a peer past the MAX_REQUEST_UPDATES we advertised, returning the error
@@ -170,10 +164,6 @@ mod tests {
 		}
 
 		for version in [
-			Version::Draft14,
-			Version::Draft15,
-			Version::Draft16,
-			Version::Draft17,
 			Version::Draft18,
 		] {
 			let mut params = super::super::Parameters::default();
