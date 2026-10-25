@@ -2955,7 +2955,11 @@ mod tests {
 		assert_eq!(link.retry(id, &lost), Some(RETRY_INITIAL));
 		assert_eq!(auth.grant().peek(), None, "the lost stream's grant is gone");
 		assert_eq!(link.token(&auth).as_deref(), Some(&b"jwt"[..]));
-		let mut gate = Gate::new(link.clone(), crate::Path::new("room").to_owned(), Direction::Publish);
+		let mut gate = Gate::new(
+			link.clone(),
+			crate::Path::new("room").to_owned().unwrap(),
+			Direction::Publish,
+		);
 		assert!(gate.poll_ready(&kio::Waiter::noop()).is_pending());
 
 		assert_eq!(link.reopen(id).unwrap().as_ref(), b"jwt");
