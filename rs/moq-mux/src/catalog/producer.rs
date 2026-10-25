@@ -2073,6 +2073,27 @@ mod test {
 	}
 
 	#[test]
+	fn an_undeclared_enrollment_releases_the_broadcast() {
+		let mut broadcast = moq_net::broadcast::Info::new().produce();
+		let catalog = Producer::new(&mut broadcast, hls()).unwrap();
+		let recorder = catalog.enroll("video0", None).unwrap();
+		let waiter = kio::Waiter::noop();
+		let mut subscribing = broadcast
+			.consume()
+			.track("video0.hls")
+			.unwrap()
+			.subscribe(None)
+			.into_inner();
+		let std::task::Poll::Ready(Ok(mut reader)) = kio::Task::poll(&mut subscribing, &waiter) else {
+			panic!("the record track is live");
+		};
+
+		// Dropped before any frame, so it never declared a duration.
+		drop((recorder, catalog, broadcast));
+		assert!(matches!(reader.poll_finished(&waiter), std::task::Poll::Ready(_)));
+	}
+
+	#[test]
 	fn clock_is_advertised_without_hls() {
 		let mut broadcast = moq_net::broadcast::Info::new().produce();
 		let catalog = Producer::new(&mut broadcast, Config::default()).unwrap();

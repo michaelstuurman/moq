@@ -28,8 +28,10 @@
 //! after each of the pacer's segment starts (even one it reported before the pacer did), and
 //! stopping when the pacer stops content. A follower records
 //! nothing before the pacer's first segment, so renditions that start together and share group
-//! boundaries (aligned GOPs, audio grouped on them) number the same segments alike. If the pacer's
-//! producer goes away, the next enrolled track still recording takes over.
+//! boundaries (aligned GOPs, audio grouped on them) number the same segments alike. A follower
+//! keeps at most a ceiling of boundaries waiting on the other track, so one that stalls costs
+//! alignment, not memory. If the pacer's producer goes away, the next enrolled track still
+//! recording takes over.
 //!
 //! ## Wiring
 //!
@@ -281,8 +283,25 @@ impl Segmenter {
 			self.declared.get_or_insert(elapsed);
 			self.begin(group, pts);
 		} else if self.following && self.cuts.is_empty() {
-			self.undecided.push_back((group, pts));
+			self.undecide(group, pts);
 		}
+	}
+
+	/// Keep a follower's group at `pts` for a cut the pacer may still report.
+	///
+	/// A pacer starts a segment at least once per ceiling while it reports, so a group more than a
+	/// ceiling behind this one could only meet a pacer stalled that long: forgetting it bounds the
+	/// queue, and that late cut starts the segment at a later group instead.
+	fn undecide(&mut self, group: u64, pts: Timestamp) {
+		let horizon = self.ceiling();
+		while self
+			.undecided
+			.front()
+			.is_some_and(|(_, start)| elapsed(*start, pts) > horizon)
+		{
+			self.undecided.pop_front();
+		}
+		self.undecided.push_back((group, pts));
 	}
 
 	/// With no segment open, start one with group `group` at `pts`, unless a follower has no cut
@@ -298,7 +317,7 @@ impl Segmenter {
 			if !started {
 				// With no cut ahead, the pacer may still report one at or before this group.
 				if self.cuts.is_empty() {
-					self.undecided.push_back((group, pts));
+					self.undecide(group, pts);
 				}
 				return;
 			}
@@ -386,7 +405,18 @@ impl Segmenter {
 					self.advance(reported);
 				}
 			}
-			None => self.cuts.push_back(pts),
+			None => {
+				// A follower that stopped reporting keeps only the cuts within a ceiling of this one:
+				// its next group past them all starts one segment either way, and one landing
+				// between them was already that far behind the pacer's numbering.
+				if self.following {
+					let horizon = self.ceiling();
+					while self.cuts.front().is_some_and(|cut| elapsed(*cut, pts) > horizon) {
+						self.cuts.pop_front();
+					}
+				}
+				self.cuts.push_back(pts);
+			}
 		}
 	}
 
@@ -888,7 +918,11 @@ impl Drop for Recorder {
 				live.segmenter.stop(last + 1);
 			}
 			live.recording = false;
-			live.publish()
+			let published = live.publish();
+			// The callback holds the catalog, which holds these tracks: an enrollment that ends
+			// without declaring must drop it, or the broadcast never closes.
+			live.on_declare = None;
+			published
 		};
 		// A pacer going away says nothing about where the others' content stops, so its last stop
 		// isn't mirrored: each follower stops where its own content does, or paces on.
@@ -1189,6 +1223,31 @@ mod test {
 			drain(&mut follower),
 			[(2, 110, None), (5, 4_110, None), (7, 4_130, Some(0))]
 		);
+	}
+
+	#[test]
+	fn a_stalled_pacer_bounds_what_its_follower_keeps() {
+		let mut follower = Segmenter::new(hinted()).following();
+		follower.follow(Mark::Start(ms(0)));
+		// 200s of audio past the pacer's only cut.
+		groups(&mut follower, 0..10_000, 20);
+		// A ceiling (three 4s segments) of groups waits for the pacer.
+		assert_eq!(follower.undecided.len(), 601);
+		// The pacer resuming that far behind starts the follower's next segment at its oldest kept
+		// group, so both still number it alike.
+		follower.follow(Mark::Start(ms(5_000)));
+		assert_eq!(drain(&mut follower), [(0, 0, None), (9_399, 187_980, None)]);
+	}
+
+	#[test]
+	fn an_idle_follower_bounds_the_cuts_it_keeps() {
+		let mut follower = Segmenter::new(hinted()).following();
+		for segment in 0..10_000 {
+			follower.follow(Mark::Start(ms(segment * 4_000)));
+		}
+		assert_eq!(follower.cuts.len(), 4);
+		follower.frame(0, ms(39_996_000)).unwrap();
+		assert_eq!(drain(&mut follower), [(0, 39_996_000, None)]);
 	}
 
 	// Aligned GOPs whose follower frame is reported just before the pacer's: each group the
