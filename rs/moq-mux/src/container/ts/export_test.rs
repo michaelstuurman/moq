@@ -6284,6 +6284,8 @@ struct SiCadenceRig {
 	si_track: moq_net::track::Producer,
 	exporter: Export<crate::catalog::Consumer<tscat::Ext>>,
 	catalog: crate::catalog::Producer<tscat::Ext>,
+	/// Held so the SI track stays routable.
+	_broadcast: moq_net::broadcast::Producer,
 }
 
 async fn si_cadence_rig(pid: u16, table_id: u8, interval: Duration) -> SiCadenceRig {
@@ -6340,6 +6342,7 @@ async fn si_cadence_rig(pid: u16, table_id: u8, interval: Duration) -> SiCadence
 		si_track,
 		exporter,
 		catalog,
+		_broadcast: broadcast,
 	}
 }
 

@@ -489,7 +489,7 @@ impl Video {
 		let reserved = target
 			.catalog
 			.reserve()
-			.with_timeline_hint(config.gop.duration(config.framerate));
+			.with_hls_hint(config.gop.duration(config.framerate));
 		let ceiling = video_ceiling(config, &rendition);
 		let producer = moq_video::encode::Producer::new(target.producer.clone(), reserved, rendition)?;
 		let finished = target.finished.clone();
@@ -1047,7 +1047,7 @@ mod tests {
 		let rendition = encode.probe().await.unwrap();
 		let reserved = catalog
 			.reserve()
-			.with_timeline_hint(encode.gop.duration(encode.framerate));
+			.with_hls_hint(encode.gop.duration(encode.framerate));
 		let producer = moq_video::encode::Producer::new(broadcast, reserved, rendition).unwrap();
 
 		let name = producer.demand().name().to_string();

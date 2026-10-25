@@ -59,7 +59,7 @@ impl VideoEncoder {
 		let rendition = config.probe().await.expect("failed to probe the H.264 encoder");
 		let reserved = catalog
 			.reserve()
-			.with_timeline_hint(config.gop.duration(config.framerate));
+			.with_hls_hint(config.gop.duration(config.framerate));
 		let producer =
 			moq_video::encode::Producer::new(broadcast, reserved, rendition).expect("failed to create avc3 producer");
 		let demand = producer.demand();

@@ -616,13 +616,13 @@ impl MoqVideoProducer {
 					.create_track(name, state.catalog.track_info(hang::catalog::PRIORITY.video))?;
 				Ok(moq_video::encode::Producer::with_track(
 					track,
-					state.catalog.reserve().with_timeline_hint(gop),
+					state.catalog.reserve().with_hls_hint(gop),
 					rendition,
 				)?)
 			}
 			None => Ok(moq_video::encode::Producer::new(
 				state.broadcast.clone(),
-				state.catalog.reserve().with_timeline_hint(gop),
+				state.catalog.reserve().with_hls_hint(gop),
 				rendition,
 			)?),
 		})?;
