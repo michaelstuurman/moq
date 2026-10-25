@@ -105,27 +105,26 @@ run_suite() {
 failed=0
 # A two-relay cell waits on a test publisher that answers TRACK_STATUS; see the
 # passthrough quest.
-for version in 18; do
-    label="single-$version"
-    start_relay "$label-origin" "$version"
-    relay_port="$HARNESS_PORT"
-    relay_pid="$HARNESS_PID"
-    harness_port "$label-publisher"
-    publisher_port="$HARNESS_PORT"
-    harness_spawn "$label-publisher" "$HARNESS_RUN/$label-publisher.log" \
-        "$package/bin/moqtest_server" --port="$HARNESS_PORT" \
-        --cert="$HARNESS_RUN/cert.pem" --key="$HARNESS_RUN/key.pem" \
-        --relay_url="https://127.0.0.1:$relay_port/" --versions="$version" --transport=quic --logging=INFO
-    publisher_pid="$HARNESS_PID"
-    namespace_ready
-    # A direct-origin control distinguishes suite/pin failures from relay behavior.
-    run_suite "reference-$version" "https://127.0.0.1:$publisher_port/test"
-    run_suite "$label" "https://127.0.0.1:$relay_port/"
-    harness_reap "$publisher_pid"
-    harness_reap "$relay_pid"
-done
+version=18
+label="single-$version"
+start_relay "$label-origin" "$version"
+relay_port="$HARNESS_PORT"
+relay_pid="$HARNESS_PID"
+harness_port "$label-publisher"
+publisher_port="$HARNESS_PORT"
+harness_spawn "$label-publisher" "$HARNESS_RUN/$label-publisher.log" \
+    "$package/bin/moqtest_server" --port="$HARNESS_PORT" \
+    --cert="$HARNESS_RUN/cert.pem" --key="$HARNESS_RUN/key.pem" \
+    --relay_url="https://127.0.0.1:$relay_port/" --versions="$version" --transport=quic --logging=INFO
+publisher_pid="$HARNESS_PID"
+namespace_ready
+# A direct-origin control distinguishes suite/pin failures from relay behavior.
+run_suite "reference-$version" "https://127.0.0.1:$publisher_port/test"
+run_suite "$label" "https://127.0.0.1:$relay_port/"
+harness_reap "$publisher_pid"
+harness_reap "$relay_pid"
 if ((failed != 0)); then
     echo "Moxygen conformance failed; see each cell's client and endpoint logs" >&2
     exit 1
 fi
-echo "Moxygen conformance: all shared drafts passed through the relay"
+echo "Moxygen conformance: draft 18 passed through the relay"

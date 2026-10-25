@@ -62,9 +62,9 @@ if (version !== undefined) {
 	peer = await Stream.accept(pair.server, version);
 	assert(peer);
 	assert.equal(await peer.reader.u53(), IetfSubscribe.id);
-	const request = await IetfSubscribe.decode(peer.reader, version);
+	await IetfSubscribe.decode(peer.reader, version);
 	await peer.writer.u53(SubscribeOk.id);
-	await new SubscribeOk({ requestId: request.requestId, trackAlias: 0n }).encode(peer.writer, version);
+	await new SubscribeOk({ trackAlias: 0n }).encode(peer.writer, version);
 	if (input.clean) {
 		await output.u53(PublishDone.id);
 		await new PublishDone({ statusCode: 0x2, streamCount: 0n, reasonPhrase: "done" }).encode(output, version);

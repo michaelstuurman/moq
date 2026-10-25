@@ -44,7 +44,7 @@ try {
 			}),
 			version,
 		);
-		await setup.parameters.encode(writer, version);
+		await setup.parameters.encode(writer);
 		await writer.close();
 		console.log(JSON.stringify(bytes));
 	} else {

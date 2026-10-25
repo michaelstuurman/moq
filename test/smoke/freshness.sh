@@ -101,6 +101,7 @@ builds_head() {
     grep -qE "build_git \"\\\$$2\" [^ ]+ [^ ]+( >|$)" "$1" &&
         grep -qE 'git clone --quiet --depth 1 (\$\{branch:\+--branch "\$branch"\} )?"\$repo" "\$dir"' "$1"
 }
+# shellcheck disable=SC2016  # the greps match literal variable references
 if grep -q 'git = "https://github.com/cloudflare/moq-rs", branch = "draft-18-dev"' clients/cloudflare/Cargo.toml &&
     ! grep -qE '(^|[,{[:space:]])(rev|tag)[[:space:]]*=' clients/cloudflare/Cargo.toml &&
     grep -qF 'build_git "$CLOUDFLARE_MOQ_REPO" moq-relay-ietf "$TMP/cloudflare-moq" "$CLOUDFLARE_MOQ_BRANCH"' cloudflare.sh &&
