@@ -83,6 +83,10 @@ pub struct Config {
 	/// The URI authority we advertise in our SETUP, under the same rules as `path`.
 	pub authority: Option<String>,
 
+	/// The connection credential our SETUP's `AUTHORIZATION TOKEN` option presents. A
+	/// server passes `None`.
+	pub token: Option<crate::setup::Token>,
+
 	/// The peer's SETUP stream, when it was already read before [`start`] (a draft-17+
 	/// server that gated on the client's path via [`accept_setup`]). It becomes the
 	/// GOAWAY channel; `None` lets the uni loop read the SETUP itself.
@@ -152,6 +156,7 @@ pub fn start(config: Config) -> Result<(Driver, crate::goaway::Handle), Error> {
 		version,
 		path,
 		authority,
+		token,
 		peer_setup_stream,
 		peer_declared,
 		auth,
@@ -417,6 +422,7 @@ pub fn start(config: Config) -> Result<(Driver, crate::goaway::Handle), Error> {
 					version,
 					path,
 					authority,
+					token,
 					implementation,
 					self_origin,
 					cost,
@@ -787,7 +793,8 @@ fn peer_from_params(params: &ietf::Parameters, version: Version) -> Result<peer:
 /// also our GOAWAY channel, so a fired drain trigger encodes the GOAWAY here.
 ///
 /// `path` is the request path we advertise (clients on URL-less transports); a
-/// server passes `None`. `self_origin` and `cost` are the MoQ Cluster options, which
+/// server passes `None`, as it does for `token`, the client's connection credential.
+/// `self_origin` and `cost` are the MoQ Cluster options, which
 /// declare our identity and (client-only) what this link costs to cross. `extensions`
 /// names the other extensions we offer.
 #[expect(
@@ -799,6 +806,7 @@ async fn run_setup(
 	version: Version,
 	path: Option<String>,
 	authority: Option<String>,
+	token: Option<crate::setup::Token>,
 	implementation: Option<String>,
 	self_origin: Hop,
 	cost: Option<u64>,
@@ -825,6 +833,9 @@ async fn run_setup(
 	}
 	if let Some(authority) = authority {
 		parameters.set_bytes(ietf::ParameterBytes::Authority, authority.into_bytes());
+	}
+	if let Some(token) = &token {
+		super::token::into_setup(&mut parameters, token, version)?;
 	}
 	cluster::peer_into_setup(&mut parameters, self_origin, cost, version);
 	if extensions.solicit {
@@ -1602,6 +1613,7 @@ mod tests {
 				version,
 				path: None,
 				authority: None,
+				token: None,
 				peer_setup_stream: None,
 				peer_declared: Some(peer::Peer {
 					solicit: Some(true),
@@ -1698,6 +1710,7 @@ mod tests {
 						version,
 						path: None,
 						authority: None,
+						token: None,
 						peer_setup_stream: None,
 						peer_declared: Some(peer::Peer {
 							auth: true,
@@ -1756,6 +1769,7 @@ mod tests {
 					version,
 					path: None,
 					authority: None,
+					token: None,
 					peer_setup_stream: None,
 					peer_declared: Some(peer::Peer {
 						auth: true,
@@ -1809,6 +1823,7 @@ mod tests {
 			version,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer {
 				auth: true,
@@ -1864,6 +1879,7 @@ mod tests {
 			version,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer {
 				auth: true,
@@ -1912,6 +1928,7 @@ mod tests {
 					version,
 					path: None,
 					authority: None,
+					token: None,
 					peer_setup_stream: None,
 					peer_declared: Some(peer::Peer {
 						auth: true,
@@ -2018,6 +2035,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			// A peer that declared its Hop ID negotiated the extension, which is what
 			// makes the cluster parameters mandatory in both directions.
@@ -2085,6 +2103,7 @@ mod tests {
 			version: Version::Draft18,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			// The requests wait on the peer's SETUP (MoQ Hidden).
 			peer_declared: Some(peer::Peer::default()),
@@ -2204,6 +2223,7 @@ mod tests {
 			version,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer {
 				solicit,
@@ -2467,6 +2487,7 @@ mod tests {
 			version: Version::Draft18,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared,
 			auth: crate::auth::Link::new(false),
@@ -2575,6 +2596,7 @@ mod tests {
 			version: Version::Draft18,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer {
 				auth,
@@ -2663,6 +2685,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer::default()),
 			auth,
@@ -2762,6 +2785,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer {
 				auth: true,
@@ -2854,6 +2878,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			// Pre-settled, so nothing waits on a SETUP the dead stream will never
 			// carry and the dispatch loop actually runs.
@@ -2873,10 +2898,12 @@ mod tests {
 		assert_eq!(log.closes(), vec![], "nothing may close the transport");
 	}
 
-	/// A draft-17+ client advertises its AUTHORITY in the SETUP it writes on its uni stream.
+	/// A draft-17+ client advertises its AUTHORITY and connection credential in the SETUP
+	/// it writes on its uni stream.
 	#[moq_clock::test]
-	async fn setup_carries_the_authority() {
+	async fn setup_carries_the_authority_and_token() {
 		const AUTHORITY: &[u8] = b"relay.example.com:4443";
+		const TOKEN: &[u8] = b"connection-credential";
 
 		// The driver parks forever once SETUP is out, so bound it: paused time makes the
 		// deadline fire the moment nothing else can run.
@@ -2900,6 +2927,10 @@ mod tests {
 			version,
 			path: None,
 			authority: Some(String::from_utf8(AUTHORITY.to_vec()).unwrap()),
+			token: Some(crate::setup::Token {
+				kind: crate::setup::Token::OUT_OF_BAND,
+				value: TOKEN.to_vec(),
+			}),
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer::default()),
 			auth: crate::auth::Link::new(false),
@@ -2918,6 +2949,11 @@ mod tests {
 			occurrences(&log, AUTHORITY),
 			1,
 			"{version:?}: SETUP must carry the authority once"
+		);
+		assert_eq!(
+			occurrences(&log, TOKEN),
+			1,
+			"{version:?}: SETUP must carry the token once"
 		);
 	}
 
@@ -3173,6 +3209,7 @@ mod tests {
 			version: Version::Draft18,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer::default()),
 			auth: crate::auth::Link::new(false),
@@ -3308,6 +3345,7 @@ mod tests {
 					version,
 					path: None,
 					authority: None,
+					token: None,
 					peer_setup_stream: None,
 					peer_declared: Some(peer::Peer::default()),
 					auth: crate::auth::Link::new(false),
@@ -3378,6 +3416,7 @@ mod tests {
 					version,
 					path: None,
 					authority: None,
+					token: None,
 					peer_setup_stream: None,
 					peer_declared: Some(peer::Peer::default()),
 					auth: crate::auth::Link::new(false),
@@ -3488,6 +3527,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: None,
 			auth: crate::auth::Link::new(false),
@@ -3618,6 +3658,7 @@ mod tests {
 					version,
 					path: None,
 					authority: None,
+					token: None,
 					peer_setup_stream: None,
 					peer_declared: Some(peer::Peer::default()),
 					auth: crate::auth::Link::new(false),
@@ -3862,6 +3903,7 @@ mod tests {
 			version: VERSION,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: None,
 			auth: crate::auth::Link::new(false),
@@ -3927,6 +3969,7 @@ mod tests {
 				None,
 				None,
 				None,
+				None,
 				Hop::new(1).unwrap(),
 				None,
 				Default::default(),
@@ -3968,6 +4011,7 @@ mod tests {
 			version,
 			path: None,
 			authority: None,
+			token: None,
 			peer_setup_stream: None,
 			peer_declared: Some(peer::Peer::default()),
 			auth: crate::auth::Link::new(false),
