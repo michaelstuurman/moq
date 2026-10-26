@@ -199,15 +199,17 @@ impl<E: CatalogExt> Outputs<E> {
 			.video
 			.renditions
 			.iter_mut()
-			.map(|(id, config)| (id, &config.track, &mut config.hls));
+			.map(|(id, config)| (id, &mut config.hls));
 		let audio = catalog
 			.audio
 			.renditions
 			.iter_mut()
-			.map(|(id, config)| (id, &config.track, &mut config.hls));
-		// Records live on the catalog's broadcast, a sibling rendition's included.
-		for (id, track, field) in video.chain(audio) {
-			if let Some(advertised) = hls.hls(track.as_deref().unwrap_or(id)) {
+			.map(|(id, config)| (id, &mut config.hls));
+		// An enrolled rendition is keyed by its track's name, which its reservation holds, so only
+		// that entry gets the records; any other entry, such as a reference to a same-named track of
+		// another broadcast, keeps its own field.
+		for (id, field) in video.chain(audio) {
+			if let Some(advertised) = hls.hls(id) {
 				*field = Some(advertised);
 			}
 		}
@@ -2045,6 +2047,37 @@ mod test {
 			tracks.hls("audio0").unwrap().duration,
 			std::time::Duration::from_secs(5)
 		);
+	}
+
+	#[test]
+	fn only_the_enrolled_rendition_gets_its_records() {
+		let mut broadcast = moq_net::broadcast::Info::new().produce();
+		let catalog = Producer::<()>::new(&mut broadcast, hls()).unwrap();
+		let _video = catalog
+			.enroll("video", Some(std::time::Duration::from_secs(2)))
+			.unwrap();
+
+		// Same-named tracks of another broadcast, one carrying that broadcast's own records.
+		let source = hang::catalog::Hls::new("video.hls", std::time::Duration::from_secs(6));
+		let local = VideoConfig::new(hang::catalog::VideoCodec::VP8);
+		let mut sibling = local.clone();
+		sibling.broadcast = Some(moq_net::path::Relative::new("./other").to_owned());
+		sibling.track = Some("video".into());
+		sibling.hls = Some(source.clone());
+		let mut unrecorded = sibling.clone();
+		unrecorded.hls = None;
+		let mut input = Catalog::<()>::default();
+		input.video.renditions.insert("video".into(), local);
+		input.video.renditions.insert("sibling".into(), sibling);
+		input.video.renditions.insert("unrecorded".into(), unrecorded);
+
+		let advertised = catalog.outputs.advertise(&input);
+		let renditions = &advertised.video.renditions;
+		let records = catalog.outputs.hls.as_ref().unwrap().hls("video");
+		assert!(records.is_some());
+		assert_eq!(renditions["video"].hls, records);
+		assert_eq!(renditions["sibling"].hls, Some(source));
+		assert_eq!(renditions["unrecorded"].hls, None);
 	}
 
 	/// A retired track's record track ends for the readers already on it and is forgotten, while
