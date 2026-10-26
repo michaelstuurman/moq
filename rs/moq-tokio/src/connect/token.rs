@@ -229,7 +229,7 @@ mod tests {
 		let url: Url = "https://relay.example.com/room".parse().unwrap();
 		let credential = Credential::new(
 			&url,
-			&versions(&["moq-lite-07-wip", "moq-transport-17"]),
+			&versions(&["moq-lite-07-wip", "moq-transport-18"]),
 			&tokens(&["a", "b"]),
 		);
 		assert_eq!(credential.url, url);

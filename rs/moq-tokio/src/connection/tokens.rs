@@ -214,7 +214,8 @@ mod tests {
 		_acceptor: AbortOnDrop,
 	}
 
-	async fn pair_on(version: &str) -> Pair {
+	/// A client and server on `version`, the server offering MoQ Auth when `auth`.
+	async fn pair_on(version: &str, auth: bool) -> Pair {
 		let versions = moq_net::Versions::from(version.parse::<moq_net::Version>().unwrap());
 		let config = || {
 			let mut config = qmux::Config::new(qmux::Version::QMux01);
@@ -242,6 +243,11 @@ mod tests {
 		let server = async {
 			let mut request = moq_net::Server::new()
 				.with_versions(versions.clone())
+				.with_extensions({
+					let mut extensions = moq_net::setup::Extensions::default();
+					extensions.auth = auth;
+					extensions
+				})
 				.accept_request(now, server)
 				.await
 				.unwrap();
@@ -296,7 +302,7 @@ mod tests {
 	/// Every configured token but the connection credential rides its own AUTH stream.
 	#[tokio::test(start_paused = true)]
 	async fn configured_tokens_ride_auth_beside_the_connection_credential() {
-		let mut pair = pair_on("moq-lite-07-wip").await;
+		let mut pair = pair_on("moq-lite-07-wip", true).await;
 		let (_tokens, _holder) = holder(&pair, "moqt://relay.example.com/", &["connection", "a", "b"]);
 		let mut presented = Vec::new();
 		let mut issued = Vec::new();
@@ -314,7 +320,7 @@ mod tests {
 	/// A URL that carries its own credential sends every configured token in band.
 	#[tokio::test(start_paused = true)]
 	async fn a_url_credential_sends_every_configured_token_in_band() {
-		let mut pair = pair_on("moq-lite-07-wip").await;
+		let mut pair = pair_on("moq-lite-07-wip", true).await;
 		let (_tokens, _holder) = holder(&pair, "moqt://relay.example.com/?jwt=peer", &["a"]);
 		let request = next_token(&mut pair).await;
 		assert_eq!(request.token().as_ref(), b"a");
@@ -324,7 +330,7 @@ mod tests {
 	/// never narrows in between.
 	#[tokio::test(start_paused = true)]
 	async fn a_replaced_token_is_withdrawn_after_its_replacement_is_answered() {
-		let mut pair = pair_on("moq-lite-07-wip").await;
+		let mut pair = pair_on("moq-lite-07-wip", true).await;
 		let (tokens, _holder) = holder(&pair, "moqt://relay.example.com/", &["connection", "old"]);
 		let old = next_token(&mut pair).await.accept(auth::Grant::all());
 
@@ -346,7 +352,7 @@ mod tests {
 	/// answers its replacement, even with a refusal.
 	#[tokio::test(start_paused = true)]
 	async fn a_refused_replacement_still_withdraws_the_replaced_token() {
-		let mut pair = pair_on("moq-lite-07-wip").await;
+		let mut pair = pair_on("moq-lite-07-wip", true).await;
 		let (tokens, _holder) = holder(&pair, "moqt://relay.example.com/", &["connection", "old"]);
 		let old = next_token(&mut pair).await.accept(auth::Grant::all());
 
@@ -363,7 +369,7 @@ mod tests {
 	/// but the handle keeps it for a later session that has AUTH.
 	#[tokio::test(start_paused = true)]
 	async fn a_configured_token_without_auth_is_kept_for_a_later_session() {
-		let pair = pair_on("moq-transport-14").await;
+		let pair = pair_on("moq-transport-18", false).await;
 		let mut held = Held::default();
 		held.update(&pair.auth, vec!["a".parse().unwrap(), "b".parse().unwrap()]);
 		moq_clock::timeout(
