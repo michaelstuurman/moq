@@ -8,6 +8,12 @@ How to update your code for each breaking change, newest first.
 
 `Source::resolve_reference` takes `Option<&Relative>` and returns `Option<Path>`, `ts::Programs::new` takes `impl Into<moq_net::Path>`, so pass a `Path`, and `follow::Instances::new` takes `impl TryInto<moq_net::Path, Error: Into<moq_net::Error>>`. Replace `PathOwned` with `Path` and drop `to_owned()` and `into_owned()` on paths. See moq-net's migration for the rest.
 
+### Repeated MSF track names and PMT PIDs keep the last entry
+
+`catalog::msf::Error::DuplicateTrackName` is gone. An MSF catalog naming a track twice keeps the later track as that rendition, and a hang catalog projected to MSF advertises one track per namespace and name, the later rendition's.
+A TS PMT listing a PID twice routes it by the later entry instead of failing the import.
+Delete matches on `DuplicateTrackName`.
+
 ### JSON snapshot encoder options move to `json::Options`
 
 `json::Config::deltas` and `with_deltas` move to the new `json::Options`, which `catalog::Producer::json_snapshot` takes as a third argument, so a custom catalog entry can set them too.

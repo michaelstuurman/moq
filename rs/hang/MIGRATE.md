@@ -8,6 +8,11 @@ How to update your code for each breaking change, newest first.
 
 `catalog` reference fields, `Echo::path`, and `health::Observer` use the lifetime-free `moq_net::path::Relative` and `moq_net::Path`: replace `RelativeOwned` with `Relative` and `PathOwned` with `Path`. `Echo::new` takes `impl Into<Relative>`: pass `Relative::new(s)?` rather than a string. See moq-net's migration for the rest.
 
+### The catalog rendition cap is removed
+
+`catalog::MAX_RENDITIONS` and `Error::TooManyRenditions` are gone: a catalog with any number of renditions is accepted.
+Delete matches on `TooManyRenditions`. An application that wants a limit counts `video.renditions`, `audio.renditions`, and `text.renditions` itself.
+
 ### `Catalog` parses through `FromStr` (#6471)
 
 The inherent `Catalog::from_str` is replaced by `impl FromStr for Catalog`, with the same `Error`.
