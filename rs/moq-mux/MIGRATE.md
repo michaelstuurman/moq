@@ -20,6 +20,7 @@ Read records with `hls::Consumer::subscribe(&broadcast, &hls)`, whose `Event::Pu
 `Config::duration_min` is `hls::Config::duration`, `with_duration_min` is `with_duration`, and `DEFAULT_DURATION_MIN` is `DEFAULT_DURATION`.
 It is now the spacing of a pts grid rather than a floor: a group starts a segment when its pts falls in a later multiple of it than the previous group's, so a segment may be shorter.
 Each rendition cuts and numbers its own segments, so they line up across renditions wherever keyframes share timestamps.
+`container::fmp4::Muxer::fragment` takes a third argument, where the content ends, which times the last sample when neither its codec nor a duration marker does; pass `None` to keep the old behavior.
 
 ### JSON snapshot encoder options move to `json::Options`
 

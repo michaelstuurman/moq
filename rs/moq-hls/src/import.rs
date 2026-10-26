@@ -2236,7 +2236,7 @@ mod tests {
 				payload: Bytes::from_static(&[0x78, 0x00, 0x00, 0x00]),
 				keyframe: true,
 			};
-			let fragment = muxer.fragment(index as u32, &[frame]).unwrap();
+			let fragment = muxer.fragment(index as u32, &[frame], None).unwrap();
 			std::fs::write(dir.join(format!("{prefix}{index}.m4s")), fragment).unwrap();
 		}
 	}

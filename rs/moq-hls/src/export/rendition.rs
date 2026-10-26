@@ -1147,18 +1147,9 @@ impl Rendition {
 			return Ok(None);
 		}
 		// The last presented sample has no successor to time it, but the record says where the
-		// segment ends, so the fragment ends exactly where the next one starts. One a duration
-		// marker already timed keeps it.
-		if let Some(last) = frames.iter_mut().max_by_key(|frame| frame.timestamp.as_micros())
-			&& last.duration.is_none()
-			&& let Ok(end) = moq_net::Timestamp::from_micros(row.end.as_micros() as u64)
-			&& let Ok(end) = end.convert(last.timestamp.scale())
-			&& let Ok(duration) = end.checked_sub(last.timestamp)
-			&& !duration.is_zero()
-		{
-			last.duration = Some(duration);
-		}
-		let fragment = muxer.fragment(row.segment as u32, &frames)?;
+		// segment ends, so the fragment ends where the next one starts.
+		let end = moq_net::Timestamp::from_micros(row.end.as_micros() as u64).ok();
+		let fragment = muxer.fragment(row.segment as u32, &frames, end)?;
 		// Inline codec metadata was already decoded from these completed groups.
 		// Reuse it instead of fetching a newer, possibly unfinished group.
 		if let Some(bytes) = muxer.init()? {

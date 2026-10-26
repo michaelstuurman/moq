@@ -2002,7 +2002,7 @@ mod tests {
 		let mut fragments = Vec::new();
 		for i in 0..6u64 {
 			let frame = vp8_frame(start + i * 1_000_000, i % 2 == 0);
-			fragments.extend_from_slice(&muxer.fragment(i as u32, &[frame]).unwrap());
+			fragments.extend_from_slice(&muxer.fragment(i as u32, &[frame], None).unwrap());
 		}
 
 		let origin = produce_origin();
@@ -2138,12 +2138,12 @@ mod tests {
 		let broadcaster = (!late).then(|| Broadcaster::new(source.clone(), Config::default()));
 		for i in 0..20u64 {
 			let fragment = video_muxer
-				.fragment(i as u32, &[vp8_frame(i * 1_000_000, i % 2 == 0)])
+				.fragment(i as u32, &[vp8_frame(i * 1_000_000, i % 2 == 0)], None)
 				.unwrap();
 			import.decode(&fragment).unwrap();
 			let mut sample = frame(i * 1_000_000, true);
 			sample.duration = Some(moq_net::Timestamp::from_secs(1).unwrap());
-			let audio = audio_muxer.fragment(i as u32, &[sample]).unwrap();
+			let audio = audio_muxer.fragment(i as u32, &[sample], None).unwrap();
 			let mut audio = std::io::Cursor::new(audio.as_ref());
 			let mut fragment = Vec::new();
 			while let Some(mut atom) = mp4_atom::Any::decode_maybe(&mut audio).unwrap() {
