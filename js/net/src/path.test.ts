@@ -336,3 +336,16 @@ test("encode enforces the max part count", () => {
 	expect(Path.encode(atLimit)).toBe(atLimit);
 	expect(() => Path.encode(`${atLimit}/extra` as Path.Valid)).toThrow();
 });
+
+test("encode and decode enforce the max byte length in UTF-8", () => {
+	const atLimit = "a".repeat(Path.MAX_BYTES) as Path.Valid;
+	expect(Path.encode(atLimit)).toBe(atLimit);
+	expect(Path.decode(atLimit)).toBe(atLimit);
+	expect(() => Path.encode(`${atLimit}b` as Path.Valid)).toThrow();
+	expect(() => Path.decode(`${atLimit}b`)).toThrow();
+
+	// One UTF-16 unit of "é" is two UTF-8 bytes, so half as many units reach the limit.
+	const wide = "é".repeat(Math.floor(Path.MAX_BYTES / 2)) as Path.Valid;
+	expect(Path.encode(wide)).toBe(wide);
+	expect(() => Path.encode(`${wide}é` as Path.Valid)).toThrow();
+});
