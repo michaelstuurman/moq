@@ -49,17 +49,6 @@ impl Repr {
 			}
 		}
 	}
-
-	fn string(s: String) -> Self {
-		if s.len() <= INLINE {
-			Self::copy(&s)
-		} else {
-			Repr::Shared {
-				start: 0,
-				buf: s.into(),
-			}
-		}
-	}
 }
 
 /// A broadcast path that provides safe prefix matching operations.
@@ -109,7 +98,7 @@ impl Path {
 	pub fn new(s: &str) -> Self {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
 		match normalize(trimmed) {
-			Some(normalized) => Self(Repr::string(normalized)),
+			Some(normalized) => Self(Repr::copy(&normalized)),
 			None => Self(Repr::copy(trimmed)),
 		}
 	}
@@ -118,14 +107,14 @@ impl Path {
 	pub fn from_static(s: &'static str) -> Self {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
 		match normalize(trimmed) {
-			Some(normalized) => Self(Repr::string(normalized)),
+			Some(normalized) => Self(Repr::copy(&normalized)),
 			None => Self(Repr::Static(trimmed)),
 		}
 	}
 
 	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
 	pub(crate) fn from_escaped(s: String) -> Path {
-		Path(Repr::string(s))
+		Path(Repr::copy(&s))
 	}
 
 	// A copy of this path skipping the first `n` bytes, reusing the shared buffer when possible.
@@ -328,7 +317,7 @@ impl Path {
 			}
 		}
 
-		Path(Repr::string(segments.join("/")))
+		Path(Repr::copy(&segments.join("/")))
 	}
 
 	/// Resolve a [`Relative`], returning `None` if it escapes above the root.
@@ -354,7 +343,7 @@ impl Path {
 			}
 		}
 
-		Some(Path(Repr::string(segments.join("/"))))
+		Some(Path(Repr::copy(&segments.join("/"))))
 	}
 
 	/// Express this path relative to `base`: the inverse of [`Path::resolve`].
@@ -619,7 +608,7 @@ impl Relative {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
 
 		if needs_normalize_relative(trimmed) {
-			Self(Path(Repr::string(normalize_relative_segments(trimmed))))
+			Self(Path(Repr::copy(&normalize_relative_segments(trimmed))))
 		} else {
 			Self(Path(Repr::copy(trimmed)))
 		}
