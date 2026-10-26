@@ -4,6 +4,10 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### `moq_net::Path` has no lifetime
+
+`catalog` reference fields, `Echo::path`, and `health::Observer` use the lifetime-free `moq_net::path::Relative` and `moq_net::Path`: replace `RelativeOwned` with `Relative` and `PathOwned` with `Path`. See moq-net's migration for the rest.
+
 ### `Catalog` parses through `FromStr` (#6471)
 
 The inherent `Catalog::from_str` is replaced by `impl FromStr for Catalog`, with the same `Error`.

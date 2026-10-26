@@ -5,6 +5,10 @@ Rolling a cluster across a release also follows the [upgrade guide](https://moq.
 
 ## Unreleased
 
+### `moq_net::Path` has no lifetime
+
+`auth` token fields that were `PathOwned` are `moq_net::Path`. See moq-net's migration for the rest.
+
 ### Tiers are metric-safe names (#6778)
 
 `--cluster-tier` and the auth server's grant and refusal `tier` must be `/`-joined segments of ASCII letters, digits, `.`, `_`, and `-`.

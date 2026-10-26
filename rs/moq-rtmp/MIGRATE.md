@@ -4,6 +4,10 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### `moq_net::Path` has no lifetime
+
+Entry points that took `impl moq_net::AsPath` take `impl Into<moq_net::Path>`; `&str`, `String`, and `&Path` arguments still work. See moq-net's migration for the rest.
+
 ### `run` and `Config` are removed
 
 `run`, `Config`, `ActivePaths`, and `PathGuard` are gone.
