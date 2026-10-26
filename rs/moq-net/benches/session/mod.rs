@@ -469,7 +469,10 @@ impl<B: Backend> Cluster<B> {
 			this.pools.push(pool);
 			for index in 0..shape.broadcasts {
 				let broadcast = origin
-					.publish(path(publisher * shape.broadcasts + index), Default::default())
+					.publish(
+						moq_net::Path::try_from(path(publisher * shape.broadcasts + index)).unwrap(),
+						Default::default(),
+					)
 					.unwrap();
 				this.tracks.push(
 					broadcast
@@ -532,7 +535,12 @@ struct Viewer {
 impl Viewer {
 	/// Resolve `path` and subscribe to each of its `tracks`.
 	async fn watch(&mut self, path: &str, tracks: &[impl AsRef<str>], subscription: Option<track::Subscription>) {
-		let broadcast = self.origin.consume().routed_broadcast(path).await.unwrap();
+		let broadcast = self
+			.origin
+			.consume()
+			.routed_broadcast(moq_net::Path::new(path).unwrap())
+			.await
+			.unwrap();
 		for track in tracks {
 			self.subscribers.push(
 				broadcast
@@ -592,7 +600,12 @@ impl<B: Backend> Room<B> {
 			let mut viewer = cluster.join((viewer + 1) % shape.relays, false).await;
 			for broadcast in broadcasts {
 				if shape.fetch {
-					let source = viewer.origin.consume().routed_broadcast(path(broadcast)).await.unwrap();
+					let source = viewer
+						.origin
+						.consume()
+						.routed_broadcast(moq_net::Path::try_from(path(broadcast)).unwrap())
+						.await
+						.unwrap();
 					viewer.fetches.push((broadcast, source.track(TRACK).unwrap()));
 				} else {
 					viewer.watch(&path(broadcast), &[TRACK], shape.subscription()).await;
@@ -1028,7 +1041,7 @@ impl<B: Backend> DashRoom<B> {
 			for project in 0..shape.projects {
 				let path = format!(".stats/{project}/node/{node}");
 				let broadcast = B::origin(&cluster.relays[node])
-					.publish(path.as_str(), Default::default())
+					.publish(moq_net::Path::new(path.as_str()).unwrap(), Default::default())
 					.unwrap();
 				for name in &names {
 					tracks.push(broadcast.create_track(name.as_str(), timed()).unwrap());
@@ -1177,7 +1190,14 @@ impl<B: Backend> ChurnRoom<B> {
 		for _ in 0..shape.sessions {
 			let mut viewer = cluster.join(0, false).await;
 			viewer.watch(&path(0), &held, None).await;
-			broadcasts.push(viewer.origin.consume().routed_broadcast(path(0)).await.unwrap());
+			broadcasts.push(
+				viewer
+					.origin
+					.consume()
+					.routed_broadcast(moq_net::Path::try_from(path(0)).unwrap())
+					.await
+					.unwrap(),
+			);
 			viewers.push(viewer);
 		}
 		Self {
@@ -1326,7 +1346,7 @@ pub(crate) fn withdrawal<B: Backend>(c: &mut Criterion) {
 							let live: Vec<_> = (0..broadcasts)
 								.map(|i| {
 									B::origin(&cluster.relays[i % (relays - 1)])
-										.publish(path(i), Default::default())
+										.publish(moq_net::Path::try_from(path(i)).unwrap(), Default::default())
 										.unwrap()
 								})
 								.collect();

@@ -352,7 +352,9 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn the_first_manifest_lists_inline_video() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("live").unwrap()).expect("publish");
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("live").unwrap())
+			.expect("publish");
 		broadcast.announce(run()).expect("announce");
 		let inline = hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		let (_catalog, _registration, _track, mut media) =
@@ -372,9 +374,13 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_denied_video_never_holds_the_manifest() {
 		let origin = moq_tokio::origin::spawn();
-		let broadcast = origin.create_broadcast(moq_net::Path::new("room/live").unwrap()).unwrap();
+		let broadcast = origin
+			.create_broadcast(moq_net::Path::new("room/live").unwrap())
+			.unwrap();
 		broadcast.announce(run()).unwrap();
-		let secret = origin.create_broadcast(moq_net::Path::new("room/secret").unwrap()).unwrap();
+		let secret = origin
+			.create_broadcast(moq_net::Path::new("room/secret").unwrap())
+			.unwrap();
 		secret.announce(Default::default()).unwrap();
 		let catalog = moq_mux::catalog::Producer::new(&mut broadcast.broadcast().clone(), Default::default()).unwrap();
 		let reserved = catalog.reserve();
