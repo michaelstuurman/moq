@@ -3579,7 +3579,7 @@ mod tests {
 	async fn a_publication_waits_for_a_configured_token() {
 		let shared = shared();
 		let publish = crate::origin::spawn();
-		let broadcast = publish.create_broadcast("room").unwrap();
+		let broadcast = publish.create_broadcast(moq_net::Path::new("room").unwrap()).unwrap();
 		broadcast.announce(moq_net::origin::Route::default()).unwrap();
 		let server_origin = crate::origin::spawn();
 
