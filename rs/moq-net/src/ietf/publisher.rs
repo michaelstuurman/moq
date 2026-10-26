@@ -1358,7 +1358,18 @@ impl Publisher {
 			};
 			let request_id = msg.request_id;
 			let track_name = msg.track_name.clone();
-			let absolute = self.origin.absolute(&msg.track_namespace)?;
+			let absolute = match self.origin.absolute(&msg.track_namespace) {
+				Ok(absolute) => absolute,
+				Err(err) => {
+					let error = ietf::RequestError {
+						request_id: None,
+						error_code: request::to_code(&err, request::Kind::Subscribe, self.version),
+						reason_phrase: "namespace too long under this root".into(),
+						retry_interval: 0,
+					};
+					return super::request_stream::reject(stream, error).await;
+				}
+			};
 
 			tracing::debug!(id = %request_id, broadcast = %absolute, track = %track_name, "subscribe started");
 
@@ -9655,6 +9666,40 @@ mod serve_tests {
 			assert_eq!(refusal_code(&h.log.writes.lock().unwrap()[mark..], version), Some(0x10));
 			assert!(h.log.closes().is_empty());
 		}
+	}
+
+	/// A namespace that overflows `Path::MAX_BYTES` under a deep root is refused per
+	/// request, and the session stays open.
+	#[moq_clock::test]
+	async fn a_namespace_too_long_under_the_root_is_refused_per_request() {
+		let version = Version::Draft22;
+		let h = serve(version);
+		let root = "r".repeat(crate::Path::MAX_BYTES - 2);
+		let scoped = h
+			._origin
+			.consume()
+			.scope(root.as_str(), &crate::Patterns::from(crate::Pattern::all()))
+			.unwrap();
+		let publisher = Publisher::new(
+			crate::time::sim(),
+			crate::driver::Transport::new(h.session.clone()),
+			scoped,
+			Control::new(None, false),
+			None,
+			peer::PeerSetup::default(),
+			version,
+		);
+		let stream = Stream::open(&mut crate::driver::Transport::new(h.session.clone()), version)
+			.await
+			.unwrap();
+		let mark = h.log.writes.lock().unwrap().len();
+		publisher
+			.run_subscribe_stream(stream, subscribe(Filter::NextObject, None))
+			.await
+			.unwrap();
+		let code = request::to_code(&Error::from(crate::path::TooLong), request::Kind::Subscribe, version);
+		assert_eq!(refusal_code(&h.log.writes.lock().unwrap()[mark..], version), Some(code));
+		assert!(h.log.closes().is_empty());
 	}
 
 	/// Legal requests we don't serve are refused NOT_SUPPORTED one at a time, and the

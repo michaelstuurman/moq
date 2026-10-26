@@ -138,7 +138,10 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 	// Point the derivative catalog at the source renditions so players fetch them from the
 	// source directly. An empty reference would name the derivative broadcast itself, which
 	// publishes the rungs and nothing else.
-	config.source = source_path.relative(&output_path).filter(|rel| !rel.is_empty());
+	let source = source_path
+		.relative(&output_path)
+		.with_context(|| format!("`{output_path}` cannot reference the source broadcast `{source_path}`"))?;
+	config.source = Some(source).filter(|rel| !rel.is_empty());
 
 	let following = Following {
 		origin: remote.consume(),

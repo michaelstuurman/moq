@@ -305,10 +305,10 @@ test("decode enforces the max part count", () => {
 });
 
 test("decode never allocates per slash of a hostile path", () => {
-	// A peer can send a path as large as a control message; splitting it would hold one entry per
-	// slash, so decode must count separators and stop at the limit instead.
-	const slashes = "/".repeat(1024 * 1024);
-	const parts = "a/".repeat(1024 * 1024);
+	// Splitting a path would hold one entry per slash, so decode must count separators and stop at
+	// the limit instead, even for the most slashes MAX_BYTES admits.
+	const slashes = "/".repeat(Path.MAX_BYTES);
+	const parts = "a/".repeat(Path.MAX_BYTES / 2);
 	const split = spyOn(String.prototype, "split");
 	const indexOf = spyOn(String.prototype, "indexOf");
 	try {
@@ -343,9 +343,12 @@ test("encode and decode enforce the max byte length in UTF-8", () => {
 	expect(Path.decode(atLimit)).toBe(atLimit);
 	expect(() => Path.encode(`${atLimit}b` as Path.Valid)).toThrow();
 	expect(() => Path.decode(`${atLimit}b`)).toThrow();
+	// Measured before normalization, so slashes can't pad a short path past the limit.
+	expect(() => Path.decode(`${"/".repeat(Path.MAX_BYTES)}a`)).toThrow();
 
 	// One UTF-16 unit of "é" is two UTF-8 bytes, so half as many units reach the limit.
 	const wide = "é".repeat(Math.floor(Path.MAX_BYTES / 2)) as Path.Valid;
 	expect(Path.encode(wide)).toBe(wide);
 	expect(() => Path.encode(`${wide}é` as Path.Valid)).toThrow();
+	expect(() => Path.decode(`${wide}é`)).toThrow();
 });

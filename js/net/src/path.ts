@@ -79,6 +79,11 @@ export function parts(path: Valid): string[] {
  * Throws when the path is too deep or too long; use at wire decode sites.
  */
 export function decode(raw: string): Valid {
+	// Measured before normalization, so redundant slashes can't smuggle a longer string.
+	// A UTF-16 unit is at least one UTF-8 byte, so a long string fails without encoding it.
+	if (raw.length > MAX_BYTES || utf8.encode(raw).length > MAX_BYTES) {
+		throw new Error(`path is longer than ${MAX_BYTES} bytes`);
+	}
 	const path = from(raw);
 	return encode(path);
 }

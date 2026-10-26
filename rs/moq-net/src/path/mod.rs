@@ -87,7 +87,7 @@ pub struct TooLong;
 /// use moq_net::Path;
 ///
 /// // Creation automatically trims slashes
-/// let path1 = Path::from_static("/foo/bar/")?;
+/// let path1 = Path::from_static("/foo/bar/");
 /// let path2 = Path::from_static("foo/bar");
 /// assert_eq!(path1, path2);
 ///
@@ -598,7 +598,12 @@ impl From<TooLong> for crate::Error {
 
 impl<V> Decode<V> for Path {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
-		let path = Path::new(&r.string()?)?;
+		// Measured before normalization, so redundant slashes can't smuggle a longer string.
+		let raw = r.string()?;
+		if raw.len() > Path::MAX_BYTES {
+			return Err(DecodeError::BoundsExceeded);
+		}
+		let path = Path::new(&raw)?;
 		if path.parts().count() > Path::MAX_PARTS {
 			return Err(DecodeError::BoundsExceeded);
 		}
@@ -1386,15 +1391,15 @@ mod tests {
 		let (decoded, _) = crate::lite::Tracks::decode_slice(&buf, Version::Lite07).unwrap();
 		assert_eq!(decoded.broadcast.as_str(), longest);
 
-		// Decode refuses a raw string longer than the limit.
-		let mut buf = Vec::new();
-		Encoder::new(&mut buf, Version::Lite04.into())
-			.string(longer.as_str())
-			.unwrap();
-		assert!(matches!(
-			crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode),
-			Err(DecodeError::BoundsExceeded)
-		));
+		// Decode refuses a raw string longer than the limit, even one that normalizes shorter.
+		for raw in [longer.clone(), format!("{}a", "/".repeat(Path::MAX_BYTES))] {
+			let mut buf = Vec::new();
+			Encoder::new(&mut buf, Version::Lite04.into()).string(&raw).unwrap();
+			assert!(matches!(
+				crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode),
+				Err(DecodeError::BoundsExceeded)
+			));
+		}
 	}
 
 	#[test]
