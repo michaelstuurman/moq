@@ -1715,10 +1715,10 @@ struct Mount {
 
 impl Mount {
 	/// Where the handle-side absolute `path` resolves, when it is under this mount
-	/// and the result fits [`Path::MAX_PARTS`].
+	/// and the result fits the wire limits.
 	fn resolve(&self, path: &Path) -> Option<Path> {
 		let resolved = self.target.join(&path.strip_prefix(&self.at)?);
-		(resolved.parts().count() <= Path::MAX_PARTS).then_some(resolved)
+		resolved.fits_wire().then_some(resolved)
 	}
 
 	/// Where the origin-side absolute `path` shows on the handle, when it is at or
@@ -1727,12 +1727,13 @@ impl Mount {
 		Some(self.at.join(&path.strip_prefix(&self.target)?))
 	}
 
-	/// Whether the origin-side absolute `path` has a handle-side name within
-	/// [`Path::MAX_PARTS`], so a reader could ask for it. A route covering the
-	/// target always does.
+	/// Whether the origin-side absolute `path` has a handle-side name within the
+	/// wire limits, so a reader could ask for it. A route covering the target always does.
 	fn names(&self, path: &Path) -> bool {
-		path.strip_prefix(&self.target)
-			.is_none_or(|rest| self.at.parts().count() + rest.parts().count() <= Path::MAX_PARTS)
+		path.strip_prefix(&self.target).is_none_or(|rest| {
+			self.at.parts().count() + rest.parts().count() <= Path::MAX_PARTS
+				&& self.at.len() + usize::from(!self.at.is_empty() && !rest.is_empty()) + rest.len() <= Path::MAX_LEN
+		})
 	}
 
 	/// The handle-side absolute `patterns` beneath this mount, as origin-side
@@ -1800,7 +1801,7 @@ impl OriginScope {
 	}
 
 	/// Where the absolute `path` resolves on the origin: itself, or its mount
-	/// target. `None` when the mount would resolve it past [`Path::MAX_PARTS`].
+	/// target. `None` when the mount would resolve it past the wire limits.
 	fn resolve(&self, path: &Path) -> Option<Path> {
 		match self.mount(path) {
 			Some(mount) => mount.resolve(path),
@@ -2154,7 +2155,7 @@ impl Producer {
 	/// producer may publish under (after [`scope`](Self::scope)) or beneath a
 	/// [`mount`](Self::mount),
 	/// [`Error::BoundsExceeded`] if the full rooted path exceeds
-	/// [`Path::MAX_PARTS`], [`Error::InvalidPath`] if it holds a segment no
+	/// [`Path::MAX_PARTS`] or 64 KiB, [`Error::InvalidPath`] if it holds a segment no
 	/// pattern can spell (`*` or `**`), [`Error::NavigationSegment`] for a literal `.` or `..`,
 	/// or [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
@@ -2176,7 +2177,7 @@ impl Producer {
 		// A decoded prefix and suffix are each within the wire limit, but their
 		// join might not be. Enforcing here bounds the table depth and guarantees the
 		// path can be re-encoded when forwarded.
-		if full.parts().count() > Path::MAX_PARTS {
+		if !full.fits_wire() {
 			return Err(BoundsExceeded.into());
 		}
 		// A path only a pattern could spell (a `*` segment) advertises nowhere, so
@@ -2431,15 +2432,12 @@ impl Producer {
 	/// `at` or `target` overlaps a mount point this producer already has, or `at`
 	/// overlaps an existing target or its own: mounts never chain, in whatever order they are added,
 	/// so a target is always read as the origin holds it. Mounts may share a target.
-	/// [`Error::BoundsExceeded`] if either rooted path exceeds [`Path::MAX_PARTS`],
+	/// [`Error::BoundsExceeded`] if either rooted path exceeds [`Path::MAX_PARTS`] or 64 KiB,
 	/// and [`Error::InvalidPath`] if `at` holds a segment no pattern can spell.
 	pub fn mount(&self, at: impl Into<Path>, target: impl Into<Path>) -> Result<Producer, Error> {
 		let at = self.root.join(&at.into());
 		let target = self.root.join(&target.into());
-		if [&at, &target]
-			.into_iter()
-			.any(|path| path.parts().count() > Path::MAX_PARTS)
-		{
+		if !at.fits_wire() || !target.fits_wire() {
 			return Err(BoundsExceeded.into());
 		}
 		// A mount point no pattern can spell could never be announced or authorized.
@@ -2533,7 +2531,7 @@ impl Announcing {
 	fn new(producer: &Producer, prefix: impl Into<Path>) -> Result<Self, Error> {
 		let requested = producer.root.join(&prefix.into());
 		publish_path(&requested)?;
-		if requested.parts().count() > Path::MAX_PARTS {
+		if !requested.fits_wire() {
 			return Err(BoundsExceeded.into());
 		}
 		let claim = prefix_claim(&requested)?;
@@ -9690,13 +9688,25 @@ mod tests {
 	}
 
 	#[moq_clock::test]
-	async fn create_broadcast_accepts_a_max_depth_path() {
+	async fn create_broadcast_accepts_a_path_at_the_wire_limits() {
 		let producer = origin(1).produce();
 		let path = vec!["a"; Path::MAX_PARTS].join("/");
 		let _broadcast = producer.create_broadcast(path.as_str()).expect("max depth is allowed");
 		let deeper = vec!["a"; Path::MAX_PARTS + 1].join("/");
 		assert!(matches!(
 			producer.create_broadcast(deeper.as_str()),
+			Err(Error::BoundsExceeded(_))
+		));
+
+		// The byte limit counts the root the producer joins on.
+		let rooted = producer.scope("r", &Patterns::from(Pattern::all())).unwrap();
+		let longest = "b".repeat(Path::MAX_LEN - 2);
+		let _long = rooted
+			.create_broadcast(longest.as_str())
+			.expect("max length is allowed");
+		let longer = "c".repeat(Path::MAX_LEN - 1);
+		assert!(matches!(
+			rooted.create_broadcast(longer.as_str()),
 			Err(Error::BoundsExceeded(_))
 		));
 	}

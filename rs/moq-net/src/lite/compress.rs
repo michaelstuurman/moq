@@ -56,7 +56,7 @@ impl Live {
 			(false, true) => Path::new(head),
 			(false, false) => Path::concat(head, path.rest.as_str()),
 		};
-		if suffix.parts().count() > Path::MAX_PARTS {
+		if !suffix.fits_wire() {
 			return Err(Error::ProtocolViolation);
 		}
 		Ok(suffix)
@@ -508,6 +508,22 @@ mod tests {
 		decoder.start(p, h).unwrap();
 		assert!(matches!(
 			decoder.start(path(1, Path::MAX_PARTS as u64, "y"), chain(0, &[], 0)),
+			Err(Error::ProtocolViolation)
+		));
+	}
+
+	#[test]
+	fn rejects_a_resolved_path_too_long() {
+		let mut decoder = AnnounceDecoder::default();
+		let head = "x".repeat(Path::MAX_LEN - 2);
+		let (p, h) = literal(&head, &[]);
+		decoder.start(p, h).unwrap();
+
+		// `head/y` is exactly the limit, and one byte more is refused.
+		let (suffix, _) = decoder.start(path(1, 1, "y"), chain(0, &[], 0)).unwrap();
+		assert_eq!(suffix.len(), Path::MAX_LEN);
+		assert!(matches!(
+			decoder.start(path(1, 1, "yz"), chain(0, &[], 0)),
 			Err(Error::ProtocolViolation)
 		));
 	}

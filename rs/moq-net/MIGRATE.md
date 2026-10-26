@@ -13,6 +13,7 @@ There is one owned `Path` type: a short path is stored inline and a long one sha
 - `AsPath` is gone. Functions that took `impl AsPath` take `impl Into<Path>`, which still accepts `&str`, `String`, `&String`, `Path`, and `&Path`.
 - `Path::{has_prefix, strip_prefix, join, relative}` take `&Path`: write `path.has_prefix(&Path::new("room"))`.
 - `Path::new` copies its argument. Use `Path::from_static("room")` for a literal, which borrows it.
+- A path longer than 64 KiB is refused like one deeper than `Path::MAX_PARTS`: encoding or decoding it fails with `BoundsExceeded`, and so does publishing, announcing, or mounting it on an origin.
 
 ### Exports without a consumer are gone
 

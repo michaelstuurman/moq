@@ -91,6 +91,14 @@ impl Path {
 	/// and publishing one to an origin is rejected.
 	pub const MAX_PARTS: usize = 32;
 
+	// Longest path on the wire, in bytes, matching the 64 KiB lite message limit.
+	pub(crate) const MAX_LEN: usize = u16::MAX as usize;
+
+	// Whether this path fits the wire limits on depth and length.
+	pub(crate) fn fits_wire(&self) -> bool {
+		self.len() <= Self::MAX_LEN && self.parts().count() <= Self::MAX_PARTS
+	}
+
 	/// Create a new Path by copying a string slice.
 	///
 	/// Leading and trailing slashes are automatically trimmed.
@@ -127,7 +135,7 @@ impl Path {
 					buf: buf.clone(),
 					start,
 				}),
-				// An offset past 64 KiB doesn't fit, so copy the rest instead.
+				// Only wire paths are capped at 64 KiB, so a longer local path copies the rest instead.
 				Err(_) => Path(Repr::copy(rest)),
 			},
 			_ => Path(Repr::copy(rest)),
@@ -515,7 +523,7 @@ impl Display for Path {
 impl<V> Decode<V> for Path {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
 		let path: Path = r.string()?.into();
-		if path.parts().count() > Path::MAX_PARTS {
+		if !path.fits_wire() {
 			return Err(DecodeError::BoundsExceeded);
 		}
 		Ok(path)
@@ -524,7 +532,7 @@ impl<V> Decode<V> for Path {
 
 impl<V> Encode<V> for Path {
 	fn encode(&self, w: &mut Encoder<'_>, _: V) -> Result<(), EncodeError> {
-		if self.parts().count() > Path::MAX_PARTS {
+		if !self.fits_wire() {
 			return Err(EncodeError::BoundsExceeded);
 		}
 		w.string(self.as_str())
@@ -1165,6 +1173,33 @@ mod tests {
 		let mut buf = Vec::new();
 		Encoder::new(&mut buf, Version::Lite04.into())
 			.string(too_deep.as_str())
+			.unwrap();
+		assert!(matches!(
+			crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode),
+			Err(DecodeError::BoundsExceeded)
+		));
+	}
+
+	#[test]
+	fn test_wire_max_len() {
+		use crate::lite::Version;
+
+		let longest = "a".repeat(Path::MAX_LEN);
+		let longer = format!("{longest}b");
+
+		// Encode enforces the limit, and decode round-trips at it.
+		let mut buf = Path::new(&longest).encode_bytes(Version::Lite04).unwrap();
+		let decoded = crate::coding::decode_buf(&mut buf, Version::Lite04, Path::decode).unwrap();
+		assert_eq!(decoded.as_str(), longest);
+		assert!(matches!(
+			Path::new(&longer).encode_bytes(Version::Lite04),
+			Err(EncodeError::BoundsExceeded)
+		));
+
+		// Decode enforces the limit on a raw string that encode would have refused.
+		let mut buf = Vec::new();
+		Encoder::new(&mut buf, Version::Lite04.into())
+			.string(longer.as_str())
 			.unwrap();
 		assert!(matches!(
 			crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode),
