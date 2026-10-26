@@ -3654,6 +3654,22 @@ mod tests {
 		assert!(rendered.contains("#EXT-X-DISCONTINUITY\n"), "{rendered}");
 	}
 
+	// A successor starting at the same group leaves the record no group to serve, so it is a gap
+	// rather than an advertised segment that can only 404.
+	#[tokio::test(start_paused = true)]
+	async fn a_record_its_successor_leaves_no_group_is_a_gap() {
+		let test = Records::with(&["video0"], &[]);
+		let (_track, mut video0) = test.publish("video0");
+		video0.push(&gop(0)).unwrap();
+		video0.push(&hang::hls::Record::new(1, 1, 2_000)).unwrap();
+		video0.push(&hang::hls::Record::new(2, 1, 3_000)).unwrap();
+		video0.push(&hang::hls::Record::new(3, 2, 4_000)).unwrap();
+
+		let snapshot = test.listed("video0", 2).await;
+		assert_eq!(numbers(&snapshot), [0, 1, 2]);
+		assert_eq!(gaps(&snapshot), [1]);
+	}
+
 	// The lead stays put while it is listed and enabled, so a rendition added later (whose
 	// records are numbered from its own start) never makes the others' segments gaps.
 	#[tokio::test(start_paused = true)]
@@ -3729,6 +3745,27 @@ mod tests {
 				assert_eq!(numbers(&test.listed("video0", 2).await), [2]);
 			}
 		}
+	}
+
+	// A replacement reading another record track shares no numbering with its predecessor, so it
+	// lists that track's records from the first.
+	#[tokio::test(start_paused = true)]
+	async fn a_replacement_on_another_record_track_lists_all_of_it() {
+		let mut test = Records::with(&["video0"], &[]);
+		let (_, mut records) = test.publish("video0");
+		let _media = test.media("video0", 4);
+		for sequence in 0..4 {
+			records.push(&gop(sequence)).unwrap();
+		}
+		test.listed("video0", 2).await;
+
+		test.catalog.video.renditions.get_mut("video0").unwrap().hls = Some(hls("video0b"));
+		let (_, mut fresh) = test.publish("video0b");
+		for sequence in 0..2 {
+			fresh.push(&gop(sequence)).unwrap();
+		}
+		test.sync();
+		assert_eq!(numbers(&test.listed("video0", 0).await), [0]);
 	}
 
 	/// The `Push` events a fresh subscriber to `track`'s records reads before it is caught up.

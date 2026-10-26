@@ -601,9 +601,11 @@ impl Live {
 				continue;
 			};
 			if let Err(err) = output.push(&record) {
-				tracing::warn!(%err, "HLS record publish failed; dropping the record track");
-				let _ = output.finish();
-				self.output = None;
+				tracing::warn!(%err, "HLS record publish failed; aborting the record track");
+				// Aborted rather than finished: a clean end reads as a complete recording.
+				if let Some(output) = self.output.take() {
+					output.abort(err.reason());
+				}
 			}
 		}
 		let declare = match self.segmenter.declared() {
@@ -884,10 +886,8 @@ impl Recorder {
 		let published = {
 			let mut live = self.live.lock().unwrap();
 			if let Err(err) = live.segmenter.frame(group, pts) {
-				tracing::warn!(%err, "HLS report rejected; dropping the record track");
-				live.segmenter.closed = true;
-				// Dropped without a finish, so subscribers see the record track fail rather than end.
-				live.output = None;
+				tracing::warn!(%err, "HLS report rejected; aborting the record track");
+				live.abort(err.reason());
 			}
 			live.publish()
 		};
@@ -1376,7 +1376,13 @@ mod test {
 		while let Ok(Some(_)) = next {
 			next = consumer.next().await;
 		}
-		assert!(next.is_err(), "the track fails rather than ends");
+		// Aborted with a cause, not dropped, so a reader can tell a refused report from a gone
+		// publisher.
+		let err = next.expect_err("the track fails rather than ends");
+		assert!(
+			matches!(err.reason(), moq_net::Error::Stream(moq_net::StreamError::Internal)),
+			"{err:?}"
+		);
 	}
 
 	#[tokio::test]

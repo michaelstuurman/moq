@@ -685,9 +685,12 @@ mod tests {
 		assert_eq!(oneshot(app.clone(), denied_uri).await.status(), StatusCode::FORBIDDEN);
 		assert_eq!(oneshot(app.clone(), allowed_uri).await.status(), StatusCode::OK);
 		assert_eq!(
-			oneshot(app, &format!("/room/live/@{RUN}/video/video0/seg/53e0aafd.9999.m4s"))
-				.await
-				.status(),
+			oneshot(
+				app,
+				&format!("/room/live/@{RUN}/video/video0/seg/{}.9999.m4s", tag("video0"))
+			)
+			.await
+			.status(),
 			StatusCode::NOT_FOUND
 		);
 		// Readiness settles even when no rendition is authorized; it must not need

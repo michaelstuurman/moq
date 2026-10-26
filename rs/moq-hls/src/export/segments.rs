@@ -187,6 +187,9 @@ pub(crate) struct Row {
 	/// Content stopped here: a zero-duration record holding no media, listed as a gap so the
 	/// numbering stays consecutive.
 	pub stop: bool,
+	/// Whether a later segment started after this one, so its groups are all complete. One only a
+	/// stop bounds may end in a group the publisher is still writing.
+	pub complete: bool,
 }
 
 /// A consistent read of the window, for rendering one playlist (the serve path only).
@@ -403,27 +406,20 @@ impl Producer {
 
 	/// The first groups of the newest segments holding media, to bootstrap an inline-parameter-set
 	/// codec's init from (a segment starts at a group, and a group at a keyframe), in the order to
-	/// try them: the newest whose group a later one followed, which is complete and so read from
-	/// cache at once, then the newest when only a stop bounds it and its group may still be open.
+	/// try them: the newest whose first group is complete, read from cache at once, then the
+	/// newest when its group may still be open.
 	pub fn init_groups(&self) -> Vec<u64> {
 		let state = self.state.read();
-		let rows = &state.rows;
-		// A row is listed once its successor arrives, so with nothing after it, a later segment
-		// already started.
-		let complete = |i: usize| {
-			let groups = &rows[i].groups;
-			groups.end > groups.start + 1 || rows.get(i + 1).is_none_or(|next| !next.stop)
-		};
-		let mut media = (0..rows.len()).rev().filter(|&i| !rows[i].stop);
+		let complete = |row: &Row| row.complete || row.groups.end > row.groups.start + 1;
+		let mut media = state.rows.iter().rev().filter(|row| !row.stop);
 		let Some(newest) = media.next() else {
 			return Vec::new();
 		};
-		let newest_group = rows[newest].groups.start;
 		if complete(newest) {
-			return vec![newest_group];
+			return vec![newest.groups.start];
 		}
-		let older = media.find(|&i| complete(i)).map(|i| rows[i].groups.start);
-		older.into_iter().chain([newest_group]).collect()
+		let older = media.find(|row| complete(row)).map(|row| row.groups.start);
+		older.into_iter().chain([newest.groups.start]).collect()
 	}
 
 	/// Whether the playlist has anything to serve yet (at least one segment, or the records
@@ -692,6 +688,7 @@ mod tests {
 			end: Duration::from(pts) + Duration::from_millis(duration_ms),
 			discontinuity: 0,
 			stop: false,
+			complete: true,
 		}
 	}
 
@@ -830,11 +827,11 @@ mod tests {
 		assert_eq!(live.row("00000000", 0), None, "another record track's numbering misses");
 		assert_eq!(live.init_groups(), [0], "a stop holds no media");
 		live.push(row(2, 1, 1_000, 1_000), window);
-		live.push(row(3, 2, 2_000, 1_000), window);
+		// Only the stop after it bounds group 2, which the row says before the stop is listed.
 		live.push(
 			Row {
-				stop: true,
-				..row(4, 3, 3_000, 0)
+				complete: false,
+				..row(3, 2, 2_000, 1_000)
 			},
 			window,
 		);
@@ -843,6 +840,14 @@ mod tests {
 			[1, 2],
 			"a group only a stop bounds may be open, so a complete one goes first"
 		);
+		live.push(
+			Row {
+				stop: true,
+				..row(4, 3, 3_000, 0)
+			},
+			window,
+		);
+		assert_eq!(live.init_groups(), [1, 2]);
 	}
 
 	#[test]

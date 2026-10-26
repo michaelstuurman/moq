@@ -280,11 +280,19 @@ pub(crate) enum Content {
 	Pending,
 }
 
+/// Where a retired rendition stops listing its records, for its replacement to take over.
+pub(crate) struct Handoff {
+	/// The record track it read.
+	track: String,
+	/// The first record it will not list.
+	next: u64,
+}
+
 /// Which records a rendition lists, shared by its records watcher and [`Rendition::retire`] so a
 /// replacement starts exactly where a retired instance stops.
 #[derive(Default)]
 struct Claim {
-	/// Records numbered below this are a predecessor's (see [`Rendition::with_start`]).
+	/// Records numbered below this are a predecessor's (see [`Rendition::after`]).
 	start: u64,
 	/// The first record this instance will not list: the one after its pending record, else the one
 	/// after the newest it handled.
@@ -507,9 +515,13 @@ impl Rendition {
 		*self.watcher.lock().expect("watcher lock poisoned") = Some(watcher);
 	}
 
-	/// List only records numbered `start` or later, the rest being a retired predecessor's (see
-	/// [`retire`](Self::retire)).
-	pub(crate) fn with_start(mut self, start: u64) -> Self {
+	/// Take over from a retired predecessor (see [`retire`](Self::retire)): list only the records
+	/// it won't. One reading another record track shares no numbering with it, so it lists all.
+	pub(crate) fn after(mut self, handoff: Option<&Handoff>) -> Self {
+		let Some(handoff) = handoff.filter(|handoff| handoff.track == self.hls.track) else {
+			return self;
+		};
+		let start = handoff.next;
 		self.claim = Mutex::new(Claim {
 			start,
 			next: start,
@@ -520,20 +532,22 @@ impl Rendition {
 	}
 
 	/// End the window once the segment its records are still bounding is listed, because the
-	/// catalog dropped or replaced the rendition. Returns the first record it will not list, where
-	/// a replacement starts.
+	/// catalog dropped or replaced the rendition. Returns where a replacement takes over.
 	///
 	/// Its records go on (a replacement follows them too, and the publisher never finishes a
 	/// dropped track's), so they can't end it. Ending it at once would lose the last segment of
 	/// every recording, since it is listed only when the record after it arrives.
-	pub(crate) fn retire(&self) -> u64 {
+	pub(crate) fn retire(&self) -> Handoff {
 		let next = {
 			let mut claim = self.claim.lock().expect("claim lock poisoned");
 			claim.retired = true;
 			claim.next
 		};
 		self.retiring.send_replace(true);
-		next
+		Handoff {
+			track: self.hls.track.clone(),
+			next,
+		}
 	}
 
 	/// The [tag](segments::tag) every segment URL carries.
@@ -1309,8 +1323,8 @@ async fn watch_records(
 								broken = false;
 								rendition.push(row);
 							}
-							// A successor that goes backwards can't bound it, but its number keeps
-							// its slot: a hole would renumber every later URI.
+							// A successor that holds none of its groups can't bound it, but its
+							// number keeps its slot: a hole would renumber every later URI.
 							None => {
 								rendition.push(gap(&rendition, &previous, broken));
 								broken = true;
@@ -1386,10 +1400,12 @@ fn gap(rendition: &Rendition, record: &moq_mux::hls::Entry, broken: bool) -> seg
 		end: pts,
 		discontinuity: rendition.fanout.stamp(record.sequence, broken, pts),
 		stop: true,
+		complete: false,
 	}
 }
 
-/// The row of `record`, bounded by its successor `next`, or `None` when `next` goes backwards.
+/// The row of `record`, bounded by its successor `next`, or `None` when `next` leaves it no
+/// group or goes backwards.
 fn row(
 	rendition: &Rendition,
 	record: &moq_mux::hls::Entry,
@@ -1397,10 +1413,10 @@ fn row(
 	broken: bool,
 ) -> Option<segments::Row> {
 	let pts = Duration::from(record.pts);
-	if next.group < record.group || Duration::from(next.pts) < pts {
+	if next.group <= record.group || Duration::from(next.pts) < pts {
 		tracing::warn!(
 			segment = record.sequence,
-			"HLS record goes backwards; dropping its segment"
+			"HLS record's successor holds none of its groups; listing it as a gap"
 		);
 		return None;
 	}
@@ -1416,6 +1432,7 @@ fn row(
 		end,
 		discontinuity: rendition.fanout.stamp(record.sequence, broken, end),
 		stop: false,
+		complete: !next.is_stop(),
 	})
 }
 
@@ -1593,6 +1610,7 @@ mod tests {
 			end: Duration::from_secs(1),
 			discontinuity: 0,
 			stop: false,
+			complete: true,
 		};
 		let segment = rendition.fetch(&row);
 		tokio::pin!(segment);

@@ -1019,7 +1019,7 @@ type HlsRecord = {
   "sequence": number,
   "group": number,
   "pts": number,
-  "duration": number | undefined,
+  "duration"?: number,
 }
 ~~~
 

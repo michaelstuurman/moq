@@ -325,6 +325,16 @@ impl Error {
 	pub(crate) fn unsupported_container(container: &hang::catalog::UnknownContainer) -> Self {
 		Self::UnsupportedContainer(container.kind().unwrap_or("<missing>").to_string())
 	}
+
+	/// The reason a track this error aborts gives its subscribers. Only a transport error has a
+	/// wire code; anything else reaches them as a generic failure while the cause stays here.
+	pub(crate) fn reason(&self) -> moq_net::Error {
+		match self {
+			Self::Moq(err) => err.clone(),
+			Self::Json(moq_json::Error::Net(err)) => err.clone(),
+			_ => moq_net::StreamError::Internal.into(),
+		}
+	}
 }
 
 impl From<anyhow::Error> for Error {

@@ -244,13 +244,7 @@ impl<E: CatalogExt> Outputs<E> {
 	/// The three tracks carry one catalog, so a failure part way through `emit` must not leave some
 	/// of them serving a newer catalog than the others. Consumers see the error instead.
 	fn abort(&mut self, err: &crate::Error) {
-		// Only a transport error has a wire code; anything else (an extension that won't serialize)
-		// reaches consumers as a generic failure while the cause stays on the producer.
-		let reason = match err {
-			crate::Error::Moq(err) => err.clone(),
-			crate::Error::Json(moq_json::Error::Net(err)) => err.clone(),
-			_ => moq_net::StreamError::Internal.into(),
-		};
+		let reason = err.reason();
 		// Idempotent: a track that is already closed keeps its first reason.
 		let _ = self.hang.clone().abort(reason.clone());
 		let _ = self.hangz.clone().abort(reason.clone());

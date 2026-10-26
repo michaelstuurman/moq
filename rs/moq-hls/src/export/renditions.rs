@@ -454,10 +454,10 @@ impl Producer {
 			.collect();
 		// A replacement lists the records its retired predecessor won't, so no record is muxed
 		// under both configs.
-		let mut starts = BTreeMap::new();
+		let mut handoffs = BTreeMap::new();
 		for key in stale {
 			if let Some(rendition) = current.renditions.remove(&key) {
-				starts.insert(key, rendition.retire());
+				handoffs.insert(key, rendition.retire());
 			}
 		}
 
@@ -481,7 +481,7 @@ impl Producer {
 				continue;
 			};
 			let rendition = match Rendition::video(name.clone(), video, source, hls, clock, self.fanout()) {
-				Ok(rendition) => Arc::new(rendition.with_start(starts.get(&key).copied().unwrap_or(0))),
+				Ok(rendition) => Arc::new(rendition.after(handoffs.get(&key))),
 				Err(err) => {
 					tracing::warn!(rendition = name, %err, "ignoring unservable video rendition");
 					continue;
@@ -507,7 +507,7 @@ impl Producer {
 				continue;
 			};
 			let rendition = match Rendition::audio(name.clone(), audio, source, hls, clock, self.fanout()) {
-				Ok(rendition) => Arc::new(rendition.with_start(starts.get(&key).copied().unwrap_or(0))),
+				Ok(rendition) => Arc::new(rendition.after(handoffs.get(&key))),
 				Err(err) => {
 					tracing::warn!(rendition = name, %err, "ignoring unservable audio rendition");
 					continue;
