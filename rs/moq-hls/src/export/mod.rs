@@ -8,10 +8,9 @@
 //! playlist. A `moq-archive` recording served by its `Consumer` is served the same way: its
 //! playlists read only the stored records, and a segment GETs only its rendition's objects.
 //!
-//! Record `n` of every rendition is segment `n`: the publisher numbers its renditions' segments
-//! together, so every edge agrees without coordinating. The edge checks each rendition's segment
-//! against the lead rendition's (the first enabled video, else audio) and lists one that does not
-//! line up as `EXT-X-GAP`, which serves nothing.
+//! A rendition's record `n` is its segment `n`: each rendition numbers its own segments, so every
+//! edge agrees without coordinating. Nothing compares numbers across renditions; players match
+//! renditions by timestamp, and segments line up wherever the publisher's keyframes do.
 //! An inline-parameter-set codec with no catalog `description` GETs one keyframe
 //! group on the first playlist render (in the background on a manifest render) to build its
 //! init, then caches it.
@@ -458,7 +457,7 @@ mod tests {
 		let duration = Duration::from_secs(2);
 		moq_mux::catalog::Config::default().with_hls(
 			moq_mux::hls::Config::default()
-				.with_duration_min(duration)
+				.with_duration(duration)
 				.with_duration_hint(duration),
 		)
 	}
@@ -1768,8 +1767,43 @@ mod tests {
 		drop((media, catalog, broadcast));
 	}
 
+	// A duration marker already times a video group's last sample, so the segment's end is not
+	// pinned on an earlier sample instead.
+	#[tokio::test]
+	async fn a_timed_trailing_sample_keeps_its_duration() {
+		let origin = produce_origin();
+		let broadcast = origin.create_broadcast("live").expect("publish allowed");
+		broadcast.announce(Default::default()).expect("publish allowed");
+		settle().await;
+		let mut producer = broadcast.broadcast().clone();
+		let catalog = hls_catalog(&mut producer);
+		let track = producer.create_track("video0", timed()).unwrap();
+		let container = moq_mux::catalog::hang::Container::Legacy(moq_mux::container::Kind::Video);
+		let mut media = catalog.video(track, container, video_config()).unwrap();
+		media.write(vp8_frame(0, true)).unwrap();
+		media.write(vp8_frame(33_000, false)).unwrap();
+		// The marker times the delta; the next segment starts on the grid at 2s.
+		media
+			.cut(Some(moq_net::Timestamp::from_micros(66_000).unwrap()))
+			.unwrap();
+		media.write(vp8_frame(2_000_000, true)).unwrap();
+		media.write(vp8_frame(4_000_000, true)).unwrap();
+
+		let broadcaster = Broadcaster::new(crate::resolved(&origin, "live").await, Config::default());
+		let _ = tokio::time::timeout(Duration::from_secs(5), broadcaster.ready()).await;
+		let rendition = broadcaster.rendition(Kind::Video, "video0").expect("rendition");
+		let _ = tokio::time::timeout(Duration::from_secs(5), rendition.playable()).await;
+
+		let segment = rendition.listed_segment(0).await.unwrap().expect("segment 0");
+		let timescale = rendition.muxer().unwrap().timescale().as_u64();
+		let frame = Some(u32::try_from(timescale * 33 / 1_000).unwrap());
+		assert_eq!(sample_durations(&segment), [frame, frame]);
+
+		drop((media, catalog, broadcast));
+	}
+
 	// The DASH half of the fetch-on-demand path: the manifest renders from the same record
-	// windows as the HLS playlists (dynamic while live, aligned S entries across renditions),
+	// windows as the HLS playlists (dynamic while live, matching S entries across renditions),
 	// and $Time$ addressing resolves a segment's pts to the same bytes its number does.
 	#[tokio::test]
 	async fn serves_dash_manifest_and_time_addressed_segments() {
@@ -1815,7 +1849,7 @@ mod tests {
 		let run = broadcaster.instance();
 		let video_tag = broadcaster.rendition(Kind::Video, "video0").unwrap().tag().to_string();
 		assert!(manifest.contains(&format!("media=\"@{run}/video/video0/seg/{video_tag}.t$Time$.m4s\"")));
-		// Both renditions list the same aligned segment spans (the live edge is not listed).
+		// Both renditions cut the same segment spans (the live edge is not listed).
 		assert_eq!(manifest.matches("<S t=\"0\" d=\"2000\"/>").count(), 2, "{manifest}");
 		assert_eq!(manifest.matches("<S t=\"2000\" d=\"2000\"/>").count(), 2);
 		assert!(
@@ -1840,7 +1874,7 @@ mod tests {
 			"media=\"@{run}/video/video0/seg/{video_tag}.t$Time$.m4s?jwt=abc.def\""
 		)));
 
-		// $Time$ resolves to the same bytes the aligned number does; unknown times miss.
+		// $Time$ resolves to the same bytes the number does; unknown times miss.
 		let by_time = video_rendition
 			.listed_segment_at(2_000)
 			.await
@@ -2211,7 +2245,7 @@ mod tests {
 		settle().await;
 		let catalog = hls_catalog(&mut broadcast.broadcast().clone());
 		let mut audio = audio(&catalog, &broadcast, "audio0", opus());
-		// 500ms groups pack into segments of the 2s minimum.
+		// 500ms groups pack into the 2s grid.
 		for micros in (0..=6_000_000u64).step_by(500_000) {
 			let keyframe = audio.needs_keyframe();
 			audio.write(frame(micros, keyframe)).unwrap();
@@ -2241,7 +2275,7 @@ mod tests {
 		broadcast.announce(Default::default()).expect("publish allowed");
 		settle().await;
 		let catalog = hls_catalog(&mut broadcast.broadcast().clone());
-		// 3s GOPs against the 2s minimum: every segment is one whole GOP.
+		// 3s GOPs on the 2s grid: every GOP lands in a later cell, so each is one segment.
 		let mut media = video(&catalog, &broadcast, "video0", inline_vp8());
 		media.write(frame(0, true)).unwrap();
 		media.write(frame(3_000_000, true)).unwrap();
@@ -2258,11 +2292,11 @@ mod tests {
 		drop((media, catalog, broadcast));
 	}
 
-	// The property HLS needs: audio and video renditions share one segment numbering, cut at
-	// the same boundaries. Video is one group per segment; an audio segment packs every audio
-	// group inside the video segment's span.
+	// Audio and video renditions whose groups start on the same grid lines cut the same
+	// boundaries, with no state shared between them. Video is one group per segment; an audio
+	// segment packs every audio group inside the video segment's span.
 	#[tokio::test]
-	async fn audio_and_video_segments_are_aligned() {
+	async fn audio_and_video_on_one_grid_line_up() {
 		let origin = produce_origin();
 		let broadcast = origin.create_broadcast("live").expect("publish allowed");
 		broadcast.announce(Default::default()).expect("publish allowed");
@@ -2301,11 +2335,7 @@ mod tests {
 		let audio_playlist = audio_rendition.snapshot();
 		assert_eq!(video_playlist.media_sequence, audio_playlist.media_sequence);
 		assert_eq!(numbers(&video_playlist), [0, 1]);
-		assert_eq!(
-			numbers(&audio_playlist),
-			[0, 1],
-			"audio lists the same aligned segments"
-		);
+		assert_eq!(numbers(&audio_playlist), [0, 1], "audio cuts the same segments");
 		assert!(gaps(&audio_playlist).is_empty());
 		assert_eq!(
 			audio_playlist.segments[0].duration,
@@ -3165,7 +3195,7 @@ mod tests {
 	}
 
 	impl Records {
-		/// A `video0` lead and a `video1` rendition.
+		/// `video0` and `video1` renditions.
 		fn new() -> Self {
 			Self::with(&["video0", "video1"], &[])
 		}
@@ -3387,7 +3417,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_record_error_fails_only_its_playlist() {
 		let test = Records::new();
-		let (_lead, mut video0) = test.publish("video0");
+		let (_video0, mut video0) = test.publish("video0");
 		let (track, mut video1) = test.publish("video1");
 		let _media = test.media("video1", 4);
 		for sequence in 0..4 {
@@ -3407,12 +3437,12 @@ mod tests {
 		assert!(video1.representation().is_err());
 		assert!(video1.failed_alone());
 		// Segments already listed stay fetchable while the listing refuses.
-		assert_eq!(video1.listed_content(0), Some(rendition::Content::Groups(0..1)));
+		assert!(video1.listed_segment(0).await.unwrap().is_some());
 		// So does the cursor, once it drains what the records covered.
 		assert_eq!(test.drain_failed("video1").await, [0, 1, 2]);
 
-		let lead = test.listed("video0", 5).await;
-		assert!(!lead.finished, "the other renditions go on");
+		let video0 = test.listed("video0", 5).await;
+		assert!(!video0.finished, "the other renditions go on");
 		assert!(test.rendition("video0").representation().is_ok());
 	}
 
@@ -3519,8 +3549,8 @@ mod tests {
 	}
 
 	// A recording refuses a listed segment whose media is gone, but reports a segment the
-	// rendition holds nothing for (a stop, or one that does not line up with the lead's) as a gap
-	// that keeps its number, so a recorder can tell it from rows it missed.
+	// rendition holds nothing for (a stop) as a gap that keeps its number, so a recorder can tell
+	// it from rows it missed.
 	#[tokio::test(start_paused = true)]
 	async fn a_recording_refuses_missing_media_but_reports_gaps() {
 		let test = Records::new();
@@ -3534,8 +3564,7 @@ mod tests {
 			video0.push(&gop(sequence)).unwrap();
 		}
 		video0.push(&stop(3, 6_000)).unwrap();
-		// video1's segment 0 starts 1.5s late, so it does not line up with the lead's.
-		video1.push(&hang::hls::Record::new(0, 0, 1_500)).unwrap();
+		video1.push(&stop(0, 0)).unwrap();
 		video1.push(&gop(1)).unwrap();
 		video1.push(&stop(2, 4_000)).unwrap();
 		video1.finish().unwrap();
@@ -3573,121 +3602,57 @@ mod tests {
 		assert!(cursor.next().await.unwrap().is_none());
 	}
 
-	// Record `n` of every rendition is segment `n`. One that does not line up with the lead's
-	// is listed as a gap, so the numbering stays consecutive and nothing misplaced is served.
+	// Each rendition lists its own records: a ladder whose boundaries and numbering differ, such as
+	// a rendition that started late, lists every segment of each, with no gaps.
 	#[tokio::test(start_paused = true)]
-	async fn a_misaligned_segment_is_a_gap() {
+	async fn an_unaligned_ladder_lists_every_segment() {
 		let test = Records::with(&["video0"], &["audio0"]);
 		let (_t0, mut video0) = test.publish("video0");
 		let (_t1, mut audio0) = test.publish("audio0");
 		for sequence in 0..5 {
 			video0.push(&gop(sequence)).unwrap();
-			// Segment 2 starts 1.5s late on audio; the rest are within half a segment.
-			let pts = match sequence {
-				2 => 5_500,
-				_ => sequence * 2_000 + 100,
-			};
+		}
+		// Audio joins at 5.5s, numbering its records from its own start.
+		for (sequence, pts) in [(0, 5_500), (1, 8_000), (2, 10_000)] {
 			audio0.push(&hang::hls::Record::new(sequence, sequence, pts)).unwrap();
 		}
-		test.listed("video0", 3).await;
-		let audio = test.listed("audio0", 3).await;
-		assert_eq!(numbers(&audio), [0, 1, 2, 3]);
-		assert_eq!(gaps(&audio), [2]);
+		assert_eq!(numbers(&test.listed("video0", 3).await), [0, 1, 2, 3]);
+		let audio = test.listed("audio0", 1).await;
+		assert_eq!(numbers(&audio), [0, 1]);
+		assert!(gaps(&audio).is_empty());
 		let rendition = test.rendition("audio0");
-		assert_eq!(rendition.listed_content(2), Some(rendition::Content::Gap));
-		assert!(rendition.listed_segment(2).await.unwrap().is_none());
-		let dash = rendition.representation().unwrap().expect("an out-of-band init");
-		assert!(dash.segments.iter().all(|(t, _)| *t != 5_500), "{:?}", dash.segments);
-
-		let rendered = rendition.media_playlist(None).unwrap().expect("playable");
-		assert!(rendered.contains("#EXT-X-GAP\n"), "{rendered}");
-	}
-
-	// A rendition ahead of the lead lists a segment only once the lead does, so its listing
-	// never changes under a player.
-	#[tokio::test(start_paused = true)]
-	async fn a_rendition_waits_for_the_lead() {
-		let test = Records::new();
-		let (_t0, mut video0) = test.publish("video0");
-		let (_t1, mut video1) = test.publish("video1");
-		for sequence in 0..6 {
-			video1.push(&gop(sequence)).unwrap();
-		}
-		for sequence in 0..3 {
-			video0.push(&gop(sequence)).unwrap();
-		}
-		test.listed("video0", 1).await;
-		settle().await;
-		assert_eq!(numbers(&test.rendition("video1").snapshot()), [0, 1]);
-
-		for sequence in 3..6 {
-			video0.push(&gop(sequence)).unwrap();
-		}
-		assert_eq!(numbers(&test.listed("video1", 4).await), [0, 1, 2, 3, 4]);
-	}
-
-	// A rendition whose first segment waits on the lead is not advertised yet, so no player
-	// starts on a playlist that lists nothing.
-	#[tokio::test(start_paused = true)]
-	async fn a_rendition_is_advertised_once_the_lead_lists_its_first_segment() {
-		let test = Records::new();
-		let (_t0, mut video0) = test.publish("video0");
-		let (_t1, mut video1) = test.publish("video1");
-		video1.push(&gop(0)).unwrap();
-		video1.push(&gop(1)).unwrap();
-		settle().await;
-		let rendition = test.rendition("video1");
-		assert!(!rendition.is_advertised(), "segment 0 waits on the lead");
-		assert_eq!(rendition.media_playlist(None).unwrap(), None);
-		// Spawned, so only a wake polls it again.
-		let mut playable = tokio::spawn({
-			let rendition = rendition.clone();
-			async move { rendition.playable().await }
-		});
-		settle().await;
-		assert!(!playable.is_finished(), "segment 0 waits on the lead");
-
-		video0.push(&gop(0)).unwrap();
-		video0.push(&gop(1)).unwrap();
-		tokio::time::timeout(Duration::from_secs(1), &mut playable)
-			.await
-			.expect("the lead listing segment 0 wakes it")
-			.unwrap();
 		assert!(rendition.is_advertised());
-		let rendered = rendition.media_playlist(None).unwrap().expect("playable");
-		assert!(rendered.contains("#EXTINF:"), "{rendered}");
+		let dash = rendition.representation().unwrap().expect("an out-of-band init");
+		assert_eq!(dash.segments, [(5_500, 2_500), (8_000, 2_000)]);
 	}
 
-	// A cursor waiting on a stalled lead resumes once the lead hands over.
+	// A break in one rendition starts a discontinuity on it alone: each rendition counts its own.
 	#[tokio::test(start_paused = true)]
-	async fn a_cursor_waiting_on_the_lead_follows_a_handover() {
-		let mut test = Records::new();
+	async fn a_break_in_one_rendition_leaves_the_others_continuous() {
+		let test = Records::new();
 		let (_t0, mut video0) = test.publish("video0");
 		let (_t1, mut video1) = test.publish("video1");
-		let _media = test.media("video1", 4);
 		for sequence in 0..4 {
 			video1.push(&gop(sequence)).unwrap();
 		}
-		// The lead lists only segment 0, bounded by record 1.
 		video0.push(&gop(0)).unwrap();
-		video0.push(&gop(1)).unwrap();
-		test.listed("video1", 0).await;
-		let mut cursor = test.rendition("video1").segments();
-		assert_eq!(cursor.next().await.unwrap().unwrap().segment, 0);
-		// Spawned, so only a wake polls it again.
-		let mut waiting = tokio::spawn(async move { cursor.next().await.unwrap().unwrap().segment });
-		settle().await;
-		assert!(!waiting.is_finished(), "segment 1 waits on the lead");
+		video0.push(&stop(1, 2_000)).unwrap();
+		video0.push(&hang::hls::Record::new(2, 1, 4_000)).unwrap();
+		video0.push(&hang::hls::Record::new(3, 2, 6_000)).unwrap();
 
-		test.catalog.video.renditions.get_mut("video0").unwrap().enabled = false;
-		test.sync();
-		assert_eq!(test_lead(&test), Some("video1".to_string()));
-		let next = tokio::time::timeout(Duration::from_secs(1), &mut waiting).await;
-		assert_eq!(next.expect("the handover wakes the cursor").unwrap(), 1);
+		let discontinuities = |snapshot: &playlist::Snapshot| {
+			snapshot
+				.segments
+				.iter()
+				.filter(|segment| segment.discontinuity)
+				.map(|segment| segment.segment)
+				.collect::<Vec<_>>()
+		};
+		assert_eq!(discontinuities(&test.listed("video0", 2).await), [2]);
+		assert!(discontinuities(&test.listed("video1", 2).await).is_empty());
 	}
 
-	// A stop is listed as a gap at once, and what resumes after it starts a new discontinuity
-	// on every rendition.
+	// A stop is listed as a gap at once, and what resumes after it starts a new discontinuity.
 	#[tokio::test(start_paused = true)]
 	async fn a_stop_is_a_gap_and_a_resume_a_discontinuity() {
 		let test = Records::with(&["video0"], &[]);
@@ -3747,37 +3712,6 @@ mod tests {
 		let snapshot = test.listed("video0", 2).await;
 		assert_eq!(numbers(&snapshot), [0, 1, 2]);
 		assert_eq!(gaps(&snapshot), [1]);
-	}
-
-	// The lead stays put while it is listed and enabled, so a rendition added later (whose
-	// records are numbered from its own start) never makes the others' segments gaps.
-	#[tokio::test(start_paused = true)]
-	async fn the_lead_sticks_until_it_leaves() {
-		let mut test = Records::with(&["video1"], &["audio0"]);
-		let lead = || test_lead(&test);
-		assert_eq!(lead(), Some("video1".to_string()));
-
-		// "video0" sorts first, but arrives later.
-		let mut config = video_config();
-		config.hls = Some(hls("video0"));
-		test.catalog.video.renditions.insert("video0".into(), config);
-		test.sync();
-		assert_eq!(test_lead(&test), Some("video1".to_string()));
-
-		// A disabled lead hands over, and audio yields to enabled video.
-		test.catalog.video.renditions.get_mut("video1").unwrap().enabled = false;
-		test.sync();
-		assert_eq!(test_lead(&test), Some("video0".to_string()));
-		test.catalog.video.renditions.get_mut("video0").unwrap().enabled = false;
-		test.sync();
-		assert_eq!(test_lead(&test), Some("audio0".to_string()));
-		test.catalog.video.renditions.get_mut("video1").unwrap().enabled = true;
-		test.sync();
-		assert_eq!(test_lead(&test), Some("video1".to_string()));
-	}
-
-	fn test_lead(test: &Records) -> Option<String> {
-		test.renditions.fanout().lead().map(|lead| lead.name.clone())
 	}
 
 	#[tokio::test(start_paused = true)]

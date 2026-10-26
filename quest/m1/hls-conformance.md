@@ -2,8 +2,8 @@
 
 ## Goal
 
-A nightly test serves an aligned multi-rendition broadcast (video renditions
-and audio) through `moq-hls`, probes every listed segment with ffprobe, and
+A nightly test serves a multi-rendition broadcast (video renditions and
+audio) through `moq-hls`, probes every listed segment with ffprobe, and
 fails if what the manifests advertise disagrees with the media served:
 `EXTINF` and DASH `t`/`d` against each segment's decoded start and duration,
 `EXT-X-TARGETDURATION` held for the run, sync flags against `startWithSAP` and
@@ -23,6 +23,9 @@ coverage. Decided with the maintainer on 2026-10-24:
 - Cover a sliding window that evicts segments, a GOP that overruns the
   declared duration, a mid-run reconfiguration (new rendition instance), and a
   recording through the segment cursors.
+- Cover an unaligned ladder, renditions whose keyframes and segment numbers
+  differ: every segment is listed and fetched (no `EXT-X-GAP`), and the DASH
+  manifest omits `segmentAlignment`.
 - Runs nightly; move any part fast enough into the merge gate.
 
 Public API: none. Wire: none.

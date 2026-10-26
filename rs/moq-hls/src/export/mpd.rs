@@ -219,11 +219,11 @@ fn render_adaptation_sets<'a>(
 		Kind::Audio => ("audio", "audio/mp4"),
 	};
 	for representations in codecs.values() {
-		// Each rendition lists only the segments that line up with the lead rendition's, leaving
-		// the rest out as gaps; groups open on keyframes.
+		// Groups open on keyframes. `segmentAlignment` is left out (false): each rendition lists
+		// its own records, which line up only where the publisher's keyframes do.
 		let _ = writeln!(
 			out,
-			"    <AdaptationSet contentType=\"{content}\" mimeType=\"{mime}\" segmentAlignment=\"true\" startWithSAP=\"1\">"
+			"    <AdaptationSet contentType=\"{content}\" mimeType=\"{mime}\" startWithSAP=\"1\">"
 		);
 		for rep in representations {
 			render_representation(out, instance, rep, query);
@@ -369,9 +369,7 @@ mod tests {
 		assert!(out.contains(" minimumUpdatePeriod=\"PT2.000S\""));
 		assert!(out.contains(" suggestedPresentationDelay=\"PT6.000S\""));
 		assert!(out.contains(" maxSegmentDuration=\"PT2.000S\""));
-		assert!(out.contains(
-			"<AdaptationSet contentType=\"video\" mimeType=\"video/mp4\" segmentAlignment=\"true\" startWithSAP=\"1\">"
-		));
+		assert!(out.contains("<AdaptationSet contentType=\"video\" mimeType=\"video/mp4\" startWithSAP=\"1\">"));
 		assert!(out.contains(
 			"<Representation id=\"video/video0\" bandwidth=\"2500000\" codecs=\"avc1.42c01f\" width=\"1280\" height=\"720\" frameRate=\"30\">"
 		));

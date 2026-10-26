@@ -2049,7 +2049,7 @@ mod test {
 
 		video.finish().unwrap();
 		let hls = catalog.snapshot().video.renditions["video0"].hls.clone();
-		assert_eq!(hls.unwrap().duration, crate::hls::DEFAULT_DURATION_MIN);
+		assert_eq!(hls.unwrap().duration, crate::hls::DEFAULT_DURATION);
 	}
 
 	#[test]

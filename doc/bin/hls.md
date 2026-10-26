@@ -50,7 +50,7 @@ Media is never transcoded, so the player must support the publisher's codecs.
 What that means for you:
 
 - **Opt in at the publisher.** Only a rendition whose catalog entry carries `hls` gets a playlist; nothing publishes it by default. Pass `--hls` to `moq import` (the stdin formats, `hls`, `rtsp`, and `capture`), or enable it with `moq_mux::catalog::Config::with_hls` in Rust. Without a duration hint, a rendition declares its records after its first segment.
-- **Align keyframes across renditions.** Segment `n` of every rendition comes from that rendition's record `n`, so a publisher that opts in must start its renditions' segments at the same timestamps, and start them together. A rendition's segment that does not line up with the lead rendition's (the first enabled video rendition, or audio when there is none) is listed as `EXT-X-GAP`, left out of the DASH manifest, and never served.
+- **Each rendition cuts its own segments.** A group starts a segment when its pts falls in a later multiple of the segment duration than the previous group's, and each rendition numbers its own segments. Players match renditions by timestamp, so nothing coordinates the ladder: segments line up wherever keyframes share timestamps, a rendition that starts late lines up from its next multiple, and audio lines up with video whose keyframes sit on those multiples. The DASH manifest leaves `segmentAlignment` out. A break in one rendition's content starts a discontinuity on that rendition alone; `EXT-X-PROGRAM-DATE-TIME`, written when the catalog has a clock, lets players resync.
 - **Idle renditions cost nothing**, and a segment is servable for as long as the relay's [cache](/bin/relay/config#cache) retains it. Keep `--window` (the playlist length, default 16 s) within that retention.
 - **Live joins cost the window.** The exporter reads the record checkpoint and lists at most 256 segments.
 - **Segments are timed by their records.** A segment is listed once the record after it arrives, and its duration, its DASH `t` and `d`, and its last sample's duration all come from its own record and the next, so a segment's bytes never change with a catalog estimate. A stop record (a break or the end of the content) is listed as a zero-length gap, and what follows it starts a discontinuity.
@@ -84,8 +84,8 @@ The recording starts at the oldest segment in the `--window` and gets
 out, the HLS records restart, or a segment can't be fetched, the export exits with
 an error and leaves the playlists unended. A rendition whose decoder is
 reconfigured keeps one playlist, switching to a new init at an
-`EXT-X-DISCONTINUITY` that every playlist marks at the same segment, so the whole
-recording stays playable from its master playlist.
+`EXT-X-DISCONTINUITY` in that playlist, so the whole recording stays playable
+from its master playlist.
 
 `--listen-tls-cert`/`--listen-tls-key` or `--listen-tls-generate` serve HTTPS,
 and `--cors-origin` opens it to browsers. HLS TLS reads `MOQ_HLS_TLS_*`;

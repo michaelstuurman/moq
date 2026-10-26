@@ -155,9 +155,9 @@ moq --connect https://relay.example.com/anon --broadcast camera.hang \
 ```
 
 `--hls` publishes [HLS segment records](/bin/hls#how-export-works) beside each
-video and audio rendition, which `export hls` needs to serve the broadcast. The
-source must start every rendition's keyframes at the same timestamps. The stdin
-formats, `hls`, `rtsp`, and `capture` take it; the other gateways build their
+video and audio rendition, which `export hls` needs to serve the broadcast.
+Renditions' segments line up wherever the source's keyframes share timestamps.
+The stdin formats, `hls`, `rtsp`, and `capture` take it; the other gateways build their
 own catalog and refuse it.
 
 ## Export

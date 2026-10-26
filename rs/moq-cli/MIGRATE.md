@@ -7,7 +7,7 @@ How to update your invocation and config for each breaking change, newest first.
 ### `import --hls` publishes the records `export hls` needs
 
 Imports no longer publish HLS records by default, so `export hls` lists nothing for a broadcast published without them.
-Pass `--hls` to `import` (the stdin formats, `hls`, `rtsp`, and `capture`), and start keyframes at the same timestamps across renditions.
+Pass `--hls` to `import` (the stdin formats, `hls`, `rtsp`, and `capture`); renditions' segments line up wherever their keyframes share timestamps.
 
 ### Unknown `MOQ_*` environment variables stop startup ([#6633](https://github.com/moq-dev/moq/pull/6633))
 

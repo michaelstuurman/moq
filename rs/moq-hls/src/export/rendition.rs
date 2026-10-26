@@ -1,7 +1,6 @@
 //! One rendition: playlists from its own HLS records, and segments fetched on demand.
 
 use moq_clock::Wall;
-use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::task::Poll;
@@ -268,18 +267,6 @@ fn tag<T: serde::Serialize>(track: &str, config: &T) -> Arc<str> {
 	Arc::from(segments::tag(track, &config))
 }
 
-/// What a listed row holds on its rendition.
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Content {
-	/// These groups.
-	Groups(std::ops::Range<u64>),
-	/// Nothing to fetch: content stopped, or the segment does not line up with the lead
-	/// rendition's. Listed as `EXT-X-GAP` so the numbering stays consecutive.
-	Gap,
-	/// Not yet known: the lead rendition has not listed this number yet.
-	Pending,
-}
-
 /// Where a retired rendition stops listing its records, for its replacement to take over.
 pub(crate) struct Handoff {
 	/// The record track it read.
@@ -336,11 +323,8 @@ pub struct Rendition {
 	clock: Option<Clock>,
 	/// This rendition's window over its records.
 	live: Arc<segments::Producer>,
-	/// What every rendition of the broadcast shares: discontinuities, the run, the lead.
+	/// What every rendition of the broadcast shares: discontinuity counts and the run.
 	fanout: renditions::Fanout,
-	/// Whether each recent segment lines up with the lead rendition's, decided once so a
-	/// listing never changes under a player.
-	verdicts: Mutex<BTreeMap<u64, bool>>,
 	/// The broadcast carrying the catalog and every record track.
 	catalog: moq_net::broadcast::Consumer,
 	/// Follows the records into [`live`](Self::live); aborted when the rendition drops.
@@ -452,7 +436,6 @@ impl Rendition {
 			clock,
 			live: Arc::new(segments::Producer::new(0)),
 			fanout,
-			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
 			retiring: tokio::sync::watch::Sender::new(false),
@@ -491,7 +474,6 @@ impl Rendition {
 			clock,
 			live: Arc::new(segments::Producer::new(0)),
 			fanout,
-			verdicts: Mutex::default(),
 			catalog: source.broadcast(),
 			watcher: Mutex::new(None),
 			retiring: tokio::sync::watch::Sender::new(false),
@@ -550,6 +532,11 @@ impl Rendition {
 		}
 	}
 
+	/// This rendition's identity in its broadcast.
+	fn key(&self) -> renditions::Key {
+		(self.kind, self.name.clone())
+	}
+
 	/// The [tag](segments::tag) every segment URL carries.
 	#[cfg(test)]
 	pub(crate) fn tag(&self) -> &str {
@@ -561,76 +548,6 @@ impl Rendition {
 		if self.media.admits(&self.live) {
 			self.live.push(row, self.fanout.window());
 		}
-	}
-
-	/// What `row` holds on this rendition.
-	pub(crate) fn resolve(&self, row: &segments::Row) -> Content {
-		if row.stop {
-			return Content::Gap;
-		}
-		match self.aligned(row) {
-			Some(true) => Content::Groups(row.groups.clone()),
-			Some(false) => Content::Gap,
-			None => Content::Pending,
-		}
-	}
-
-	/// Whether `row` lines up with the lead rendition's segment of the same number: it starts
-	/// within half that segment of it. `None` until the lead lists that number or never will.
-	///
-	/// A segment the lead never lists, or already evicted, can't be checked and is listed as is.
-	/// One the lead skipped while holding the numbers around it is misaligned.
-	fn aligned(&self, row: &segments::Row) -> Option<bool> {
-		if let Some(verdict) = self.verdicts.lock().expect("verdicts lock poisoned").get(&row.segment) {
-			return Some(*verdict);
-		}
-		let Some(lead) = self.fanout.lead() else {
-			return Some(true);
-		};
-		if std::ptr::eq(lead.as_ref(), self) {
-			return Some(true);
-		}
-		let pts = Duration::from(row.pts);
-		let verdict = match lead.live.numbered(row.segment) {
-			segments::Lookup::Found(lead) => !lead.stop && pts.abs_diff(Duration::from(lead.pts)) <= lead.duration / 2,
-			segments::Lookup::Missing(span) => !span.contains(&pts),
-			segments::Lookup::Never => true,
-			segments::Lookup::Pending => return None,
-		};
-		if !verdict {
-			tracing::error!(
-				rendition = %self.name,
-				lead = %lead.name,
-				segment = row.segment,
-				"HLS segment does not line up with the lead rendition's; listing it as a gap"
-			);
-		}
-		let mut verdicts = self.verdicts.lock().expect("verdicts lock poisoned");
-		verdicts.insert(row.segment, verdict);
-		while verdicts.len() > 2 * segments::MAX_SEGMENTS {
-			verdicts.pop_first();
-		}
-		Some(verdict)
-	}
-
-	/// Whether the rendition has nothing to fetch for this row.
-	pub(crate) fn is_gap(&self, row: &segments::Row) -> bool {
-		self.resolve(row) == Content::Gap
-	}
-
-	/// Poll until `row`'s alignment is decided.
-	pub(crate) fn poll_resolved(&self, waiter: &kio::Waiter, row: &segments::Row) -> Poll<()> {
-		// Registered on lead changes too: a new lead may decide the row at once, while the old one
-		// may never list it.
-		let Some(lead) = self.fanout.poll_lead(waiter) else {
-			return Poll::Ready(());
-		};
-		// Read before resolving, so a row the lead lists in between wakes this poll.
-		let seen = lead.live.produced();
-		if self.resolve(row) != Content::Pending {
-			return Poll::Ready(());
-		}
-		lead.live.poll_changed(waiter, seen)
 	}
 
 	/// List every segment URL under `generation` from now on, keeping the run's rows and init.
@@ -649,7 +566,6 @@ impl Rendition {
 			build.abort();
 		}
 		self.live.clear();
-		self.verdicts.lock().expect("verdicts lock poisoned").clear();
 		let mut run = self.run_mut();
 		*run = Run {
 			generation,
@@ -713,18 +629,14 @@ impl Rendition {
 		kio::wait(|waiter| self.poll_playable(waiter)).await;
 	}
 
-	/// Poll until this rendition is playable (its first segment's alignment is decided, or its
-	/// records ended empty), its media is denied, or its window failed.
+	/// Poll until this rendition is playable (it lists a segment, or its records ended), its
+	/// media is denied, or its window failed.
 	pub(crate) fn poll_playable(&self, waiter: &kio::Waiter) -> Poll<()> {
 		self.poll_media(waiter);
 		if self.media.refusal().is_some() {
 			return Poll::Ready(());
 		}
-		match self.live.poll_front(waiter) {
-			Poll::Ready(Some(front)) => self.poll_resolved(waiter, &front),
-			Poll::Ready(None) => Poll::Ready(()),
-			Poll::Pending => Poll::Pending,
-		}
+		self.live.poll_listed(waiter)
 	}
 
 	/// End the window if the bound sibling ended, registering `waiter` to wake when it does, and
@@ -762,7 +674,6 @@ impl Rendition {
 		let Some(init) = self.built_init(&run) else {
 			return Ok(None);
 		};
-		// A segment still waiting on the lead is not listed, so check what renders.
 		let playable = !snapshot.segments.is_empty() || snapshot.finished;
 		Ok(playable.then(|| super::render_media(&snapshot, &init.hash, query)))
 	}
@@ -808,10 +719,7 @@ impl Rendition {
 		if let Some(err) = self.failure(&window) {
 			return Err(err);
 		}
-		// Ended records end the playlist only once every row's alignment is decided, so the tail
-		// is listed before `EXT-X-ENDLIST` stops players polling.
-		let complete = self.resolved(&window.segments).count() == window.segments.len();
-		let finished = window.ended && complete;
+		let finished = window.ended;
 		Ok(self.snapshot_from_window(window, finished, generation))
 	}
 
@@ -873,15 +781,16 @@ impl Rendition {
 			.max(1);
 		let program_date_time = window.segments.first().and_then(|first| self.wall_clock(first.pts));
 		let mut previous = None;
-		let segments = self
-			.resolved(&window.segments)
-			.map(|(s, content)| {
+		let segments = window
+			.segments
+			.iter()
+			.map(|s| {
 				let discontinuity = previous.replace(s.discontinuity).is_some_and(|p| p != s.discontinuity);
 				Segment {
 					segment: s.segment,
 					tag: s.tag.to_string(),
 					duration: s.duration,
-					gap: content == Content::Gap,
+					gap: s.stop,
 					discontinuity,
 				}
 			})
@@ -895,14 +804,6 @@ impl Rendition {
 			program_date_time,
 			generation,
 		}
-	}
-
-	/// `rows` with what each holds, up to the first one whose alignment is still pending: a
-	/// segment is listed only once its content is final.
-	fn resolved<'a>(&'a self, rows: &'a [segments::Row]) -> impl Iterator<Item = (&'a segments::Row, Content)> {
-		rows.iter()
-			.map(|row| (row, self.resolve(row)))
-			.take_while(|(_, content)| *content != Content::Pending)
 	}
 
 	/// Whether the multivariant playlist advertises this rendition, i.e. a player can start it.
@@ -937,12 +838,12 @@ impl Rendition {
 		let Some(init) = self.built_init(&run) else {
 			return Ok(None);
 		};
-		let complete = self.resolved(&window.segments).count() == window.segments.len();
-		let ended = window.ended && complete;
-		let segments = self
-			.resolved(&window.segments)
-			.filter(|(_, content)| *content != Content::Gap)
-			.map(|(row, _)| {
+		let ended = window.ended;
+		let segments = window
+			.segments
+			.iter()
+			.filter(|row| !row.stop)
+			.map(|row| {
 				let t = row.pts.as_millis() as u64;
 				let d = row.end.saturating_sub(row.pts.into()).as_millis() as u64;
 				(t, d)
@@ -1158,7 +1059,7 @@ impl Rendition {
 	///
 	/// Fetches every group the segment holds on this rendition (an audio segment packs many
 	/// short groups) and encodes them as a single CMAF fragment. `None` when the segment isn't in
-	/// the playlist window, is a gap or not yet decided for this rendition, or its groups already
+	/// the playlist window, is a gap, or its groups already
 	/// left the relay cache. After End or Restart, only the bound instance's retained media
 	/// drains; a replacement's media is never read under these rows. A denied referenced
 	/// broadcast returns its authorization error even when the requested row is absent.
@@ -1193,9 +1094,10 @@ impl Rendition {
 		// Read the run before resolving the row (see `restart`), so an init decoded from its
 		// groups is never cached for a run that started while they were being fetched.
 		let run = self.run();
-		let Content::Groups(groups) = self.resolve(row) else {
+		if row.stop {
 			return Ok(None);
-		};
+		}
+		let groups = row.groups.clone();
 
 		// A segment must be served whole. If its group span exceeds the safety cap (a
 		// pathologically coarse record), 404 rather than silently truncating it to a segment
@@ -1241,11 +1143,10 @@ impl Rendition {
 			return Ok(None);
 		}
 		// The last presented sample has no successor to time it, but the record says where the
-		// segment ends, so the fragment ends exactly where the next one starts.
-		if let Some(last) = frames
-			.iter_mut()
-			.filter(|frame| frame.duration.is_none())
-			.max_by_key(|frame| frame.timestamp.as_micros())
+		// segment ends, so the fragment ends exactly where the next one starts. One a duration
+		// marker already timed keeps it.
+		if let Some(last) = frames.iter_mut().max_by_key(|frame| frame.timestamp.as_micros())
+			&& last.duration.is_none()
 			&& let Ok(end) = moq_net::Timestamp::from_micros(row.end.as_micros() as u64)
 			&& let Ok(end) = end.convert(last.timestamp.scale())
 			&& let Ok(duration) = end.checked_sub(last.timestamp)
@@ -1268,11 +1169,6 @@ impl Rendition {
 	/// Fetch the listed segment numbered `segment`.
 	pub(crate) async fn listed_segment(&self, segment: u64) -> Result<Option<Bytes>> {
 		self.numbered(&self.tag.clone(), segment).await
-	}
-
-	/// What the listed segment numbered `segment` holds on this rendition.
-	pub(crate) fn listed_content(&self, segment: u64) -> Option<Content> {
-		Some(self.resolve(&self.live.row(&self.tag, segment)?))
 	}
 
 	/// Fetch the listed segment starting at `time` milliseconds.
@@ -1398,7 +1294,7 @@ fn gap(rendition: &Rendition, record: &moq_mux::hls::Entry, broken: bool) -> seg
 		duration: Duration::ZERO,
 		pts: record.pts,
 		end: pts,
-		discontinuity: rendition.fanout.stamp(record.sequence, broken, pts),
+		discontinuity: rendition.fanout.stamp(&rendition.key(), broken, pts),
 		stop: true,
 		complete: false,
 	}
@@ -1430,7 +1326,7 @@ fn row(
 		duration,
 		pts: record.pts,
 		end,
-		discontinuity: rendition.fanout.stamp(record.sequence, broken, end),
+		discontinuity: rendition.fanout.stamp(&rendition.key(), broken, end),
 		stop: false,
 		complete: !next.is_stop(),
 	})

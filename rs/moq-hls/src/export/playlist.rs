@@ -46,7 +46,7 @@ pub(crate) struct Segment {
 	/// `EXTINF` duration.
 	pub duration: Duration,
 	/// The rendition has no content for this span (`EXT-X-GAP`): the segment keeps its slot in
-	/// the aligned numbering, but a player should not request it.
+	/// the rendition's numbering, but a player should not request it.
 	pub gap: bool,
 	/// Content time jumped before this segment (`EXT-X-DISCONTINUITY`).
 	pub discontinuity: bool,

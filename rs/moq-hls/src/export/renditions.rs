@@ -3,15 +3,14 @@
 //! The `Producer` holds the current renditions, reconciled from the catalog by its `sync`;
 //! the HTTP serve path reads them synchronously (look one up, render the master playlist). Each
 //! rendition follows its own HLS records; the `Fanout` handle holds what they share: the
-//! discontinuity numbering, the publisher run, and the lead rendition the others' segments are
-//! checked against.
+//! discontinuity counts and the publisher run.
 //! A [`Consumer`] is a cursor for a recorder that mirrors the *whole* broadcast: [`next`](Consumer::next)
 //! yields one [`Event`] at a time as renditions are added or removed, replaying the current
 //! set as [`Added`](Event::Added) when first consumed, and returning `None` once the catalog
 //! finishes cleanly, or an error when the recording is incomplete.
 
 use moq_clock::Wall;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Weak};
 use std::task::Poll;
 use std::time::Duration;
@@ -20,11 +19,46 @@ use moq_mux::catalog::hang::Catalog;
 
 use super::master;
 use super::rendition::{Kind, Rendition};
-use super::segments::Discontinuities;
 
 /// The `(kind, name)` identity of a rendition. Video and audio are separate axes, so a video
 /// and an audio rendition may share a name without colliding.
-type Key = (Kind, String);
+pub(crate) type Key = (Kind, String);
+
+/// Numbers each rendition's content breaks: its segments after a stop, or after records nobody
+/// saw, start a new discontinuity, as does every rendition's next segment after a publisher-run
+/// restart.
+///
+/// Counted per rendition, since each numbers its own segments. A break in one rendition only
+/// makes its count diverge from its siblings', which players resync across by
+/// `EXT-X-PROGRAM-DATE-TIME`. Kept by name, so a reconfigured rendition's replacement never
+/// lists a lower sequence than its predecessor.
+#[derive(Default)]
+struct Discontinuities {
+	/// Each live rendition's newest sequence.
+	renditions: BTreeMap<Key, u64>,
+	/// Publisher-run restarts so far, where a rendition first seen starts.
+	restarts: u64,
+}
+
+impl Discontinuities {
+	/// The sequence of rendition `key`'s next segment, which starts a new one when `broken`.
+	fn stamp(&mut self, key: &Key, broken: bool) -> u64 {
+		if !self.renditions.contains_key(key) {
+			self.renditions.insert(key.clone(), self.restarts);
+		}
+		let sequence = self.renditions.get_mut(key).expect("inserted above");
+		*sequence += u64::from(broken);
+		*sequence
+	}
+
+	/// Start a new discontinuity on every rendition, for a publisher run that restarts.
+	fn restart(&mut self) {
+		self.restarts += 1;
+		for sequence in self.renditions.values_mut() {
+			*sequence += 1;
+		}
+	}
+}
 
 /// A change to the rendition set, yielded by [`Consumer::next`].
 #[non_exhaustive]
@@ -49,7 +83,7 @@ pub enum Event {
 struct Feed {
 	/// Every rendition created and still alive, the dropped ones pruned as the next registers.
 	targets: Vec<Weak<Rendition>>,
-	/// Stamps each segment number once, so every rendition agrees on where content breaks.
+	/// Each rendition's discontinuity count.
 	discontinuities: Discontinuities,
 	/// The catalog failed; late-created renditions start failed.
 	failed: Option<crate::Error>,
@@ -63,9 +97,6 @@ struct Feed {
 	/// The playlist window duration applied on every push (see
 	/// [`Config::window`](super::Config::window)).
 	window: Duration,
-	/// The rendition every other one's segments are checked against: the first enabled video
-	/// rendition, else the first enabled audio one, kept while it stays enabled.
-	lead: Option<Weak<Rendition>>,
 }
 
 /// The producing side of a broadcast's rendition set.
@@ -111,7 +142,6 @@ impl Producer {
 					anchor: None,
 					generation: None,
 					window,
-					lead: None,
 				}),
 			},
 		}
@@ -230,41 +260,20 @@ impl Fanout {
 		self.feed.read().window
 	}
 
-	/// The discontinuity sequence of segment `segment`, which starts a new one when `broken`
-	/// (see [`Discontinuities::stamp`]). Anchors the presentation at a segment ending at `end`,
-	/// if nothing has.
-	pub fn stamp(&self, segment: u64, broken: bool, end: Duration) -> u64 {
+	/// The discontinuity sequence of rendition `key`'s next segment, which starts a new one when
+	/// `broken` (see [`Discontinuities::stamp`]). Anchors the presentation at a segment ending at
+	/// `end`, if nothing has.
+	pub fn stamp(&self, key: &Key, broken: bool, end: Duration) -> u64 {
 		let mut feed = self.feed.write().unwrap_or_else(|_| unreachable!("fanout is open"));
 		if feed.anchor.is_none() {
 			feed.anchor = Some(moq_clock::wall().checked_sub(end).unwrap_or(Wall::UNIX_EPOCH));
 		}
-		feed.discontinuities.stamp(segment, broken)
+		feed.discontinuities.stamp(key, broken)
 	}
 
 	/// Why the catalog failed, if it did.
 	pub fn failure(&self) -> Option<crate::Error> {
 		self.feed.read().failed.clone()
-	}
-
-	/// The rendition every other one's segments are checked against, if any.
-	pub fn lead(&self) -> Option<Arc<Rendition>> {
-		self.feed.read().lead.as_ref()?.upgrade()
-	}
-
-	/// [`lead`](Self::lead), registering `waiter` for the next change to what every rendition
-	/// shares, a new lead included.
-	pub fn poll_lead(&self, waiter: &kio::Waiter) -> Option<Arc<Rendition>> {
-		let mut lead = None;
-		let _ = self.feed.poll_ref(waiter, |feed| {
-			lead = feed.lead.as_ref().and_then(Weak::upgrade);
-			Poll::<()>::Pending
-		});
-		lead
-	}
-
-	fn set_lead(&self, lead: Option<&Arc<Rendition>>) {
-		let mut feed = self.feed.write().unwrap_or_else(|_| unreachable!("fanout is open"));
-		feed.lead = lead.map(Arc::downgrade);
 	}
 
 	/// List every rendition under `generation` from now on.
@@ -415,9 +424,18 @@ impl Producer {
 		} else {
 			rendition.watch();
 		}
-		// Pruned here, so a catalog that keeps replacing renditions holds only the live ones.
+		// Pruned here, so a catalog that keeps replacing renditions holds only the live ones. A
+		// replacement shares its predecessor's name, so its count survives.
+		let feed = &mut *feed;
 		feed.targets.retain(|target| target.strong_count() > 0);
 		feed.targets.push(Arc::downgrade(rendition));
+		let live: BTreeSet<Key> = feed
+			.targets
+			.iter()
+			.filter_map(Weak::upgrade)
+			.map(|rendition| (rendition.kind, rendition.name.clone()))
+			.collect();
+		feed.discontinuities.renditions.retain(|key, _| live.contains(key));
 	}
 
 	/// Reconcile the rendition set with a complete catalog snapshot. Removed or reconfigured
@@ -541,18 +559,6 @@ impl Producer {
 			tracing::debug!("no rendition advertises HLS records yet; nothing to serve");
 		}
 
-		// Keep the lead while it stays listed and enabled, so a rendition added later (whose
-		// records may be numbered from its own start) never takes over. Audio yields to video.
-		// Video sorts first, so a new pick is the first enabled video rendition, else audio.
-		let first = current.renditions.values().find(|rendition| rendition.is_enabled());
-		let kept = self.fanout.lead().and_then(|lead| {
-			let listed = current.renditions.get(&(lead.kind, lead.name.clone()))?;
-			let video = first.is_some_and(|first| first.kind == Kind::Video);
-			(Arc::ptr_eq(listed, &lead) && lead.is_enabled() && (lead.kind == Kind::Video || !video))
-				.then(|| listed.clone())
-		});
-		self.fanout.set_lead(kept.as_ref().or(first));
-
 		// Rank once per catalog update, keeping playlist reads linear. Updating state also wakes
 		// the master's long-poll when metadata changes without replacing a rendition.
 		current.audio = catalog
@@ -665,6 +671,33 @@ mod tests {
 		let mut cursor = producer.subscribe();
 		drop(producer);
 		assert!(matches!(cursor.next().await, Err(crate::Error::IncompleteRecording)));
+	}
+
+	#[test]
+	fn each_rendition_counts_its_own_discontinuities() {
+		let video = (Kind::Video, "video".to_string());
+		let audio = (Kind::Audio, "audio".to_string());
+		let mut breaks = Discontinuities::default();
+		assert_eq!(breaks.stamp(&video, false), 0);
+		assert_eq!(
+			breaks.stamp(&video, true),
+			1,
+			"the segment after a stop starts a new one"
+		);
+		assert_eq!(
+			breaks.stamp(&audio, false),
+			0,
+			"a break in one rendition leaves the others"
+		);
+		breaks.restart();
+		assert_eq!(breaks.stamp(&video, false), 2);
+		assert_eq!(breaks.stamp(&audio, false), 1);
+		let late = (Kind::Video, "late".to_string());
+		assert_eq!(
+			breaks.stamp(&late, false),
+			1,
+			"a rendition first seen starts at the run"
+		);
 	}
 
 	#[tokio::test]

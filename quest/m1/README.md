@@ -160,7 +160,6 @@ surface and zero-copy texture import, land before the cut.
 - [Generated JS API reference](/quest/m1/js-api-reference.md) - the doc site renders an API reference for every `@moq/*` package from API Extractor's doc model
 - [Interop coverage](/quest/m1/interop-coverage/README.md) - the riskiest moq-transport features moq-net exposes get cross-implementation tests over drafts 18 and 22
 - [Calibrate the paired nightly benchmarks](/quest/m1/bench-ci.md) - A/A and deliberately slowed Nightly runs set the paired comparison's threshold, so its regression alerts can be trusted
-- [HLS follower numbering](/quest/m1/hls-follower-numbering.md) - a late or rebuilt rendition numbers its HLS records from the pacer, so its segments line up
 - [HLS opt-in for gateways](/quest/m1/hls-opt-in-gateways.md) - SRT, RTMP, WebRTC ingest and the bindings can publish HLS records
 - [HLS takeover leak](/quest/m1/hls-takeover-leak.md) - a replaced instance's recording cursor never yields the replacement's media, and ends or fails instead of stalling
 - [HLS and DASH segment conformance](/quest/m1/hls-conformance.md) - nightly ffprobe checks that advertised timing, sync flags, and bytes match the media served

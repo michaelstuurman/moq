@@ -11,9 +11,9 @@
 //!   (via [`Rendition`]), and yields the CMAF bytes.
 //!
 //! A segment is addressed by its record track's tag and its number (the `seg/{tag}.{segment}.m4s`
-//! URI); the number alone is its `EXT-X-MEDIA-SEQUENCE` and the recorder cursor's position. A
-//! publisher that aligns its renditions numbers the same span of content time alike on every
-//! rendition, so the number means the same on every rendition, edge, and reload.
+//! URI); the number alone is its `EXT-X-MEDIA-SEQUENCE` and the recorder cursor's position. Each
+//! rendition numbers its own segments, so a number means the same on every edge and reload of
+//! that rendition, but nothing across renditions: players match renditions by timestamp.
 
 use moq_clock::Wall;
 use std::collections::VecDeque;
@@ -92,51 +92,6 @@ struct State {
 	produced: u64,
 }
 
-/// Numbers the broadcast's content breaks: segments after a stop, or after records nobody saw,
-/// start a new discontinuity.
-///
-/// Held once per broadcaster and keyed by segment number, so every rendition marks segment `n`
-/// with the same sequence however many segments each one listed: the first rendition to stamp a
-/// segment decides it.
-#[derive(Default)]
-pub(crate) struct Discontinuities {
-	/// The sequence stamped on each recent segment.
-	stamped: std::collections::BTreeMap<u64, u64>,
-	/// The highest sequence stamped so far.
-	sequence: u64,
-}
-
-impl Discontinuities {
-	/// The sequence of segment `segment`, which starts a new one when `broken`.
-	pub fn stamp(&mut self, segment: u64, broken: bool) -> u64 {
-		if let Some(sequence) = self.stamped.get(&segment) {
-			return *sequence;
-		}
-		let previous = self
-			.stamped
-			.range(..segment)
-			.next_back()
-			.map_or(self.sequence, |(_, sequence)| *sequence);
-		let sequence = match broken {
-			true => previous.max(self.sequence) + 1,
-			false => previous,
-		};
-		self.sequence = self.sequence.max(sequence);
-		self.stamped.insert(segment, sequence);
-		// Every rendition lists at most a window's worth, so older stamps are never asked for.
-		while self.stamped.len() > 4 * MAX_SEGMENTS {
-			self.stamped.pop_first();
-		}
-		sequence
-	}
-
-	/// Forget every stamp, for a publisher run that restarts its numbering.
-	pub fn restart(&mut self) {
-		self.stamped.clear();
-		self.sequence += 1;
-	}
-}
-
 /// The most segments a playlist window lists, however short they are.
 ///
 /// A fresh subscriber to a `moq-mux` record track is only promised this many recent records (the
@@ -182,10 +137,10 @@ pub(crate) struct Row {
 	pub pts: moq_net::Timestamp,
 	/// The segment's ending presentation timestamp (`pts + duration`), for window eviction.
 	pub end: Duration,
-	/// The broadcast's [`Discontinuities`] sequence for this segment.
+	/// The rendition's discontinuity sequence for this segment.
 	pub discontinuity: u64,
-	/// Content stopped here: a zero-duration record holding no media, listed as a gap so the
-	/// numbering stays consecutive.
+	/// Nothing to fetch: content stopped here, or the record's successor can't bound it. Listed as
+	/// a gap so the numbering stays consecutive.
 	pub stop: bool,
 	/// Whether a later segment started after this one, so its groups are all complete. One only a
 	/// stop bounds may end in a group the publisher is still writing.
@@ -252,7 +207,7 @@ impl State {
 
 impl Producer {
 	/// An empty window whose first segment is numbered `start` or later: those before it belong
-	/// to another window, which [`numbered`](Self::numbered) reports as never listed here.
+	/// to another window.
 	pub fn new(start: u64) -> Self {
 		Self {
 			state: kio::Producer::new(State {
@@ -366,31 +321,6 @@ impl Producer {
 			.cloned()
 	}
 
-	/// The row of segment `segment`, whatever its tag, with whether the window holds every
-	/// segment from `segment` on: the alignment check needs both.
-	pub fn numbered(&self, segment: u64) -> Lookup {
-		let state = self.state.read();
-		let (Some(front), Some(back)) = (state.rows.front(), state.rows.back()) else {
-			return match segment < state.sequence || state.ended || state.failed.is_some() {
-				true => Lookup::Never,
-				false => Lookup::Pending,
-			};
-		};
-		if segment < front.segment {
-			return Lookup::Never;
-		}
-		if segment > back.segment {
-			return match state.ended || state.failed.is_some() {
-				true => Lookup::Never,
-				false => Lookup::Pending,
-			};
-		}
-		match state.rows.iter().find(|row| row.segment == segment) {
-			Some(row) => Lookup::Found(row.clone()),
-			None => Lookup::Missing(Duration::from(front.pts)..back.end),
-		}
-	}
-
 	/// The number of the segment whose `pts` is exactly `time` milliseconds (DASH `$Time$`
 	/// addressing), or `None` when no listed row starts there. Exact match is safe because the
 	/// rendered `S@t` and this lookup convert the same [`Row::pts`] the same way. A stop is never
@@ -422,24 +352,16 @@ impl Producer {
 		older.into_iter().chain([newest.groups.start]).collect()
 	}
 
-	/// Poll until the window lists a row, returning the oldest, or `None` once it failed, ended
-	/// empty, or closed empty. A returned row still registers `waiter` for the window's next
-	/// change, so a caller waiting on that row's alignment also wakes when the front moves.
-	pub fn poll_front(&self, waiter: &kio::Waiter) -> Poll<Option<Row>> {
-		let mut front = None;
-		let poll = self.state.poll_ref(waiter, |state| {
-			if state.failed.is_some() || (state.ended && state.rows.is_empty()) {
-				return Poll::Ready(());
+	/// Poll until the window lists a row, ends, fails, or closes.
+	pub fn poll_listed(&self, waiter: &kio::Waiter) -> Poll<()> {
+		match self.state.poll_ref(waiter, |state| {
+			match !state.rows.is_empty() || state.ended || state.failed.is_some() {
+				true => Poll::Ready(()),
+				false => Poll::Pending,
 			}
-			front = state.rows.front().cloned();
-			// Pending even with a row, so the waiter registers.
-			Poll::Pending
-		});
-		match poll {
-			Poll::Ready(Ok(())) => Poll::Ready(None),
-			// Closed: no more rows arrive, so the front is final.
-			Poll::Ready(Err(_)) => Poll::Ready(front),
-			Poll::Pending => front.map_or(Poll::Pending, |row| Poll::Ready(Some(row))),
+		}) {
+			Poll::Ready(_) => Poll::Ready(()),
+			Poll::Pending => Poll::Pending,
 		}
 	}
 
@@ -458,26 +380,6 @@ impl Producer {
 		}
 	}
 
-	/// Poll until the window changes from `seen` rows produced, ends, or fails, for a check that
-	/// waits on another rendition's window.
-	pub fn poll_changed(&self, waiter: &kio::Waiter, seen: u64) -> Poll<()> {
-		match self.state.poll_ref(waiter, |state| {
-			if state.produced != seen || state.ended || state.failed.is_some() {
-				Poll::Ready(())
-			} else {
-				Poll::Pending
-			}
-		}) {
-			Poll::Ready(_) => Poll::Ready(()),
-			Poll::Pending => Poll::Pending,
-		}
-	}
-
-	/// How many rows were ever appended.
-	pub fn produced(&self) -> u64 {
-		self.state.read().produced
-	}
-
 	/// A cursor over segments, starting from the oldest still in the window.
 	pub fn subscribe(&self, rendition: Arc<Rendition>) -> Consumer {
 		let consumer = self.state.consume();
@@ -489,19 +391,6 @@ impl Producer {
 			feed: None,
 		}
 	}
-}
-
-/// What one window says about a segment number.
-#[derive(Debug)]
-pub(crate) enum Lookup {
-	/// The window lists it.
-	Found(Row),
-	/// The window holds the numbers around it but not it, spanning this content time.
-	Missing(std::ops::Range<Duration>),
-	/// It may still arrive.
-	Pending,
-	/// The window will never list it: evicted already, or the records ended before it.
-	Never,
 }
 
 /// A segment with its transmuxed media, yielded by a [`Consumer`].
@@ -574,9 +463,8 @@ impl Consumer {
 	/// [`CatalogFailed`](crate::Error::CatalogFailed). A denied referenced broadcast fails every
 	/// call with its authorization error.
 	///
-	/// Waits for the next segment's alignment to settle, then FETCHes and transmuxes its groups.
-	/// A stop or a misaligned segment is yielded without media, so every segment number is
-	/// accounted for. Missing window rows or unavailable media fail the recording instead of
+	/// FETCHes and transmuxes the next segment's groups. A stop, or a record its successor can't
+	/// bound, is yielded without media, so every segment number is accounted for. Missing window rows or unavailable media fail the recording instead of
 	/// silently omitting segments. Fetch/transmux errors leave the cursor in place so the caller
 	/// can retry. A bound instance's retained media drains after End or Restart; a replacement's
 	/// media is never read under the old rows.
@@ -584,14 +472,7 @@ impl Consumer {
 		let Some(row) = kio::wait(|waiter| self.poll_next(waiter)).await? else {
 			return Ok(None);
 		};
-		kio::wait(|waiter| {
-			// The refusal settles the binding, not this rendition's records, so watch both.
-			self.rendition.poll_media(waiter);
-			self.rendition.authorize()?;
-			self.rendition.poll_resolved(waiter, &row).map(Ok::<_, crate::Error>)
-		})
-		.await?;
-		let media = if self.rendition.is_gap(&row) {
+		let media = if row.stop {
 			None
 		} else {
 			let media = self.rendition.fetch(&row).await?;
@@ -774,32 +655,6 @@ mod tests {
 	}
 
 	#[test]
-	fn renditions_agree_on_discontinuities_whatever_they_listed() {
-		let mut breaks = Discontinuities::default();
-		assert_eq!(breaks.stamp(0, false), 0);
-		assert_eq!(breaks.stamp(1, false), 0);
-		assert_eq!(breaks.stamp(2, true), 1, "the segment after a stop starts a new one");
-		assert_eq!(breaks.stamp(3, false), 1);
-		// A rendition that joined later, or saw records the first one skipped, takes the stamps
-		// already made rather than its own view.
-		assert_eq!(breaks.stamp(2, false), 1);
-		assert_eq!(breaks.stamp(3, true), 1);
-		assert_eq!(breaks.stamp(4, false), 1);
-	}
-
-	#[test]
-	fn a_restart_starts_a_new_discontinuity() {
-		let mut breaks = Discontinuities::default();
-		assert_eq!(breaks.stamp(5, false), 0);
-		breaks.restart();
-		assert_eq!(
-			breaks.stamp(0, false),
-			1,
-			"the new run's numbering is unrelated to the old"
-		);
-	}
-
-	#[test]
 	fn rows_and_the_init_groups() {
 		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
@@ -859,23 +714,6 @@ mod tests {
 		live.push(row(0, 0, 2_000, 2_000), window);
 		assert_eq!(live.window().segments.len(), 1);
 		assert_eq!(live.state.read().resets, 2);
-	}
-
-	#[test]
-	fn lookups_tell_pending_from_never() {
-		let live = Producer::new(0);
-		let window = Duration::from_secs(30);
-		assert!(matches!(live.numbered(0), Lookup::Pending));
-		live.push(row(3, 3, 6_000, 2_000), window);
-		live.push(row(5, 5, 10_000, 2_000), window);
-		assert!(matches!(live.numbered(2), Lookup::Never), "evicted or never listed");
-		assert!(matches!(live.numbered(3), Lookup::Found(row) if row.segment == 3));
-		assert!(
-			matches!(live.numbered(4), Lookup::Missing(span) if span == (Duration::from_secs(6)..Duration::from_secs(12)))
-		);
-		assert!(matches!(live.numbered(6), Lookup::Pending));
-		live.end();
-		assert!(matches!(live.numbered(6), Lookup::Never));
 	}
 
 	#[test]

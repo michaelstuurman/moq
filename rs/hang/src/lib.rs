@@ -6,7 +6,7 @@
 //!
 //! - **Catalog**: A JSON track containing codec info and track metadata, updated live as tracks change.
 //! - **Tracks**: Audio or video, supporting one or more renditions.
-//! - **HLS records**: An opt-in JSON track per rendition marking each aligned HLS segment's first group
+//! - **HLS records**: An opt-in JSON track per rendition marking each of its HLS segments' first group
 //!   and pts, so an edge can render playlists without downloading media. Advertised by the rendition's `hls` field.
 //!
 //! Each track specifies a container format:

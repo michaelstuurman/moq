@@ -2424,7 +2424,7 @@ mod tests {
 				}
 				wait_for(&mut fixture.publication, Status::Waiting).await;
 				// Idle past the minimum segment, so each run is listed as its own segment.
-				tokio::time::sleep(moq_mux::hls::DEFAULT_DURATION_MIN + Duration::from_millis(100)).await;
+				tokio::time::sleep(moq_mux::hls::DEFAULT_DURATION + Duration::from_millis(100)).await;
 			}
 
 			let (mut catalog, _consumer) = fixture.finish().await;

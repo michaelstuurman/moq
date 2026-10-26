@@ -451,15 +451,16 @@ async fn a_bounded_cache_rereads_evicted_objects() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn stopped_and_misaligned_segments_are_gaps_and_a_resume_is_a_discontinuity() {
+async fn stopped_segments_are_gaps_and_a_resume_is_a_discontinuity() {
 	let mut recording = Recording::new().await;
-	// 1080p, the lead: two segments, a stop, then content resumes at 10s.
+	// 1080p: two segments, a stop, then content resumes at 10s.
 	recording.add("1080p", 0, &[(0, &[0])]);
 	recording.add("1080p", 2000, &[(1, &[2_000_000])]);
 	recording.stop("1080p", 2, 4000);
 	recording.add("1080p", 10_000, &[(2, &[10_000_000])]);
 	recording.stop("1080p", 3, 12_000);
-	// 360p starts its segment 1 a second and a half late, so it does not line up.
+	// 360p starts its segment 1 a second and a half late. Each rendition lists its own records,
+	// so it is listed as is.
 	recording.add("360p", 0, &[(0, &[0])]);
 	recording.add("360p", 3500, &[(1, &[3_500_000])]);
 	recording.stop("360p", 2, 4000);
@@ -482,36 +483,27 @@ async fn stopped_and_misaligned_segments_are_gaps_and_a_resume_is_a_discontinuit
 			.map(|s| (s.segment, s.gap, s.discontinuity))
 			.collect::<Vec<_>>()
 	};
-	assert_eq!(
-		flags(&low),
-		[
-			(0, false, false),
-			(1, true, false),
-			(2, true, false),
-			(3, false, true),
-			(4, true, false)
-		]
-	);
+	let expected = [
+		(0, false, false),
+		(1, false, false),
+		(2, true, false),
+		(3, false, true),
+		(4, true, false),
+	];
+	assert_eq!(flags(&low), expected);
 	replay
 		.playlist_until(Kind::Video, "1080p", |playlist| playlist.contains("#EXT-X-ENDLIST"))
 		.await;
 	let high = replay.rendition(Kind::Video, "1080p").snapshot();
-	assert_eq!(
-		flags(&high),
-		[
-			(0, false, false),
-			(1, false, false),
-			(2, true, false),
-			(3, false, true),
-			(4, true, false)
-		]
-	);
+	assert_eq!(flags(&high), expected);
 
 	// A gap is never fetched.
 	counting.take();
 	let rendition = replay.rendition(Kind::Video, "360p");
-	assert!(rendition.listed_segment(1).await.unwrap().is_none());
+	assert!(rendition.listed_segment(2).await.unwrap().is_none());
 	assert!(!counting.take().iter().any(|path| is_media(path)));
+	let late = rendition.listed_segment(1).await.unwrap().unwrap();
+	assert_eq!(&late[4..8], b"moof");
 	let after = rendition.listed_segment(3).await.unwrap().unwrap();
 	assert_eq!(&after[4..8], b"moof");
 }

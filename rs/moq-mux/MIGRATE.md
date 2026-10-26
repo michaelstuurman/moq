@@ -17,7 +17,9 @@ Enable them with `catalog::Config::with_hls(hls::Config::default())`; `with_time
 `catalog::Reserved::with_timeline_hint` is `with_hls_hint`, and `catalog::Producer::timeline()` is gone.
 Each video and audio rendition then advertises its own `hls` field and `<track>.hls` record track, cut at group boundaries; untimed and data tracks get none.
 Read records with `hls::Consumer::subscribe(&broadcast, &hls)`, whose `Event::Push` carries an `hls::Entry`, or publish your own with `hls::Producer`.
-A publisher that enables HLS must align group boundaries across its renditions.
+`Config::duration_min` is `hls::Config::duration`, `with_duration_min` is `with_duration`, and `DEFAULT_DURATION_MIN` is `DEFAULT_DURATION`.
+It is now the spacing of a pts grid rather than a floor: a group starts a segment when its pts falls in a later multiple of it than the previous group's, so a segment may be shorter.
+Each rendition cuts and numbers its own segments, so they line up across renditions wherever keyframes share timestamps.
 
 ### JSON snapshot encoder options move to `json::Options`
 

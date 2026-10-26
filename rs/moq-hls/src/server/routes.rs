@@ -256,7 +256,7 @@ mod tests {
 		let duration = Duration::from_secs(2);
 		moq_mux::catalog::Config::default().with_hls(
 			moq_mux::hls::Config::default()
-				.with_duration_min(duration)
+				.with_duration(duration)
 				.with_duration_hint(duration),
 		)
 	}

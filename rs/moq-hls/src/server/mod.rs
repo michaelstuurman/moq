@@ -20,7 +20,7 @@
 //!
 //! `{kind}` is `video` or `audio`, so a video and an audio rendition that share a
 //! name address distinct resources. The two `seg/` forms name the same bytes: HLS
-//! playlists address a segment by its aligned number, the DASH manifest by its
+//! playlists address a segment by its number, the DASH manifest by its
 //! `pts` in milliseconds (`$Time$`). `{hash}` is a hash of the init segment's bytes, so a
 //! reconfigured rendition gets a new init URL. A broadcaster given a generation
 //! ([`Broadcaster::set_generation`](crate::export::Broadcaster::set_generation))

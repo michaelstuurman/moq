@@ -985,8 +985,8 @@ A publisher that does not know the target MAY omit `hls` until its first segment
 
 A consumer that cannot decode a rendition's `hls` field MUST treat it as absent without rejecting the rendition.
 
-A publisher that sets `hls` on several renditions MUST start their segments at the same timestamps: segment `n` of every rendition starts at the same pts.
-This is why the field is opt-in.
+Each rendition's records number its own segments; a segment number means nothing across renditions.
+Segments of different renditions line up wherever their boundaries share timestamps.
 
 ## Track Framing {#hls-framing}
 A record track is a sliding window of records.
@@ -1040,15 +1040,13 @@ The newest record is therefore the live edge.
 A record MUST tolerate and SHOULD preserve unknown fields, like the catalog.
 
 ## Derived Formats {#hls-derived}
-An edge maps record `n` of each rendition to segment `n` of its playlist directly.
+An edge maps a rendition's record `n` to segment `n` of that rendition's playlist directly.
 The HLS media sequence and the segment URL derive from the record `sequence`, so every edge numbers a segment alike.
 A segment is listed once the next record arrives; its `EXTINF`, its DASH `t` and `d`, and the timing of its last sample all come from its own record and the next.
 
-An edge checks each rendition's segment `n` against the same segment of one lead rendition, the first enabled video rendition by name, or the first enabled audio rendition when there is none.
-The lead is kept while it stays listed and enabled, except that an audio lead yields once an enabled video rendition appears.
-A segment that does not start within half of the lead's segment of its own start, or that is a stop, has no content on that rendition: the edge lists it as a gap (HLS `EXT-X-GAP`, omitted from the DASH SegmentTimeline) and never serves media for it.
-A rendition does not list segment `n` before the lead does.
-The segment after a stop, or after records the edge missed, starts a discontinuity.
+A stop has no content: the edge lists it as a gap (HLS `EXT-X-GAP`, omitted from the DASH SegmentTimeline) and never serves media for it.
+The segment after a stop, or after records the edge missed, starts a discontinuity on that rendition.
+Each rendition counts its own discontinuities, so a break in one rendition alone makes its discontinuity sequence differ from the others'; `EXT-X-PROGRAM-DATE-TIME` lets players resynchronize across them.
 
 
 # MPEG-TS Service Information {#mpegts-si}
@@ -1146,7 +1144,7 @@ This document has no IANA actions.
 ## moq-hang-04
 {:numbered="false"}
 
-- Replaced the root `archive` section and its per-track timelines with an opt-in, per-rendition `hls` field on video and audio ({{hls}}). Each record is a segment's first `group` and `pts` in milliseconds, with an optional `duration` where zero marks a stop; frame positions, `end`, `keyframe`, `timescale`, `replay`, `replayEpoch`, `store`, and `version` are gone. Renditions that set it align their segments, so an edge maps record `n` to segment `n`. The record track is named `<track>.hls` and is not compressed.
+- Replaced the root `archive` section and its per-track timelines with an opt-in, per-rendition `hls` field on video and audio ({{hls}}). Each record is a segment's first `group` and `pts` in milliseconds, with an optional `duration` where zero marks a stop; frame positions, `end`, `keyframe`, `timescale`, `replay`, `replayEpoch`, `store`, and `version` are gone. Each rendition numbers its own segments, and an edge maps a rendition's record `n` to its segment `n`. The record track is named `<track>.hls` and is not compressed.
 - A reader refuses a JSON frame in which an object repeats a member name.
 - Added the root `version` ({{catalog-version}}): the oldest draft that reads the catalog, which a consumer refuses when above its own. A `track` other than the entry's ID or a video `warmup` needs 4. Consumers MUST ignore unknown fields.
 - A data track marks a discontinuity with a group of one object with no bytes, since its empty payload is data. An object with no bytes on an audio or video track, or sharing its group, is malformed.
