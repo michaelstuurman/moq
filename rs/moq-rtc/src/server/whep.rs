@@ -226,7 +226,6 @@ fn status_for(err: &Error) -> StatusCode {
 
 #[cfg(test)]
 mod tests {
-	use moq_net::Path;
 	use std::time::Duration;
 
 	use bytes::Bytes;
@@ -318,7 +317,7 @@ mod tests {
 	async fn offers_ride_the_routers_scope_watch() {
 		let pub_origin = moq_tokio::origin::spawn();
 		let other = pub_origin
-			.create_broadcast(Path::new("other").unwrap())
+			.create_broadcast(moq_net::Path::new("other").unwrap())
 			.expect("create broadcast");
 		other
 			.announce(moq_net::origin::Route::default())
@@ -328,7 +327,7 @@ mod tests {
 		let _router = super::router(crate::server::Server::new(Default::default()), sub_origin.consume());
 		let missing = sub_origin
 			.consume()
-			.follow(Path::new("missing").unwrap())
+			.follow(moq_net::Path::new("missing").unwrap())
 			.expect("follow");
 		moq_clock::timeout(TIMEOUT, missing.synced())
 			.await
@@ -337,7 +336,7 @@ mod tests {
 		// Nothing watches `other` on its own, yet the synced lookup already discovered it.
 		sub_origin
 			.consume()
-			.request_broadcast(Path::new("other").unwrap(), None)
+			.request_broadcast(moq_net::Path::new("other").unwrap(), None)
 			.await
 			.expect("discovered through the scope watch");
 
