@@ -26,7 +26,7 @@
 
 use bytes::Bytes;
 use loom::{future::block_on, thread};
-use moq_net::{Error, Hop, Timestamp, broadcast, cache, origin};
+use moq_net::{Error, Hop, Path, Timestamp, broadcast, cache, origin};
 
 /// A millisecond track: the frames written here carry timestamps.
 fn timed() -> moq_net::track::Info {
@@ -218,13 +218,15 @@ fn a_front_sees_a_reader_come_and_go() {
 	model(|| {
 		let (producer, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 		let consumer = producer.consume();
-		let source = producer.publish("room", origin::Route::default()).unwrap();
+		let source = producer
+			.publish(Path::new("room").unwrap(), origin::Route::default())
+			.unwrap();
 		let video = source.create_track("video", None).expect("create track");
 		let demand = video.demand();
 		let noop = kio::Waiter::noop();
 		let now = moq_net::time::Instant::now();
 
-		let pending = consumer.request_broadcast("room", None);
+		let pending = consumer.request_broadcast(Path::new("room").unwrap(), None);
 		driver.poll(now, &noop).unwrap();
 		let room = block_on(pending).expect("resolves");
 
@@ -259,13 +261,15 @@ fn a_front_sees_a_reader_return() {
 	model(|| {
 		let (producer, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 		let consumer = producer.consume();
-		let source = producer.publish("room", origin::Route::default()).unwrap();
+		let source = producer
+			.publish(Path::new("room").unwrap(), origin::Route::default())
+			.unwrap();
 		let video = source.create_track("video", None).expect("create track");
 		let demand = video.demand();
 		let noop = kio::Waiter::noop();
 		let now = moq_net::time::Instant::now();
 
-		let pending = consumer.request_broadcast("room", None);
+		let pending = consumer.request_broadcast(Path::new("room").unwrap(), None);
 		driver.poll(now, &noop).unwrap();
 		let room = block_on(pending).expect("resolves");
 
@@ -453,15 +457,17 @@ fn a_request_never_joins_a_retiring_front() {
 	model(|| {
 		let (producer, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 		let consumer = producer.consume();
-		let _broadcast = producer.publish("room", origin::Route::default()).unwrap();
+		let _broadcast = producer
+			.publish(Path::new("room").unwrap(), origin::Route::default())
+			.unwrap();
 		let waiter = kio::Waiter::noop();
 		let now = moq_net::time::Instant::now();
 
-		let pending = consumer.request_broadcast("room", None);
+		let pending = consumer.request_broadcast(Path::new("room").unwrap(), None);
 		driver.poll(now, &waiter).unwrap();
 		let first = block_on(pending).expect("resolves");
 
-		let requester = thread::spawn(move || consumer.request_broadcast("room", None));
+		let requester = thread::spawn(move || consumer.request_broadcast(Path::new("room").unwrap(), None));
 		drop(first);
 		driver.poll(now, &waiter).unwrap();
 		let pending = requester.join().unwrap();
@@ -479,8 +485,10 @@ fn a_request_never_joins_a_retiring_front() {
 fn a_refused_answer_is_never_announced() {
 	model(|| {
 		let (producer, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
-		let claim = producer.dynamic("room").unwrap();
-		let pending = producer.consume().request_broadcast("room/alice", None);
+		let claim = producer.dynamic(Path::new("room").unwrap()).unwrap();
+		let pending = producer
+			.consume()
+			.request_broadcast(Path::new("room/alice").unwrap(), None);
 		driver
 			.poll(moq_net::time::Instant::now(), &kio::Waiter::noop())
 			.unwrap();
@@ -488,19 +496,27 @@ fn a_refused_answer_is_never_announced() {
 			.expect("requested")
 			.prepare(moq_net::Epoch::mint())
 			.expect("prepare");
-		let answer = prepared.broadcast().clone();
+		// Keep a refused answer alive so dropping it cannot hide a stray announcement.
+		let _answer = prepared.broadcast().clone();
+		let announced = |consumer: &origin::Consumer| {
+			let mut route = std::pin::pin!(consumer.routed(Path::new("room/alice").unwrap()));
+			matches!(
+				kio::Waiter::noop().poll_future(route.as_mut()),
+				std::task::Poll::Ready(Some(_))
+			)
+		};
 
-		let watch = answer.clone();
+		let watch = producer.consume();
 		let releaser = thread::spawn(move || {
 			drop(claim);
-			watch.route().is_some()
+			announced(&watch)
 		});
 		let published = prepared.publish();
 		let seen = releaser.join().unwrap();
 
 		assert_eq!(
 			published.is_ok(),
-			answer.route().is_some(),
+			announced(&producer.consume()),
 			"the route outlived its answer"
 		);
 		assert!(!seen || published.is_ok(), "a refused answer was announced");
@@ -516,12 +532,14 @@ fn refused_track_race(read: fn(&mut moq_net::track::Subscriber) -> bool) {
 	model(move || {
 		let (producer, mut driver) = origin::Producer::new(origin::Config::new(Hop::new(1).unwrap()));
 		let consumer = producer.consume();
-		let source = producer.publish("room", origin::Route::default()).unwrap();
+		let source = producer
+			.publish(Path::new("room").unwrap(), origin::Route::default())
+			.unwrap();
 		let video = source.create_track("video", None).expect("create track");
 		let noop = kio::Waiter::noop();
 		let now = moq_net::time::Instant::now();
 
-		let pending = consumer.request_broadcast("room", None);
+		let pending = consumer.request_broadcast(Path::new("room").unwrap(), None);
 		driver.poll(now, &noop).unwrap();
 		let room = block_on(pending).expect("resolves");
 
