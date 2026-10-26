@@ -893,6 +893,24 @@ mod tests {
 		assert_eq!((removed, added), (2, 2));
 	}
 
+	#[tokio::test]
+	async fn replaced_renditions_are_not_held() {
+		let origin = produce_origin();
+		let _broadcast = origin.create_broadcast("live").expect("publish allowed");
+		_broadcast.announce(Default::default()).expect("publish allowed");
+		settle().await;
+		let upstream = empty_upstream(&origin, "live").await;
+
+		let mut catalog = catalog_with_both();
+		let renditions = renditions::Producer::new(Config::default().window);
+		for width in 1..=8 {
+			catalog.video.renditions.get_mut("video0").unwrap().coded_width = Some(width);
+			renditions.sync(&upstream, &catalog);
+		}
+		// The unchanged audio rendition, the current video one, and at most the one it replaced.
+		assert!(renditions.targets() <= 3, "{} targets", renditions.targets());
+	}
+
 	// The whole fetch-on-demand path in process: a broadcast publishes media through the
 	// catalog (which records its HLS segments), the Broadcaster renders playlists from the
 	// records alone, and a segment request fetches and transmuxes exactly its groups.

@@ -47,7 +47,7 @@ pub enum Event {
 /// cursor's `Arc<Rendition>` must keep its records flowing after `Broadcaster::drop` clears the
 /// map, or its final segments would be silently lost.
 struct Feed {
-	/// Every rendition ever created and still alive, pruned as they drop.
+	/// Every rendition created and still alive, the dropped ones pruned as the next registers.
 	targets: Vec<Weak<Rendition>>,
 	/// Stamps each segment number once, so every rendition agrees on where content breaks.
 	discontinuities: Discontinuities,
@@ -115,6 +115,12 @@ impl Producer {
 				}),
 			},
 		}
+	}
+
+	/// How many renditions the fanout still reaches, dropped ones not yet pruned included.
+	#[cfg(test)]
+	pub(super) fn targets(&self) -> usize {
+		self.fanout.feed.read().targets.len()
 	}
 
 	/// The handle every rendition shares.
@@ -398,6 +404,8 @@ impl Producer {
 		} else {
 			rendition.watch();
 		}
+		// Pruned here, so a catalog that keeps replacing renditions holds only the live ones.
+		feed.targets.retain(|target| target.strong_count() > 0);
 		feed.targets.push(Arc::downgrade(rendition));
 	}
 
