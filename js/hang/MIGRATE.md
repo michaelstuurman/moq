@@ -4,6 +4,11 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### The catalog rendition cap is removed
+
+`Catalog.MAX_RENDITIONS` and `Catalog.TooManyRenditions` are gone: `checkRenditions`, `encode`, and `watch` accept any number of renditions.
+Delete `instanceof TooManyRenditions` checks. An application that wants a limit counts the `renditions` of each section itself.
+
 ### HLS records replace the root archive
 
 `Catalog.ArchiveSchema`, `Catalog.ARCHIVE_VERSION`, the root `archive` field, and the `Timeline` module are gone.

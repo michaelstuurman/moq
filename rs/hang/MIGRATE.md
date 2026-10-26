@@ -4,6 +4,11 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### The catalog rendition cap is removed
+
+`catalog::MAX_RENDITIONS` and `Error::TooManyRenditions` are gone: a catalog with any number of renditions is accepted.
+Delete matches on `TooManyRenditions`. An application that wants a limit counts `video.renditions`, `audio.renditions`, and `text.renditions` itself.
+
 ### HLS records replace the root archive
 
 `catalog::Archive`, `catalog::Timeline`, `Catalog::archive`, and the `timeline` module are gone.

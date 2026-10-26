@@ -4,6 +4,12 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
+### Repeated MSF track names and PMT PIDs keep the last entry
+
+`catalog::msf::Error::DuplicateTrackName` is gone. An MSF catalog naming a track twice keeps the later track as that rendition, and a hang catalog projected to MSF advertises one track per namespace and name, the later rendition's.
+A TS PMT listing a PID twice routes it by the later entry instead of failing the import.
+Delete matches on `DuplicateTrackName`.
+
 ### HLS records are opt-in and replace timelines
 
 The `timeline` module is replaced by `hls`, and nothing publishes records by default.
