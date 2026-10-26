@@ -401,16 +401,29 @@ impl Producer {
 			.map(|row| row.segment)
 	}
 
-	/// The first group of the newest segment holding media, used to bootstrap an init segment
-	/// for inline-parameter-set codecs: a segment starts at a group, and a group at a keyframe.
-	pub fn latest_group(&self) -> Option<u64> {
+	/// The first groups of the newest segments holding media, to bootstrap an inline-parameter-set
+	/// codec's init from (a segment starts at a group, and a group at a keyframe), in the order to
+	/// try them: the newest whose group a later one followed, which is complete and so read from
+	/// cache at once, then the newest when only a stop bounds it and its group may still be open.
+	pub fn init_groups(&self) -> Vec<u64> {
 		let state = self.state.read();
-		state
-			.rows
-			.iter()
-			.rev()
-			.find(|row| !row.stop)
-			.map(|row| row.groups.start)
+		let rows = &state.rows;
+		// A row is listed once its successor arrives, so with nothing after it, a later segment
+		// already started.
+		let complete = |i: usize| {
+			let groups = &rows[i].groups;
+			groups.end > groups.start + 1 || rows.get(i + 1).is_none_or(|next| !next.stop)
+		};
+		let mut media = (0..rows.len()).rev().filter(|&i| !rows[i].stop);
+		let Some(newest) = media.next() else {
+			return Vec::new();
+		};
+		let newest_group = rows[newest].groups.start;
+		if complete(newest) {
+			return vec![newest_group];
+		}
+		let older = media.find(|&i| complete(i)).map(|i| rows[i].groups.start);
+		older.into_iter().chain([newest_group]).collect()
 	}
 
 	/// Whether the playlist has anything to serve yet (at least one segment, or the records
@@ -438,6 +451,21 @@ impl Producer {
 			// Ready, or the channel closed (no more rows will arrive): stop waiting either way.
 			Poll::Ready(_) => Poll::Ready(()),
 			Poll::Pending => Poll::Pending,
+		}
+	}
+
+	/// Poll until the window fails.
+	#[cfg_attr(
+		not(feature = "server"),
+		allow(dead_code, reason = "only the `server` feature uses it")
+	)]
+	pub fn poll_failed(&self, waiter: &kio::Waiter) -> Poll<()> {
+		match self.state.poll_ref(waiter, |state| match state.failed {
+			Some(_) => Poll::Ready(()),
+			None => Poll::Pending,
+		}) {
+			Poll::Ready(Ok(())) => Poll::Ready(()),
+			_ => Poll::Pending,
 		}
 	}
 
@@ -782,10 +810,12 @@ mod tests {
 	}
 
 	#[test]
-	fn rows_and_the_latest_group() {
+	fn rows_and_the_init_groups() {
 		let live = Producer::new(0);
 		let window = Duration::from_secs(30);
+		assert!(live.init_groups().is_empty());
 		live.push(row(0, 0, 0, 1_000), window);
+		assert_eq!(live.init_groups(), [0], "a listed row's successor already started");
 		live.push(
 			Row {
 				stop: true,
@@ -798,7 +828,21 @@ mod tests {
 		assert_eq!(live.row(&tag, 0).unwrap().groups, 0..1);
 		assert_eq!(live.row(&tag, 7), None, "unknown segments miss");
 		assert_eq!(live.row("00000000", 0), None, "another record track's numbering misses");
-		assert_eq!(live.latest_group(), Some(0), "a stop holds no media");
+		assert_eq!(live.init_groups(), [0], "a stop holds no media");
+		live.push(row(2, 1, 1_000, 1_000), window);
+		live.push(row(3, 2, 2_000, 1_000), window);
+		live.push(
+			Row {
+				stop: true,
+				..row(4, 3, 3_000, 0)
+			},
+			window,
+		);
+		assert_eq!(
+			live.init_groups(),
+			[1, 2],
+			"a group only a stop bounds may be open, so a complete one goes first"
+		);
 	}
 
 	#[test]
