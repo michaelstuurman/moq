@@ -112,7 +112,6 @@ whose surface its QUIC adapter plugs into.
 - [Cancelled moq-transport requests stop](/quest/m1/ietf-request-cancel.md) - a cancelled request releases its state even when the peer withholds credit
 - [In-band auth](/quest/m1/auth/README.md) - a session tells its peer what it may publish and subscribe to, unions tokens presented in band, and fails loud on an out-of-scope publish
 - [Cluster routing](/quest/m1/cluster-routing/README.md) - prove shared routing contracts, implement per-origin routes, and connect outbound local clusters
-- [No reused track names](/quest/m1/name-reuse.md) - no first-party publisher re-creates a finished track under its old name
 - [Routing guide](/quest/m1/routing-guide.md) - concepts and practical outbound federation setup
 - [Generated C bindings](/quest/m1/c/README.md) - C generated from moq-ffi ships as `moq-c` 0.8.0 and replaces the hand-written libmoq
 - [Exact timestamps in every binding](/quest/m1/binding-timestamps.md) - bindings carry `{value, scale}` timestamps instead of lossy microseconds
@@ -150,7 +149,6 @@ whose surface its QUIC adapter plugs into.
 - [API Extractor checks](/quest/m1/api-extractor-checks.md) - API Extractor fails a PR on a forgotten export, an unresolved declaration, or an undocumented export, replacing the hand-rolled `.d.ts` checkers
 - [Generated JS API reference](/quest/m1/js-api-reference.md) - the doc site renders an API reference for every `@moq/*` package from API Extractor's doc model
 - [Interop coverage](/quest/m1/interop-coverage/README.md) - the riskiest moq-transport features moq-net exposes get cross-implementation tests over drafts 18 and 22
-- [AMF0 exact reads](/quest/m1/rtmp-amf0-exact-reads.md) - a truncated RTMP string fails with `UnexpectedEof` instead of parsing NUL padding
 - [Calibrate the paired nightly benchmarks](/quest/m1/bench-ci.md) - A/A and deliberately slowed Nightly runs set the paired comparison's threshold, so its regression alerts can be trusted
 - [HLS takeover leak](/quest/m1/hls-takeover-leak.md) - a replaced instance's recording cursor never yields the replacement's media, and ends or fails instead of stalling
 - [HLS and DASH segment conformance](/quest/m1/hls-conformance.md) - nightly ffprobe checks that advertised timing, sync flags, and bytes match the media served
