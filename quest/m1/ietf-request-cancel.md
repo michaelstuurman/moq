@@ -12,11 +12,9 @@ Every request write in `rs/moq-net/src/ietf/subscriber.rs` awaits its first
 message without watching for cancellation, so a peer that withholds credit
 pins a cancelled request.
 Lazy discovery ([moq-dev/moq#6530](https://github.com/moq-dev/moq/pull/6530))
-fixed only the stream-open race. On drafts 16 and up, reset a partially written request
-stream. Drafts 14 and 15 share the ordered control stream, so a partial
-message cannot be abandoned; decide there whether to finish the message and
-cancel right after, and record the choice here.
+fixed only the stream-open race. Every remaining draft gives each request its
+own stream, so reset the partially written request stream.
 
-Test with a peer that never grants credit, on each draft family.
+Test with a peer that never grants credit, on drafts 18 and 22.
 
 Public API: none. Wire: none.
