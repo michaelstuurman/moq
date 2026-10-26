@@ -1358,20 +1358,11 @@ impl Publisher {
 			};
 			let request_id = msg.request_id;
 			let track_name = msg.track_name.clone();
-			let absolute = match self.origin.absolute(&msg.track_namespace) {
-				Ok(absolute) => absolute,
-				Err(err) => {
-					let error = ietf::RequestError {
-						request_id: None,
-						error_code: request::to_code(&err, request::Kind::Subscribe, self.version),
-						reason_phrase: "namespace too long under this root".into(),
-						retry_interval: 0,
-					};
-					return super::request_stream::reject(stream, error).await;
-				}
-			};
-
-			tracing::debug!(id = %request_id, broadcast = %absolute, track = %track_name, "subscribe started");
+			// Logged beside the root rather than joined, so a namespace too long under it is
+			// refused by the lookup, on this request alone.
+			let (root, namespace) = (self.origin.root().clone(), msg.track_namespace.clone());
+			let broadcast = || crate::path::Rooted(&root, &namespace);
+			tracing::debug!(id = %request_id, broadcast = %broadcast(), track = %track_name, "subscribe started");
 
 			// Serve only what our grant lets us publish (MoQ Auth), and stop once it no
 			// longer does. Checked before resolving, so a denied request never reaches the
@@ -1702,11 +1693,11 @@ impl Publisher {
 					{
 						// PUBLISH_DONE carries a fixed reason per status, so only the code reaches
 						// the peer once SUBSCRIBE_OK went out.
-						tracing::info!(broadcast = %absolute, track = %track_name, err = %refusal.error, reason = %refusal.reason, "request token grant ended");
+						tracing::info!(broadcast = %broadcast(), track = %track_name, err = %refusal.error, reason = %refusal.reason, "request token grant ended");
 						return Poll::Ready(refusal);
 					}
 					if gate.poll_denied(waiter).is_ready() {
-						tracing::info!(broadcast = %absolute, track = %track_name, "subscription no longer authorized");
+						tracing::info!(broadcast = %broadcast(), track = %track_name, "subscription no longer authorized");
 						return Poll::Ready(Error::Unauthorized.into());
 					}
 					Poll::Pending
@@ -9672,34 +9663,50 @@ mod serve_tests {
 	/// request, and the session stays open.
 	#[moq_clock::test]
 	async fn a_namespace_too_long_under_the_root_is_refused_per_request() {
-		let version = Version::Draft22;
-		let h = serve(version);
-		let root = "r".repeat(crate::Path::MAX_BYTES - 2);
-		let scoped = h
-			._origin
-			.consume()
-			.scope(root.as_str(), &crate::Patterns::from(crate::Pattern::all()))
-			.unwrap();
-		let publisher = Publisher::new(
-			crate::time::sim(),
-			crate::driver::Transport::new(h.session.clone()),
-			scoped,
-			Control::new(None, false),
-			None,
-			peer::PeerSetup::default(),
-			version,
-		);
-		let stream = Stream::open(&mut crate::driver::Transport::new(h.session.clone()), version)
-			.await
-			.unwrap();
-		let mark = h.log.writes.lock().unwrap().len();
-		publisher
-			.run_subscribe_stream(stream, subscribe(Filter::NextObject, None))
-			.await
-			.unwrap();
-		let code = request::to_code(&Error::from(crate::path::TooLong), request::Kind::Subscribe, version);
-		assert_eq!(refusal_code(&h.log.writes.lock().unwrap()[mark..], version), Some(code));
-		assert!(h.log.closes().is_empty());
+		for version in ALL_VERSIONS {
+			let h = serve(version);
+			let root = "r".repeat(crate::Path::MAX_BYTES - 2);
+			let scoped = h
+				._origin
+				.consume()
+				.scope(root.as_str(), &crate::Patterns::from(crate::Pattern::all()))
+				.unwrap();
+			let peer_setup = peer::PeerSetup::default();
+			peer_setup.set(peer::Peer::default());
+			let publisher = Publisher::new(
+				crate::time::sim(),
+				crate::driver::Transport::new(h.session.clone()),
+				scoped,
+				Control::new(None, false),
+				None,
+				peer_setup,
+				version,
+			);
+			let stream = Stream::open(&mut crate::driver::Transport::new(h.session.clone()), version)
+				.await
+				.unwrap();
+			let mark = h.log.writes.lock().unwrap().len();
+			publisher
+				.run_subscribe_stream(stream, subscribe(Filter::NextObject, None))
+				.await
+				.unwrap();
+
+			let wire = h.log.writes.lock().unwrap()[mark..].to_vec();
+			let mut buf = Decoder::new(&wire, version.into());
+			let code = match version {
+				Version::Draft14 => {
+					assert_eq!(buf.varint().unwrap(), ietf::SubscribeError::ID, "{version}");
+					ietf::SubscribeError::decode(&mut buf, version).unwrap().error_code
+				}
+				_ => {
+					assert_eq!(buf.varint().unwrap(), ietf::RequestError::ID, "{version}");
+					ietf::RequestError::decode(&mut buf, version).unwrap().error_code
+				}
+			};
+			let expected = request::to_code(&Error::from(crate::path::TooLong), request::Kind::Subscribe, version);
+			assert_eq!(code, expected, "{version}");
+			assert!(h.log.closes().is_empty(), "{version}");
+		}
 	}
 
 	/// Legal requests we don't serve are refused NOT_SUPPORTED one at a time, and the
