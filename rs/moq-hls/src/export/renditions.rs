@@ -251,6 +251,17 @@ impl Fanout {
 		self.feed.read().lead.as_ref()?.upgrade()
 	}
 
+	/// [`lead`](Self::lead), registering `waiter` for the next change to what every rendition
+	/// shares, a new lead included.
+	pub fn poll_lead(&self, waiter: &kio::Waiter) -> Option<Arc<Rendition>> {
+		let mut lead = None;
+		let _ = self.feed.poll_ref(waiter, |feed| {
+			lead = feed.lead.as_ref().and_then(Weak::upgrade);
+			Poll::<()>::Pending
+		});
+		lead
+	}
+
 	fn set_lead(&self, lead: Option<&Arc<Rendition>>) {
 		let mut feed = self.feed.write().unwrap_or_else(|_| unreachable!("fanout is open"));
 		feed.lead = lead.map(Arc::downgrade);

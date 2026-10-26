@@ -620,7 +620,9 @@ impl Rendition {
 
 	/// Poll until `row`'s alignment is decided.
 	pub(crate) fn poll_resolved(&self, waiter: &kio::Waiter, row: &segments::Row) -> Poll<()> {
-		let Some(lead) = self.fanout.lead() else {
+		// Registered on lead changes too: a new lead may decide the row at once, while the old one
+		// may never list it.
+		let Some(lead) = self.fanout.poll_lead(waiter) else {
 			return Poll::Ready(());
 		};
 		// Read before resolving, so a row the lead lists in between wakes this poll.

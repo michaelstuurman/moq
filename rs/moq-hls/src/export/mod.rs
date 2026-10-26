@@ -3625,6 +3625,34 @@ mod tests {
 		assert_eq!(numbers(&test.listed("video1", 4).await), [0, 1, 2, 3, 4]);
 	}
 
+	// A cursor waiting on a stalled lead resumes once the lead hands over.
+	#[tokio::test(start_paused = true)]
+	async fn a_cursor_waiting_on_the_lead_follows_a_handover() {
+		let mut test = Records::new();
+		let (_t0, mut video0) = test.publish("video0");
+		let (_t1, mut video1) = test.publish("video1");
+		let _media = test.media("video1", 4);
+		for sequence in 0..4 {
+			video1.push(&gop(sequence)).unwrap();
+		}
+		// The lead lists only segment 0, bounded by record 1.
+		video0.push(&gop(0)).unwrap();
+		video0.push(&gop(1)).unwrap();
+		test.listed("video1", 0).await;
+		let mut cursor = test.rendition("video1").segments();
+		assert_eq!(cursor.next().await.unwrap().unwrap().segment, 0);
+		// Spawned, so only a wake polls it again.
+		let mut waiting = tokio::spawn(async move { cursor.next().await.unwrap().unwrap().segment });
+		settle().await;
+		assert!(!waiting.is_finished(), "segment 1 waits on the lead");
+
+		test.catalog.video.renditions.get_mut("video0").unwrap().enabled = false;
+		test.sync();
+		assert_eq!(test_lead(&test), Some("video1".to_string()));
+		let next = tokio::time::timeout(Duration::from_secs(1), &mut waiting).await;
+		assert_eq!(next.expect("the handover wakes the cursor").unwrap(), 1);
+	}
+
 	// A stop is listed as a gap at once, and what resumes after it starts a new discontinuity
 	// on every rendition.
 	#[tokio::test(start_paused = true)]
