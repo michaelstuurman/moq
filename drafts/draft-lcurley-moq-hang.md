@@ -1044,7 +1044,8 @@ An edge maps record `n` of each rendition to segment `n` of its playlist directl
 The HLS media sequence and the segment URL derive from the record `sequence`, so every edge numbers a segment alike.
 A segment is listed once the next record arrives; its `EXTINF`, its DASH `t` and `d`, and the timing of its last sample all come from its own record and the next.
 
-An edge checks each rendition's segment `n` against the same segment of one lead rendition, the first enabled video rendition by name, or the first enabled audio rendition when there is none, kept while it stays enabled.
+An edge checks each rendition's segment `n` against the same segment of one lead rendition, the first enabled video rendition by name, or the first enabled audio rendition when there is none.
+The lead is kept while it stays listed and enabled, except that an audio lead yields once an enabled video rendition appears.
 A segment that does not start within half of the lead's segment of its own start, or that is a stop, has no content on that rendition: the edge lists it as a gap (HLS `EXT-X-GAP`, omitted from the DASH SegmentTimeline) and never serves media for it.
 A rendition does not list segment `n` before the lead does.
 The segment after a stop, or after records the edge missed, starts a discontinuity.

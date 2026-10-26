@@ -883,15 +883,41 @@ impl Recorder {
 	/// A report the segmenter cannot place ends the record track with an error rather than
 	/// publishing records that silently omit frames. Media publishing is unaffected.
 	pub fn frame(&mut self, group: u64, pts: Timestamp) {
-		let published = {
+		let (published, failed) = {
 			let mut live = self.live.lock().unwrap();
-			if let Err(err) = live.segmenter.frame(group, pts) {
+			let result = live.segmenter.frame(group, pts);
+			if let Err(err) = &result {
 				tracing::warn!(%err, "HLS report rejected; aborting the record track");
 				live.abort(err.reason());
 			}
-			live.publish()
+			(live.publish(), result.is_err())
 		};
 		self.lead(&published.fire());
+		if failed {
+			// An aborted pacer cuts nothing more, so its followers would never start a segment.
+			self.hand_over();
+		}
+	}
+
+	/// Hand pacing, if this track holds it, to the earliest enrollment that can still pace, or to
+	/// nobody until the next.
+	fn hand_over(&self) {
+		let mut state = self.state.lock().unwrap();
+		if state.pacer.as_deref() != Some(self.name.as_str()) {
+			return;
+		}
+		let next = state
+			.tracks
+			.iter()
+			.filter_map(|(name, (_, live))| {
+				let live = live.lock().unwrap();
+				(live.recording && !live.segmenter.closed).then_some((live.enrolled, name.clone()))
+			})
+			.min();
+		state.pacer = next.map(|(_, name)| name);
+		if let Some(pacer) = &state.pacer {
+			state.tracks[pacer].1.lock().unwrap().segmenter.pace();
+		}
 	}
 
 	/// Report that the content extends to `pts`; see [`Segmenter::end`].
@@ -927,24 +953,7 @@ impl Drop for Recorder {
 		// A pacer going away says nothing about where the others' content stops, so its last stop
 		// isn't mirrored: each follower stops where its own content does, or paces on.
 		published.fire();
-
-		// The earliest enrollment still recording takes over pacing, or nobody does until the next.
-		let mut state = self.state.lock().unwrap();
-		if state.pacer.as_deref() != Some(self.name.as_str()) {
-			return;
-		}
-		let next = state
-			.tracks
-			.iter()
-			.filter_map(|(name, (_, live))| {
-				let live = live.lock().unwrap();
-				live.recording.then_some((live.enrolled, name.clone()))
-			})
-			.min();
-		state.pacer = next.map(|(_, name)| name);
-		if let Some(pacer) = &state.pacer {
-			state.tracks[pacer].1.lock().unwrap().segmenter.pace();
-		}
+		self.hand_over();
 	}
 }
 
@@ -1337,6 +1346,20 @@ mod test {
 		let video = tracks.track("video", hinted()).unwrap();
 		let mut audio = tracks.track("audio", hinted()).unwrap();
 		drop(video);
+		groups_on(&mut audio, 0..9, 1_000);
+		let live = tracks.state.lock().unwrap().tracks["audio"].1.clone();
+		let next = live.lock().unwrap().segmenter.sequence();
+		assert_eq!(next, 3, "audio paced its own segments at 0, 4s, and 8s");
+	}
+
+	#[tokio::test]
+	async fn a_rejected_pacer_hands_over_pacing() {
+		let broadcast = moq_net::broadcast::Info::new().produce();
+		let tracks = Tracks::new(&broadcast);
+		let mut video = tracks.track("video", hinted()).unwrap();
+		let mut audio = tracks.track("audio", hinted()).unwrap();
+		video.frame(1, ms(0));
+		video.frame(0, ms(1_000));
 		groups_on(&mut audio, 0..9, 1_000);
 		let live = tracks.state.lock().unwrap().tracks["audio"].1.clone();
 		let next = live.lock().unwrap().segmenter.sequence();
