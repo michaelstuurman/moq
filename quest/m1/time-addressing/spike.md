@@ -64,10 +64,9 @@ a producer would need per-track memory of its last number.
   previous-start link rides in the Prior Group ID Gap property. Object IDs
   stay +1 per frame, so no Prior Object ID Gap is sent; each object's PTS
   rides in the TIMESTAMP property, and GROUP_END maps to END_OF_GROUP.
-  Only draft-14 lets a status object carry properties, so only there does
-  END_OF_GROUP carry the end in its TIMESTAMP; later drafts refuse them
-  (`rs/moq-net/src/ietf/object.rs:57`), so their END_OF_GROUP stays bare and
-  the end is lost unless an extension carries it. Keep it LOC compatible:
+  The supported drafts refuse properties on a status object
+  (`rs/moq-net/src/ietf/object.rs`), so END_OF_GROUP stays bare and the end
+  is lost unless an extension carries it. Keep it LOC compatible:
   TIMESTAMP (0x10) and TIMESCALE (0x08) are the MOQ Properties shared with
   draft-ietf-moq-loc. Rejected: Object ID as a PTS delta, because B-frames
   run backwards in decode order and open-GOP leading frames present before

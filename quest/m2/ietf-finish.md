@@ -33,4 +33,4 @@ its draft.
 
 ## Required
 
-- [Join after a quick finish](/quest/m2/ietf-join-after-finish.md) - the pre-draft-22 half of this, without which drafts 14 to 18 cannot pass
+- [Join after a quick finish](/quest/m2/ietf-join-after-finish.md) - the pre-draft-22 half of this, without which draft 18 cannot pass
