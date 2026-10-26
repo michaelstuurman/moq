@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use crate::coding::{Decode, DecodeError, Decoder, Encode, EncodeError, Encoder};
 
-// Paths up to this many bytes live inline, which keeps `Path` at 24 bytes.
-const INLINE: usize = 22;
+// Paths up to this many bytes live inline, in the word `Shared` holds beside its `Arc` less the
+// length and the tag: 22 bytes on 64-bit targets and 10 on 32-bit ones.
+const INLINE: usize = size_of::<Arc<str>>() + size_of::<usize>() - 2;
 
 /// Inline bytes, a static literal, or a suffix of a shared reference-counted buffer.
 ///
@@ -27,10 +28,10 @@ const INLINE: usize = 22;
 enum Repr {
 	Inline { len: u8, buf: [u8; INLINE] },
 	Static(&'static str),
-	Shared { start: u32, buf: Arc<str> },
+	Shared { start: u16, buf: Arc<str> },
 }
 
-const _: () = assert!(std::mem::size_of::<Repr>() == 24);
+const _: () = assert!(size_of::<Repr>() == INLINE + 2);
 
 impl Repr {
 	fn copy(s: &str) -> Self {
@@ -132,12 +133,12 @@ impl Path {
 		let rest = &self.as_str()[n..];
 		match &self.0 {
 			Repr::Static(s) => Path(Repr::Static(&s[n..])),
-			Repr::Shared { buf, start } if rest.len() > INLINE => match u32::try_from(*start as usize + n) {
+			Repr::Shared { buf, start } if rest.len() > INLINE => match u16::try_from(*start as usize + n) {
 				Ok(start) => Path(Repr::Shared {
 					buf: buf.clone(),
 					start,
 				}),
-				// An offset past 4 GiB doesn't fit, so copy the rest instead.
+				// An offset past 64 KiB doesn't fit, so copy the rest instead.
 				Err(_) => Path(Repr::copy(rest)),
 			},
 			_ => Path(Repr::copy(rest)),
@@ -1105,6 +1106,24 @@ mod tests {
 			wide.strip_prefix(&Path::new("caf\u{e9}")).unwrap().as_str(),
 			"\u{1f3a5}"
 		);
+	}
+
+	#[test]
+	fn test_shared_offset_limit() {
+		// Stripping `head/` leaves an offset of exactly `u16::MAX`.
+		let head = "a".repeat(u16::MAX as usize - 1);
+		let tail = "c".repeat(INLINE + 1);
+		let path = Path::new(&format!("{head}/b/{tail}"));
+
+		// The largest offset that fits shares the buffer.
+		let at = path.strip_prefix(&Path::new(&head)).unwrap();
+		assert_eq!(at.as_str().as_ptr(), path.as_str()[head.len() + 1..].as_ptr());
+
+		// One past it copies, with the same contents.
+		let past = path.strip_prefix(&Path::new(&format!("{head}/b"))).unwrap();
+		assert_eq!(past.as_str(), tail);
+		assert!(matches!(past.0, Repr::Shared { start: 0, .. }));
+		assert_ne!(past.as_str().as_ptr(), path.as_str()[head.len() + 3..].as_ptr());
 	}
 
 	#[test]
