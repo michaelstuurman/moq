@@ -71,12 +71,12 @@ fn hops(ids: &[u64]) -> Hops {
 fn paths() {
 	for (name, s) in [("short", SHORT), ("medium", MEDIUM), ("long", LONG)] {
 		let path = Path::new(s);
-		let prefix = Path::new("room");
+		let prefix = Path::new(s.split('/').next().unwrap());
 		let cam = Path::new("cam");
 		allocs(&format!("path/new/{name}"), 10_000, 1, || Path::new(black_box(s)));
 		allocs(&format!("path/clone/{name}"), 10_000, 1, || path.clone());
 		allocs(&format!("path/strip_prefix/{name}"), 10_000, 1, || {
-			path.strip_prefix(black_box(&prefix))
+			path.strip_prefix(black_box(&prefix)).unwrap()
 		});
 		allocs(&format!("path/join/{name}"), 10_000, 1, || path.join(black_box(&cam)));
 	}

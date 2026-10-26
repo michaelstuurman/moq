@@ -56,8 +56,8 @@ export type Relative = string & { __brand: "Relative" };
  */
 export const MAX_PARTS = 32;
 
-/** Maximum UTF-8 length of a path in bytes, matching the 64 KiB moq-lite message limit. */
-export const MAX_BYTES = 65535;
+/** Maximum UTF-8 length of a path in bytes, leaving room in a 64 KiB moq-lite message for its other fields. */
+export const MAX_BYTES = 16384;
 
 const utf8 = new TextEncoder();
 

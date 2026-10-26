@@ -91,12 +91,13 @@ impl Path {
 	/// and publishing one to an origin is rejected.
 	pub const MAX_PARTS: usize = 32;
 
-	// Longest path on the wire, in bytes, matching the 64 KiB lite message limit.
-	pub(crate) const MAX_LEN: usize = u16::MAX as usize;
+	// Longest path on the wire, in bytes: a quarter of the 64 KiB lite message limit,
+	// leaving room for every other field of a message that carries one.
+	pub(crate) const MAX_BYTES: usize = 16 * 1024;
 
 	// Whether this path fits the wire limits on depth and length.
 	pub(crate) fn fits_wire(&self) -> bool {
-		self.len() <= Self::MAX_LEN && self.parts().count() <= Self::MAX_PARTS
+		self.len() <= Self::MAX_BYTES && self.parts().count() <= Self::MAX_PARTS
 	}
 
 	/// Create a new Path by copying a string slice.
@@ -135,7 +136,7 @@ impl Path {
 					buf: buf.clone(),
 					start,
 				}),
-				// Only wire paths are capped at 64 KiB, so a longer local path copies the rest instead.
+				// Only wire paths are capped, so a local path past 64 KiB copies the rest instead.
 				Err(_) => Path(Repr::copy(rest)),
 			},
 			_ => Path(Repr::copy(rest)),
@@ -1184,7 +1185,7 @@ mod tests {
 	fn test_wire_max_len() {
 		use crate::lite::Version;
 
-		let longest = "a".repeat(Path::MAX_LEN);
+		let longest = "a".repeat(Path::MAX_BYTES);
 		let longer = format!("{longest}b");
 
 		// Encode enforces the limit, and decode round-trips at it.
@@ -1195,6 +1196,15 @@ mod tests {
 			Path::new(&longer).encode_bytes(Version::Lite04),
 			Err(EncodeError::BoundsExceeded)
 		));
+
+		// A message carrying the longest path still fits the lite message limit.
+		let tracks = crate::lite::Tracks {
+			broadcast: Path::new(&longest),
+			epoch: None,
+		};
+		let buf = tracks.encode_bytes(Version::Lite07).unwrap();
+		let (decoded, _) = crate::lite::Tracks::decode_slice(&buf, Version::Lite07).unwrap();
+		assert_eq!(decoded.broadcast.as_str(), longest);
 
 		// Decode enforces the limit on a raw string that encode would have refused.
 		let mut buf = Vec::new();

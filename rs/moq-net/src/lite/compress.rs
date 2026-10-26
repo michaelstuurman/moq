@@ -515,13 +515,13 @@ mod tests {
 	#[test]
 	fn rejects_a_resolved_path_too_long() {
 		let mut decoder = AnnounceDecoder::default();
-		let head = "x".repeat(Path::MAX_LEN - 2);
+		let head = "x".repeat(Path::MAX_BYTES - 2);
 		let (p, h) = literal(&head, &[]);
 		decoder.start(p, h).unwrap();
 
 		// `head/y` is exactly the limit, and one byte more is refused.
 		let (suffix, _) = decoder.start(path(1, 1, "y"), chain(0, &[], 0)).unwrap();
-		assert_eq!(suffix.len(), Path::MAX_LEN);
+		assert_eq!(suffix.len(), Path::MAX_BYTES);
 		assert!(matches!(
 			decoder.start(path(1, 1, "yz"), chain(0, &[], 0)),
 			Err(Error::ProtocolViolation)

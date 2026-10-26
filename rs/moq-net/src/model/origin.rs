@@ -1732,7 +1732,7 @@ impl Mount {
 	fn names(&self, path: &Path) -> bool {
 		path.strip_prefix(&self.target).is_none_or(|rest| {
 			self.at.parts().count() + rest.parts().count() <= Path::MAX_PARTS
-				&& self.at.len() + usize::from(!self.at.is_empty() && !rest.is_empty()) + rest.len() <= Path::MAX_LEN
+				&& self.at.len() + usize::from(!self.at.is_empty() && !rest.is_empty()) + rest.len() <= Path::MAX_BYTES
 		})
 	}
 
@@ -2155,7 +2155,7 @@ impl Producer {
 	/// producer may publish under (after [`scope`](Self::scope)) or beneath a
 	/// [`mount`](Self::mount),
 	/// [`Error::BoundsExceeded`] if the full rooted path exceeds
-	/// [`Path::MAX_PARTS`] or 64 KiB, [`Error::InvalidPath`] if it holds a segment no
+	/// [`Path::MAX_PARTS`] or 16 KiB, [`Error::InvalidPath`] if it holds a segment no
 	/// pattern can spell (`*` or `**`), [`Error::NavigationSegment`] for a literal `.` or `..`,
 	/// or [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
@@ -2432,7 +2432,7 @@ impl Producer {
 	/// `at` or `target` overlaps a mount point this producer already has, or `at`
 	/// overlaps an existing target or its own: mounts never chain, in whatever order they are added,
 	/// so a target is always read as the origin holds it. Mounts may share a target.
-	/// [`Error::BoundsExceeded`] if either rooted path exceeds [`Path::MAX_PARTS`] or 64 KiB,
+	/// [`Error::BoundsExceeded`] if either rooted path exceeds [`Path::MAX_PARTS`] or 16 KiB,
 	/// and [`Error::InvalidPath`] if `at` holds a segment no pattern can spell.
 	pub fn mount(&self, at: impl Into<Path>, target: impl Into<Path>) -> Result<Producer, Error> {
 		let at = self.root.join(&at.into());
@@ -9700,11 +9700,11 @@ mod tests {
 
 		// The byte limit counts the root the producer joins on.
 		let rooted = producer.scope("r", &Patterns::from(Pattern::all())).unwrap();
-		let longest = "b".repeat(Path::MAX_LEN - 2);
+		let longest = "b".repeat(Path::MAX_BYTES - 2);
 		let _long = rooted
 			.create_broadcast(longest.as_str())
 			.expect("max length is allowed");
-		let longer = "c".repeat(Path::MAX_LEN - 1);
+		let longer = "c".repeat(Path::MAX_BYTES - 1);
 		assert!(matches!(
 			rooted.create_broadcast(longer.as_str()),
 			Err(Error::BoundsExceeded(_))
