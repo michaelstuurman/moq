@@ -3350,8 +3350,8 @@ impl Fetch {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use crate::frame::Frame;
 	use crate::Path;
+	use crate::frame::Frame;
 	use crate::model::test_tracing::count_drop_warnings;
 	use bytes::Bytes;
 	#[cfg(feature = "async")]

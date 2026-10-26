@@ -83,7 +83,10 @@ impl Chain {
 	async fn subscribe(&self, budget: Duration) -> track::Subscriber {
 		let consumer = self.viewer.consume();
 		consumer.routed(Path::new("live").unwrap()).await.unwrap();
-		let remote = consumer.request_broadcast(Path::new("live").unwrap(), None).await.unwrap();
+		let remote = consumer
+			.request_broadcast(Path::new("live").unwrap(), None)
+			.await
+			.unwrap();
 		let subscription = Subscription::default()
 			.with_max_delay(budget)
 			.with_ranges([Range::oldest()]);
