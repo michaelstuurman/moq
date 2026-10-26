@@ -571,11 +571,12 @@ impl Display for Path<'_> {
 
 impl<V> Decode<V> for Path<'_> {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
-		let path = Path::try_from(r.string()?).map_err(|_| DecodeError::InvalidValue)?;
+		// Borrow the wire bytes until the path is known good, then copy them once.
+		let path = Path::new(r.str()?).map_err(|_| DecodeError::InvalidValue)?;
 		if path.parts().count() > Path::MAX_PARTS {
 			return Err(DecodeError::BoundsExceeded);
 		}
-		Ok(path)
+		Ok(path.into_owned())
 	}
 }
 
