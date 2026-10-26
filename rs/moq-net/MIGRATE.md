@@ -10,6 +10,7 @@ How to update your code for each breaking change, newest first.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
 The moql SETUP (no ALPN, or `moql`) now negotiates only lite-01 and lite-02.
 `session::Limits::requests` is removed: stream credit bounds every peer request, so drop the field and keep `announces`.
+
 ### Exports without a consumer are gone
 
 These had no caller outside tests; replace them as follows.
