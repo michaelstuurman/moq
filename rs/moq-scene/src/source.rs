@@ -261,7 +261,8 @@ impl Driver {
 	/// Follow the broadcast at `path` for as long as the feed lives, playing
 	/// each instance of it that comes online.
 	async fn broadcast(&self, path: &str) -> Result<(), Error> {
-		let mut instances = moq_mux::follow::Instances::new(&self.context.origin, path, None)?;
+		let broadcast = moq_net::Path::new(path)?;
+		let mut instances = moq_mux::follow::Instances::new(&self.context.origin, &broadcast, None)?;
 		set(&self.status, Status::Offline);
 
 		let mut playing: Option<Playing<'_>> = None;
@@ -598,7 +599,9 @@ mod tests {
 		local(async {
 			let dir = tempfile::tempdir().unwrap();
 			let (context, origin) = context(dir.path());
-			let publication = origin.create_broadcast("room/guest").unwrap();
+			let publication = origin
+				.create_broadcast(moq_net::Path::new("room/guest").unwrap())
+				.unwrap();
 			let mut broadcast = publication.broadcast().clone();
 			let catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 			// A known bitrate ranks a rendition above one without.
@@ -644,7 +647,9 @@ mod tests {
 		local(async {
 			let dir = tempfile::tempdir().unwrap();
 			let (context, origin) = context(dir.path());
-			let publication = origin.create_broadcast("room/guest").unwrap();
+			let publication = origin
+				.create_broadcast(moq_net::Path::new("room/guest").unwrap())
+				.unwrap();
 			let mut broadcast = publication.broadcast().clone();
 			let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 			let info = catalog.track_info(hang::catalog::PRIORITY.audio);
@@ -687,7 +692,9 @@ mod tests {
 		local(async {
 			let dir = tempfile::tempdir().unwrap();
 			let (context, origin) = context(dir.path());
-			let publication = origin.create_broadcast("room/guest").unwrap();
+			let publication = origin
+				.create_broadcast(moq_net::Path::new("room/guest").unwrap())
+				.unwrap();
 			let mut broadcast = publication.broadcast().clone();
 			let mut catalog = moq_mux::catalog::Producer::new(&mut broadcast, Default::default()).unwrap();
 			let mut config = hang::catalog::AudioConfig::new(hang::catalog::AudioCodec::Opus, 48_000, 2);
