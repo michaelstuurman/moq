@@ -196,7 +196,7 @@ mod tests {
 		let producer = Producer::new(
 			produce::Config::new()
 				.with_origin(origin.clone())
-				.with_node(Path::from("sjc")),
+				.with_node(Path::from_static("sjc")),
 		);
 		(producer, origin)
 	}
@@ -224,7 +224,10 @@ mod tests {
 	}
 
 	async fn feed(producer: &Producer, tier: Tier, label: &str, path: &str) -> Feed {
-		let ctx = producer.registry().tier(tier).session(label);
+		let ctx = producer
+			.registry()
+			.tier(tier)
+			.session(moq_net::Path::new(label).unwrap());
 		let feed_origin = produce_origin();
 		let egress = feed_origin.consume().with_stats(ctx.clone());
 
@@ -254,7 +257,7 @@ mod tests {
 		assert!(active);
 		origin
 			.consume()
-			.request_broadcast(moq_net::Path::new(update.prefix.as_str()), None)
+			.request_broadcast(&update.prefix, None)
 			.await
 			.expect("resolve")
 	}
@@ -300,7 +303,10 @@ mod tests {
 		assert_eq!(plain_frame, z_frame, "delta reconstructs the same frame");
 
 		// At depth 0 the one group is the empty one, compressed by its track.
-		let mut group = compressed.group("").await.expect("subscribe group");
+		let mut group = compressed
+			.group(moq_net::Path::from_static(""))
+			.await
+			.expect("subscribe group");
 		let frame = group.next().await.expect("read").expect("frame");
 		let tier = &frame.tiers[""];
 		assert_eq!(tier.publisher.bytes, 50);
@@ -308,7 +314,7 @@ mod tests {
 		assert_eq!(tier.labels["acme"].active(), 1);
 
 		// A presence track is produced once requested, so drive a drain.
-		let mut presence = std::pin::pin!(compressed.presence("acme"));
+		let mut presence = std::pin::pin!(compressed.presence(moq_net::Path::from_static("acme")));
 		assert!(futures::poll!(presence.as_mut()).is_pending());
 		drive_tick().await;
 		let mut presence = presence.await.expect("subscribe presence");
@@ -316,7 +322,7 @@ mod tests {
 		assert_eq!(frame.get("").expect("default tier").active(), 1);
 
 		// So is a prefix track.
-		let mut prefix = std::pin::pin!(compressed.prefix("foo"));
+		let mut prefix = std::pin::pin!(compressed.prefix(moq_net::Path::from_static("foo")));
 		assert!(futures::poll!(prefix.as_mut()).is_pending());
 		drive_tick().await;
 		let mut prefix = prefix.await.expect("subscribe prefix");

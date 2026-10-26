@@ -702,7 +702,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Standalone {
-				namespace: Path::new("test"),
+				namespace: Path::from_static("test"),
 				track: "video".into(),
 				start: Location { group: 0, object: 0 },
 				end: Location { group: 10, object: 5 },
@@ -727,7 +727,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Standalone {
-				namespace: Path::new("test"),
+				namespace: Path::from_static("test"),
 				track: "video".into(),
 				start: Location { group: 0, object: 0 },
 				end: Location { group: 10, object: 5 },
@@ -770,7 +770,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Standalone {
-				namespace: Path::new("test"),
+				namespace: Path::from_static("test"),
 				track: "video".into(),
 				start: Location { group: 0, object: 0 },
 				end: Location { group: 10, object: 5 },
@@ -795,7 +795,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Standalone {
-				namespace: Path::new("test"),
+				namespace: Path::from_static("test"),
 				track: "video".into(),
 				start: Location { group: 0, object: 0 },
 				end: Location { group: 10, object: 5 },
@@ -874,7 +874,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Standalone {
-				namespace: Path::new("test"),
+				namespace: Path::from_static("test"),
 				track: "video".into(),
 				start: Location { group: 0, object: 0 },
 				end: Location { group: 10, object: 5 },
@@ -967,7 +967,7 @@ mod tests {
 		assert_eq!(
 			fetch.fetch_type,
 			FetchType::Filtered {
-				namespace: Path::new("live"),
+				namespace: Path::from_static("live"),
 				track: "video".into(),
 				filter: Filter::Absolute {
 					start: Location { group: 128, object: 0 },
@@ -989,7 +989,7 @@ mod tests {
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,
 			fetch_type: FetchType::Filtered {
-				namespace: Path::new("live"),
+				namespace: Path::from_static("live"),
 				track: "video".into(),
 				filter: Filter::Unfiltered,
 			},

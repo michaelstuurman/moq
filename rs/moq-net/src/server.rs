@@ -1387,7 +1387,11 @@ mod tests {
 			.accept_request(start, session.clone())
 			.await
 			.unwrap()
-			.with_stats(registry.tier(Default::default()).session("room"))
+			.with_stats(
+				registry
+					.tier(Default::default())
+					.session(crate::Path::from_static("room")),
+			)
 			.with_deadline(deadline);
 		let Err(err) = request.ok().await else {
 			panic!("a reply the peer never took completed");
@@ -1415,7 +1419,11 @@ mod tests {
 			.accept_request(moq_clock::now(), session.clone())
 			.await
 			.unwrap()
-			.with_stats(registry.tier(Default::default()).session("room"));
+			.with_stats(
+				registry
+					.tier(Default::default())
+					.session(crate::Path::from_static("room")),
+			);
 		let abandoned = moq_clock::timeout(std::time::Duration::from_secs(1), request.ok()).await;
 		assert!(abandoned.is_err(), "a reply the peer never took completed");
 		assert_eq!(
@@ -1441,7 +1449,11 @@ mod tests {
 				.accept_request(moq_clock::now(), session)
 				.await
 				.unwrap()
-				.with_stats(registry.tier(Default::default()).session("room"))
+				.with_stats(
+					registry
+						.tier(Default::default())
+						.session(crate::Path::from_static("room")),
+				)
 				.close(err.clone());
 			let failures = registry.snapshot().sessions()[0].1.sessions_failed;
 			for kind in stats::Failure::ALL {

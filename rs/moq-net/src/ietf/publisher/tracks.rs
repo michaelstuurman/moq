@@ -316,7 +316,7 @@ impl Publisher {
 			return super::super::request_stream::reject(stream, error).await;
 		};
 
-		tracing::debug!(prefix = %self.origin.absolute(&prefix), forward = msg.forward, "subscribe_tracks stream");
+		tracing::debug!(prefix = %crate::path::Rooted(self.origin.root(), &prefix), forward = msg.forward, "subscribe_tracks stream");
 
 		// The view SUBSCRIBE_NAMESPACE discovers through: rooted at the prefix so every
 		// broadcast arrives named by its suffix, never handing back what flowed through the
@@ -436,7 +436,7 @@ impl Publisher {
 			broadcasts.push(task);
 		};
 
-		tracing::debug!(prefix = %self.origin.absolute(&prefix), ?cancelled, "subscribe_tracks ended");
+		tracing::debug!(prefix = %crate::path::Rooted(self.origin.root(), &prefix), ?cancelled, "subscribe_tracks ended");
 		// The request no longer stands: another may take its prefix, nothing more is
 		// PUBLISHed, and what was never sent is dropped. Its routes stay, so a PUBLISH
 		// already sent still ends when its track does.
@@ -602,8 +602,8 @@ impl Publisher {
 		epoch: Option<crate::Epoch>,
 		route: kio::Consumer<Route>,
 	) {
-		let namespace = request.prefix.join(&suffix);
-		let absolute = self.origin.absolute(&namespace);
+		let namespace = request.prefix.rejoin(&suffix);
+		let absolute = self.origin.root().rejoin(&namespace);
 		let flate = self.peer_setup.get().await.flate;
 
 		// Resolving may wait on a route for the broadcast, which its going ends.
@@ -868,7 +868,7 @@ impl Publisher {
 		// An update may ask for a new group only if the PUBLISH sent DYNAMIC_GROUPS, which
 		// INCLUDE_PROPERTIES=0 leaves out.
 		let dynamic = properties.dynamic_groups;
-		let absolute = self.origin.absolute(&namespace);
+		let absolute = self.origin.root().rejoin(&namespace);
 
 		// Every wait on the peer, for a Request ID or the PUBLISH's bytes, lasts only while
 		// the track is listed and the request stands. A Request ID abandoned unsent leaves a
@@ -1408,7 +1408,7 @@ mod tests {
 	fn listing(forward: bool) -> ietf::SubscribeTracks {
 		ietf::SubscribeTracks {
 			request_id: RequestId(0),
-			prefix: crate::Path::new("room"),
+			prefix: crate::Path::from_static("room"),
 			forward,
 			subscriber_priority: None,
 			group_order: None,
@@ -1794,7 +1794,7 @@ mod tests {
 
 			let mut nested = listing(false);
 			nested.request_id = RequestId(2);
-			nested.prefix = crate::Path::new("room/cam");
+			nested.prefix = crate::Path::from_static("room/cam");
 			let mut second = h.request(&nested).await;
 			let (id, body) = next(&mut second).await;
 			assert_eq!(id, ietf::RequestError::ID, "{version}");
@@ -1820,7 +1820,7 @@ mod tests {
 
 			let subscribe = ietf::Subscribe {
 				request_id: RequestId(2),
-				track_namespace: crate::Path::new("room/cam"),
+				track_namespace: crate::Path::from_static("room/cam"),
 				track_name: "video".into(),
 				subscriber_priority: 128,
 				group_order: GroupOrder::Descending,
@@ -1909,7 +1909,7 @@ mod tests {
 				let route = kio::Producer::new(Route::Replaced);
 				let request = Request {
 					origin: h._origin.consume(),
-					prefix: crate::Path::new(""),
+					prefix: crate::Path::from_static(""),
 					forward: true,
 					params: Params {
 						priority: crate::ietf::priority::DEFAULT_WIRE,
@@ -1924,7 +1924,7 @@ mod tests {
 				};
 				moq_clock::sim::spawn(h.publisher.clone().run_listed_broadcast(
 					request,
-					crate::Path::new("room/cam"),
+					crate::Path::from_static("room/cam"),
 					None,
 					route.consume(),
 				));
@@ -2335,7 +2335,7 @@ mod tests {
 		let mut h = harness(version);
 		let subscribe = ietf::Subscribe {
 			request_id: RequestId(0),
-			track_namespace: crate::Path::new("room/cam"),
+			track_namespace: crate::Path::from_static("room/cam"),
 			track_name: "video".into(),
 			subscriber_priority: 128,
 			group_order: GroupOrder::Descending,

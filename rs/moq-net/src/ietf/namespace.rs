@@ -1,4 +1,4 @@
-use crate::{Path, coding::*};
+use crate::{Path, coding::*, path::TooLong};
 
 fn to_tuple(namespace: &Path) -> Vec<String> {
 	let path = namespace.as_str();
@@ -28,7 +28,7 @@ fn to_tuple(namespace: &Path) -> Vec<String> {
 	parts
 }
 
-fn from_tuple(parts: &[String]) -> Path {
+fn from_tuple(parts: &[String]) -> Result<Path, TooLong> {
 	let mut path = String::new();
 	for (i, part) in parts.iter().enumerate() {
 		if i > 0 {
@@ -73,7 +73,7 @@ fn decode_fields(r: &mut Decoder<'_>) -> Result<(Path, usize), DecodeError> {
 	let count = r.varint()?;
 
 	if count == 0 {
-		return Ok((Path::from(String::new()), 0));
+		return Ok((Path::empty(), 0));
 	}
 
 	if count > Path::MAX_PARTS as u64 {
@@ -95,7 +95,7 @@ fn decode_fields(r: &mut Decoder<'_>) -> Result<(Path, usize), DecodeError> {
 		parts.push(part);
 	}
 
-	Ok((from_tuple(&parts), size))
+	Ok((from_tuple(&parts)?, size))
 }
 
 /// Decode a Track Namespace.
@@ -159,7 +159,7 @@ mod tests {
 			(vec![".sessionish"], false),
 		] {
 			let parts: Vec<_> = fields.iter().map(|field| (*field).to_owned()).collect();
-			let path = from_tuple(&parts);
+			let path = from_tuple(&parts).unwrap();
 			assert_eq!(
 				refusal(&path, super::super::Version::Draft22).is_some(),
 				reserved,
@@ -173,7 +173,7 @@ mod tests {
 	const FORM: Form = Form::LeadingOnes { seven: false };
 
 	fn encode_ns(path: &str) -> Vec<u8> {
-		encode_path(&Path::from(path.to_string()))
+		encode_path(&crate::Path::try_from(path.to_string()).unwrap())
 	}
 
 	fn encode_path(path: &Path) -> Vec<u8> {

@@ -912,7 +912,7 @@ mod test {
 			order: crate::track::Order::Descending,
 			epoch: None,
 			id: 1,
-			broadcast: Path::new("room"),
+			broadcast: Path::from_static("room"),
 			track: Cow::Borrowed("video"),
 			priority: 3,
 			max_delay: std::time::Duration::from_millis(250),
@@ -1045,7 +1045,7 @@ mod test {
 		let mut buf = Vec::new();
 		let mut w = Encoder::new(&mut buf, version.into());
 		w.varint(1).unwrap();
-		Path::new("room").encode(&mut w, version).unwrap();
+		Path::from_static("room").encode(&mut w, version).unwrap();
 		w.string("video").unwrap();
 		w.u8(0);
 		w.varint(0).unwrap(); // max delay

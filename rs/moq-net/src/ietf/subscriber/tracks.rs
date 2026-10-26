@@ -444,7 +444,7 @@ impl Subscriber {
 				authorization_token: None,
 			},
 		)?;
-		tracing::debug!(prefix = %self.origin.absolute(prefix), id = %request_id, "subscribe_tracks started");
+		tracing::debug!(prefix = %crate::path::Rooted(self.origin.root(), prefix), id = %request_id, "subscribe_tracks started");
 
 		let mut messages = Messages::new(self.session.clone(), self.control.client());
 		let mut established = false;
@@ -497,7 +497,9 @@ impl Subscriber {
 					let skipped = body
 						.message::<ietf::PublishSkipped>(self.version)
 						.map_err(|err| messages.failed(err.into()))?;
-					let namespace = prefix.join(&skipped.suffix);
+					let namespace = prefix
+						.join(&skipped.suffix)
+						.map_err(|err| messages.failed(err.into()))?;
 					self.skipped(namespace, skipped.track_name.as_ref().into());
 				}
 				_ => return Err(messages.failed(Error::UnexpectedMessage)),
@@ -507,7 +509,7 @@ impl Subscriber {
 		// Cancelled: close our half (FIN on draft-18, RESET_STREAM from draft-22, where a
 		// FIN is not a cancel), then read until the peer closes its own. The PUBLISHes it
 		// made stay ours.
-		tracing::debug!(prefix = %self.origin.absolute(prefix), "subscribe_tracks cancelled");
+		tracing::debug!(prefix = %crate::path::Rooted(self.origin.root(), prefix), "subscribe_tracks cancelled");
 		let Stream { mut writer, mut reader } = stream;
 		match request_stream::fin_cancels(self.version) {
 			true => {
@@ -876,7 +878,7 @@ impl Subscriber {
 			}
 			return Ok(());
 		}
-		tracing::debug!(broadcast = %self.origin.absolute(&key.0), track = %key.1, id = %request_id, "holding publish");
+		tracing::debug!(broadcast = %crate::path::Rooted(self.origin.root(), &key.0), track = %key.1, id = %request_id, "holding publish");
 		let upstream = Upstream {
 			stream,
 			messages: Messages::new(self.session.clone(), self.control.client()),
@@ -1279,7 +1281,7 @@ mod tests {
 		let broadcast = crate::broadcast::Info::default().produce();
 		let lister = Arc::new(broadcast.dynamic().lister().unwrap());
 		let tracks = broadcast.consume().tracks().unwrap();
-		let listening = subscriber.listen(Path::from("bcast"), lister);
+		let listening = subscriber.listen(crate::Path::from_static("bcast"), lister);
 		Harness {
 			subscriber,
 			peer,
@@ -1370,7 +1372,7 @@ mod tests {
 			let mut subscriber = self.subscriber.clone();
 			let serving = moq_clock::sim::spawn(async move {
 				subscriber
-					.run_subscribe(Path::new("bcast"), dynamic, None, request)
+					.run_subscribe(Path::from_static("bcast"), dynamic, None, request)
 					.await;
 			});
 			(track, reader, serving)
@@ -1447,7 +1449,7 @@ mod tests {
 	fn offered<'a>(namespace: &'a str, name: &'a str, request_id: u64) -> ietf::Publish<'a> {
 		ietf::Publish {
 			request_id: RequestId(request_id),
-			track_namespace: Path::new(namespace),
+			track_namespace: Path::new(namespace).unwrap(),
 			track_name: name.into(),
 			track_alias: request_id,
 			largest_location: None,
@@ -1562,7 +1564,7 @@ mod tests {
 			let mut h = harness(version);
 			let mut listing = h.establish().await;
 			let skipped = ietf::PublishSkipped {
-				suffix: Path::new(""),
+				suffix: Path::from_static(""),
 				track_name: "audio".into(),
 			};
 			write(&mut listing, ietf::PublishSkipped::ID, &skipped).await;
@@ -1607,7 +1609,7 @@ mod tests {
 		let mut h = harness(version);
 		let mut listing = h.establish().await;
 		let skipped = ietf::PublishSkipped {
-			suffix: Path::new(""),
+			suffix: Path::from_static(""),
 			track_name: "audio".into(),
 		};
 		write(&mut listing, ietf::PublishSkipped::ID, &skipped).await;

@@ -70,9 +70,9 @@ fn hops(ids: &[u64]) -> Hops {
 
 fn paths() {
 	for (name, s) in [("short", SHORT), ("medium", MEDIUM), ("long", LONG)] {
-		let path = Path::new(s);
-		let prefix = Path::new(s.split('/').next().unwrap());
-		let cam = Path::new("cam");
+		let path = Path::new(s).unwrap();
+		let prefix = Path::new(s.split('/').next().unwrap()).unwrap();
+		let cam = Path::from_static("cam");
 		allocs(&format!("path/new/{name}"), 10_000, 1, || Path::new(black_box(s)));
 		allocs(&format!("path/clone/{name}"), 10_000, 1, || path.clone());
 		allocs(&format!("path/strip_prefix/{name}"), 10_000, 1, || {
@@ -105,7 +105,7 @@ fn decode() {
 		}),
 	];
 	for (name, shape) in shapes {
-		let paths: Vec<Path> = (0..1000).map(|i| Path::from(shape(i))).collect();
+		let paths: Vec<Path> = (0..1000).map(|i| moq_net::Path::try_from(shape(i)).unwrap()).collect();
 		let stream: Vec<Announced> = paths
 			.iter()
 			.enumerate()
@@ -142,7 +142,7 @@ fn requests() {
 		};
 
 		let target = format!("{s}/0");
-		let target_path = Path::new(&target);
+		let target_path = Path::new(&target).unwrap();
 		allocs(&format!("origin/request_str/{name}"), 2_000, 1, || {
 			local(&|| consumer.request_broadcast(target.as_str(), None))
 		});

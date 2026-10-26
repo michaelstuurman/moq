@@ -2264,7 +2264,7 @@ mod session_tests {
 		let mut catalog =
 			moq_mux::catalog::Producer::new(&mut catalog_broadcast.broadcast().clone(), Default::default()).unwrap();
 		let mut config = video_rendition();
-		config.broadcast = Some("./left".into());
+		config.broadcast = Some(moq_net::path::Relative::new("./left").unwrap());
 		config.track = Some("encoded".into());
 		catalog.modify().unwrap().video.renditions.insert("view".into(), config);
 		catalog_broadcast.announce(Default::default()).unwrap();
@@ -2295,7 +2295,7 @@ mod session_tests {
 			.renditions
 			.get_mut("view")
 			.unwrap()
-			.broadcast = Some("./right".into());
+			.broadcast = Some(moq_net::path::Relative::new("./right").unwrap());
 		let next = super::RUNTIME
 			.block_on(async { tokio::time::timeout(Duration::from_secs(10), replacement.requested_track()).await });
 		stopping.send(true).unwrap();
@@ -3572,7 +3572,7 @@ mod session_tests {
 	/// A `room` whose video rendition references the `cam` sibling, naming `epoch` when given.
 	fn referencing(origin: &moq_net::origin::Producer, epoch: Option<moq_net::Epoch>) -> Publisher {
 		let mut config = video_rendition();
-		config.broadcast = Some("./cam".into());
+		config.broadcast = Some(moq_net::path::Relative::new("./cam").unwrap());
 		config.epoch = epoch;
 		Publisher::new(origin, Default::default(), config)
 	}
@@ -4271,7 +4271,7 @@ mod session_tests {
 			let mut guard = room.catalog.modify().unwrap();
 			let config = guard.video.renditions.get_mut("video").unwrap();
 			config.track = None;
-			config.broadcast = Some("./cam".into());
+			config.broadcast = Some(moq_net::path::Relative::new("./cam").unwrap());
 		}
 		assert_eq!(recorder.written(&mut cam, 4), pad, "the move took another pad");
 		room.write(3);

@@ -84,7 +84,7 @@ impl Client {
 		&self,
 		url: Url,
 		origin: moq_net::origin::Consumer,
-		path: impl Into<moq_net::Path>,
+		path: impl TryInto<moq_net::Path, Error: Into<moq_net::Error>>,
 	) -> crate::Result<()> {
 		whip::dial(self, url, origin, path).await
 	}

@@ -399,13 +399,13 @@ impl Meter {
 
 /// Build a session-local payload meter without exposing the model's private stats carriers.
 pub fn session_meter(registry: &crate::stats::Registry, tier: crate::stats::Tier, label: &str, path: &str) -> Meter {
-	let session = registry.tier(tier).session(label);
-	Meter(session.egress(path).meter())
+	let session = registry.tier(tier).session(Path::new(label).expect("label fits"));
+	Meter(session.egress(Path::new(path).expect("path fits")).meter())
 }
 
 /// Build the original per-path-only payload meter as the benchmark baseline.
 pub fn path_meter(registry: &crate::stats::Registry, tier: &crate::stats::Tier, path: &str) -> Meter {
-	Meter(registry.publisher_meter(path, tier))
+	Meter(registry.publisher_meter(Path::new(path).expect("path fits"), tier))
 }
 
 /// Encode `announced` as a fresh [`AnnounceWriter`] stream.
@@ -537,7 +537,7 @@ impl LiteSample {
 				order: crate::track::Order::Descending,
 				epoch: None,
 				id: 3,
-				broadcast: Path::new("room/alice"),
+				broadcast: Path::from_static("room/alice"),
 				track: "video".into(),
 				priority: 2,
 				max_delay: std::time::Duration::from_secs(10),
@@ -762,7 +762,7 @@ impl Default for Messages {
 				order: crate::track::Order::Descending,
 				epoch: None,
 				id: 7,
-				broadcast: Path::new("room/alice"),
+				broadcast: Path::from_static("room/alice"),
 				track: "video".into(),
 				priority: 3,
 				max_delay: Duration::from_millis(500),
@@ -801,7 +801,7 @@ impl Default for Messages {
 				max_age: None,
 				new_group: None,
 				request_id: ietf::RequestId(2),
-				track_namespace: Path::new("room/alice"),
+				track_namespace: Path::from_static("room/alice"),
 				track_name: "video".into(),
 				subscriber_priority: 128,
 				group_order: ietf::GroupOrder::Descending,
@@ -923,12 +923,29 @@ pub fn path(data: &[u8]) -> bool {
 	};
 
 	let (target, base) = text.split_once('\n').unwrap_or((text, ""));
-	let target = Path::new(target);
-	let base = Path::new(base);
+	// Only a path over the limit is refused, and the limit applies after normalizing.
+	let (Ok(target), Ok(base)) = (Path::new(target), Path::new(base)) else {
+		let normalized = |s: &str| {
+			s.split('/')
+				.filter(|part| !part.is_empty())
+				.collect::<Vec<_>>()
+				.join("/")
+				.len()
+		};
+		assert!(
+			normalized(target).max(normalized(base)) > Path::MAX_BYTES,
+			"a path within the limit was refused"
+		);
+		return true;
+	};
 
 	// Normalization is a fixed point: re-parsing what `as_str` printed changes nothing,
 	// or every path that made a round trip through the wire would drift.
-	assert_eq!(Path::new(target.as_str()), target, "normalization is not idempotent");
+	assert_eq!(
+		Path::new(target.as_str()),
+		Ok(target.clone()),
+		"normalization is not idempotent"
+	);
 	assert_eq!(target.parts().collect::<Vec<_>>().join("/"), target.as_str());
 
 	// A prefix is a prefix whichever way you ask.
@@ -938,17 +955,27 @@ pub fn path(data: &[u8]) -> bool {
 		"has_prefix and strip_prefix disagree"
 	);
 	if let Some(rest) = target.strip_prefix(&base) {
-		assert_eq!(base.join(&rest), target, "strip_prefix did not invert join");
+		assert_eq!(base.join(&rest), Ok(target.clone()), "strip_prefix did not invert join");
 	}
 
-	// Joining descends, so the result is always under what it started from.
-	let joined = target.join(&base);
-	assert!(joined.has_prefix(&target), "join escaped its base");
+	// Joining descends, so the result is always under what it started from, and fails
+	// only past the limit.
+	match target.join(&base) {
+		Ok(joined) => assert!(joined.has_prefix(&target), "join escaped its base"),
+		Err(_) => assert!(
+			target.len() + 1 + base.len() > Path::MAX_BYTES,
+			"a join within the limit failed"
+		),
+	}
 
 	// `relative` is documented as the inverse of `resolve`, and as never walking above
 	// the root, so `try_resolve` has to accept whatever it produces.
 	if let Some(rel) = target.relative(&base) {
-		assert_eq!(base.resolve(&rel), target, "relative did not invert resolve");
+		assert_eq!(
+			base.resolve(&rel),
+			Ok(target.clone()),
+			"relative did not invert resolve"
+		);
 		assert_eq!(
 			base.try_resolve(&rel),
 			Some(target.clone()),
@@ -959,9 +986,9 @@ pub fn path(data: &[u8]) -> bool {
 	// Resolving arbitrary references must stay inside the clamped/unclamped contract:
 	// `try_resolve` only refuses by walking above the root, so whenever it answers, it
 	// answers the same as `resolve`.
-	let rel = Relative::new(base.as_str());
+	let rel = Relative::new(base.as_str()).expect("a reference no longer than its path fits");
 	if let Some(resolved) = target.try_resolve(&rel) {
-		assert_eq!(resolved, target.resolve(&rel), "try_resolve disagreed with resolve");
+		assert_eq!(Ok(resolved), target.resolve(&rel), "try_resolve disagreed with resolve");
 	}
 
 	// The wire form is the same path back, whenever the path is expressible at all.
@@ -1160,7 +1187,7 @@ pub fn seeds() -> Vec<Seed> {
 				group_id: 0,
 			},
 			ietf::FetchType::Filtered {
-				namespace: crate::Path::new("a"),
+				namespace: crate::Path::from_static("a"),
 				track: "b".into(),
 				filter: ietf::Filter::Relative(1),
 			},
@@ -1223,7 +1250,7 @@ pub fn seeds() -> Vec<Seed> {
 	let mut announced = Vec::new();
 	let hop = |id: u64| crate::Hop::new(id).expect("a valid hop");
 	for n in 0..12u64 {
-		let suffix = Path::from(format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2));
+		let suffix = Path::new(&format!("pid{}/private/channel_{}/health-{n}", n % 3, n % 2)).unwrap();
 		let hops = Hops::try_from(vec![hop(100 + n % 3), hop(1 << 40), hop(1 << 41)]).expect("valid hops");
 		announced.push(Announced::Start(suffix, hops));
 		if n % 4 == 3 {
@@ -1483,13 +1510,13 @@ mod tests {
 		let registry = crate::stats::Registry::new(crate::stats::Config::new());
 		let (origin, driver) = crate::origin::Producer::new(crate::origin::Config::default());
 		let _driver = driver;
-		let tier = crate::stats::Tier::new("t");
-		let session = registry.tier(tier.clone()).session("root");
+		let tier = crate::stats::Tier::new(crate::Path::from_static("t"));
+		let session = registry.tier(tier.clone()).session(crate::Path::from_static("root"));
 		let _broadcast = origin.publish("room/1", crate::origin::Route::default()).unwrap();
 		let mut cursor = origin.consume().with_stats(session).announced();
 		while cursor.next().now_or_never().flatten().is_some() {}
 
-		bump_publisher_bytes(&registry, "room/1", &tier, 5);
+		bump_publisher_bytes(&registry, crate::Path::from_static("room/1"), &tier, 5);
 		let mut report = crate::stats::Report::default();
 		registry.report(&mut report);
 		registry.report(&mut report);

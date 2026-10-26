@@ -171,7 +171,7 @@ mod tests {
 	#[tokio::test]
 	async fn yields_camera_and_skips_local_and_unknown() {
 		let origin = origin();
-		let local = Path::new("alice");
+		let local = Path::from_static("alice");
 		let mut room = Room::new(&origin.consume(), Some(local));
 
 		let _alice = publish(&origin, "alice/camera");

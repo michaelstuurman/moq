@@ -279,7 +279,7 @@ fn parse_keyed_track(name: &str, kind: &str) -> Option<(Path, Encoding)> {
 		rest => rest.strip_suffix('/').filter(|key| !key.is_empty())?,
 	};
 	// Only a normalized key round-trips, so each key has exactly one name.
-	let path = Path::new(key);
+	let path = Path::new(key).ok()?;
 	if path.as_str() != key {
 		return None;
 	}
@@ -304,7 +304,7 @@ pub fn parse_node_path(prefix: impl Into<Path>, path: impl Into<Path>) -> Option
 		"" => "",
 		node => node.strip_prefix('/')?,
 	};
-	Some(Path::new(node))
+	Path::new(node).ok()
 }
 
 /// Errors produced while publishing or consuming stats.
@@ -329,12 +329,13 @@ mod tests {
 
 	#[test]
 	fn parse_node_path_variants() {
-		let parse = |path| parse_node_path(".stats", path);
+		let parse =
+			|path: &str| parse_node_path(moq_net::Path::from_static(".stats"), moq_net::Path::new(path).unwrap());
 
-		assert_eq!(parse(".stats/node/sjc"), Some(Path::new("sjc")));
+		assert_eq!(parse(".stats/node/sjc"), Some(Path::from_static("sjc")));
 		assert_eq!(
 			parse(".stats/node/sjc/1"),
-			Some(Path::new("sjc/1")),
+			Some(Path::from_static("sjc/1")),
 			"multi-segment node"
 		);
 		assert_eq!(parse(".stats/node"), Some(Path::empty()), "nodeless path");
@@ -350,20 +351,32 @@ mod tests {
 	fn track_names() {
 		assert_eq!(totals_track(Encoding::Plain), "totals.json");
 		assert_eq!(totals_track(Encoding::Compressed), "totals.json.z");
-		assert_eq!(presence_track("acme/live", Encoding::Plain), "acme/live/presence.json");
-		assert_eq!(presence_track("", Encoding::Compressed), "presence.json.z");
-		assert_eq!(prefix_track("acme/live", Encoding::Plain), "acme/live/prefix.json");
-		assert_eq!(prefix_track("", Encoding::Compressed), "prefix.json.z");
+		assert_eq!(
+			presence_track(moq_net::Path::from_static("acme/live"), Encoding::Plain),
+			"acme/live/presence.json"
+		);
+		assert_eq!(
+			presence_track(moq_net::Path::from_static(""), Encoding::Compressed),
+			"presence.json.z"
+		);
+		assert_eq!(
+			prefix_track(moq_net::Path::from_static("acme/live"), Encoding::Plain),
+			"acme/live/prefix.json"
+		);
+		assert_eq!(
+			prefix_track(moq_net::Path::from_static(""), Encoding::Compressed),
+			"prefix.json.z"
+		);
 	}
 
 	#[test]
 	fn presence_track_names_round_trip() {
 		for label in ["", "acme", "acme/live", "a.json", "x/presence.json", "publisher", "z"] {
 			for encoding in [Encoding::Plain, Encoding::Compressed] {
-				let name = presence_track(label, encoding);
+				let name = presence_track(moq_net::Path::new(label).unwrap(), encoding);
 				assert_eq!(
 					parse_presence_track(&name),
-					Some((Path::from(label), encoding)),
+					Some((Path::try_from(label).unwrap(), encoding)),
 					"{name}"
 				);
 			}
@@ -400,8 +413,12 @@ mod tests {
 			"publisher",
 		] {
 			for encoding in [Encoding::Plain, Encoding::Compressed] {
-				let name = prefix_track(path, encoding);
-				assert_eq!(parse_prefix_track(&name), Some((Path::from(path), encoding)), "{name}");
+				let name = prefix_track(moq_net::Path::new(path).unwrap(), encoding);
+				assert_eq!(
+					parse_prefix_track(&name),
+					Some((Path::try_from(path).unwrap(), encoding)),
+					"{name}"
+				);
 				assert_eq!(parse_presence_track(&name), None, "{name} is not a presence track");
 			}
 		}

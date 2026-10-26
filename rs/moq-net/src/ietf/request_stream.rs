@@ -594,7 +594,7 @@ mod tests {
 		use crate::lite::test_transport::ScriptedSession;
 		use crate::stats::{Control, Registry, Tier};
 		let registry = Registry::new(Default::default());
-		let stats = registry.tier(Tier::default()).session("");
+		let stats = registry.tier(Tier::default()).session(crate::Path::from_static(""));
 		let version = Version::Draft22;
 		let session = ScriptedSession::new(vec![0x10, 0, 2, 0, 0, 0x07, 0, 0]);
 		let mut stream = with_stats(

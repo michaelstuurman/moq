@@ -783,7 +783,7 @@ mod tests {
 		settle().await;
 		let upstream = crate::resolved(&origin, "a/pub").await;
 		let mut config = hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8);
-		config.broadcast = Some(moq_net::path::Relative::new("../../source"));
+		config.broadcast = Some(moq_net::path::Relative::new("../../source").unwrap());
 		let mut catalog = moq_mux::catalog::hang::Catalog::default();
 		catalog.archive = Some(archive(&["video0", "audio0"]));
 		catalog.video.renditions.insert("video".to_string(), config);
@@ -3445,7 +3445,7 @@ mod tests {
 		let source = crate::resolved(&origin, "live").await;
 		let mut config = hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8);
 		if sibling {
-			config.broadcast = Some(moq_net::path::Relative::new("media"));
+			config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 		}
 		let (rendition, watcher) = export(&source, &config);
 		rendition.playable().await;
@@ -3709,7 +3709,7 @@ mod tests {
 		// A relative reference replaces the base's last segment, so "media" is a sibling of the
 		// catalog broadcast "live".
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let (rendition, watcher) = export(&upstream, &config);
 		tokio::time::timeout(Duration::from_secs(5), rendition.playable())
@@ -3830,7 +3830,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let mut snapshot = moq_mux::catalog::hang::Catalog::default();
 		snapshot.video.renditions.insert("video0".to_string(), config.clone());
@@ -3906,7 +3906,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = hang::catalog::VideoConfig::new(hang::catalog::VideoCodec::VP8);
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let mut snapshot = moq_mux::catalog::hang::Catalog::default();
 		snapshot.video.renditions.insert("video0".to_string(), config);
@@ -3965,7 +3965,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let (rendition, watcher) = export(&upstream, &config);
 		tokio::time::timeout(Duration::from_secs(5), rendition.playable())
@@ -4004,7 +4004,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let (rendition, watcher) = export(&upstream, &config);
 		old_media.announce(sibling_route(10)).unwrap();
@@ -4064,7 +4064,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 		let (rendition, watcher) = export(&upstream, &config);
 		media.announce(sibling_route(10)).unwrap();
 		tokio::time::timeout(Duration::from_secs(5), rendition.playable())
@@ -4114,7 +4114,7 @@ mod tests {
 
 		let upstream = crate::resolved(&origin, "live").await;
 		let mut config = video_config();
-		config.broadcast = Some(moq_net::path::Relative::new("media"));
+		config.broadcast = Some(moq_net::path::Relative::new("media").unwrap());
 
 		let (rendition, watcher) = export(&upstream, &config);
 		tokio::time::timeout(Duration::from_secs(5), rendition.playable())

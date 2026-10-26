@@ -20,7 +20,7 @@ use super::{
 use crate::{
 	Epoch, Error, InvalidPattern, Path, Pattern, Patterns,
 	coding::{BoundsExceeded, Decode, DecodeError, Decoder, Encode, EncodeError, Encoder, Form, varint},
-	path::Segment,
+	path::{self, Segment},
 	time::{Deadlines, Instant},
 	util::{Keepalive, SendCell, TaskSet, Tasks, TasksWeak},
 };
@@ -1614,7 +1614,7 @@ impl TableCursor {
 			if let Some(last) = self.current.remove(presented)
 				&& let Ok(mut state) = self.state.write()
 			{
-				state.apply_unannounce(self.under.join(presented), last.meta, last.captures);
+				state.apply_unannounce(self.under.rejoin(presented), last.meta, last.captures);
 			}
 			return;
 		};
@@ -1654,15 +1654,15 @@ impl TableCursor {
 			// identity explicitly so consumers keyed on it remove it.
 			Some(previous) if previous.captures != captures => {
 				if let Ok(mut state) = self.state.write() {
-					state.apply_unannounce(self.under.join(presented), previous.meta, previous.captures);
-					state.apply_announce(self.under.join(presented), meta, captures);
+					state.apply_unannounce(self.under.rejoin(presented), previous.meta, previous.captures);
+					state.apply_announce(self.under.rejoin(presented), meta, captures);
 				}
 			}
 			// Another instance: whatever was resolved under the prefix is stale.
 			Some(previous) if previous.instance != instance => {
 				let release = meta.3.is_none().then(|| hold.release()).flatten();
 				if let Ok(mut state) = self.state.write() {
-					state.apply_restart(self.under.join(presented), meta, captures, release);
+					state.apply_restart(self.under.rejoin(presented), meta, captures, release);
 				}
 			}
 			// Unchanged metadata and servability: nothing the consumer could
@@ -1674,7 +1674,7 @@ impl TableCursor {
 			Some(previous) if previous.meta == meta && previous.served == served => {}
 			_ => {
 				if let Ok(mut state) = self.state.write() {
-					state.apply_announce(self.under.join(presented), meta, captures);
+					state.apply_announce(self.under.rejoin(presented), meta, captures);
 				}
 			}
 		}
@@ -1717,14 +1717,14 @@ impl Mount {
 	/// Where the handle-side absolute `path` resolves, when it is under this mount
 	/// and the result fits the wire limits.
 	fn resolve(&self, path: &Path) -> Option<Path> {
-		let resolved = self.target.join(&path.strip_prefix(&self.at)?);
-		resolved.fits_wire().then_some(resolved)
+		let resolved = self.target.join(&path.strip_prefix(&self.at)?).ok()?;
+		(resolved.parts().count() <= Path::MAX_PARTS).then_some(resolved)
 	}
 
 	/// Where the origin-side absolute `path` shows on the handle, when it is at or
 	/// beneath the target. A route covering the target has no handle-side name.
 	fn name(&self, path: &Path) -> Option<Path> {
-		Some(self.at.join(&path.strip_prefix(&self.target)?))
+		self.at.join(&path.strip_prefix(&self.target)?).ok()
 	}
 
 	/// Whether the origin-side absolute `path` has a handle-side name within the
@@ -1766,7 +1766,7 @@ impl Mount {
 	/// moves under the target, and one above it hangs at the target itself.
 	fn translate_head(&self, head: &Path) -> Option<Path> {
 		match head.strip_prefix(&self.at) {
-			Some(rest) => Some(self.target.join(&rest)),
+			Some(rest) => self.target.join(&rest).ok(),
 			None => self.at.has_prefix(head).then(|| self.target.clone()),
 		}
 	}
@@ -1838,7 +1838,11 @@ impl Default for OriginScope {
 /// The announce-interest prefixes that cover a pattern scope on a prefix-only
 /// wire: each member's literal head, minus heads another already covers.
 pub(crate) fn interest_prefixes(allowed: &Patterns) -> Vec<Path> {
-	let mut heads: Vec<Path> = allowed.iter().map(|pattern| Path::new(pattern.head())).collect();
+	// A head too long for a path covers none, so it asks for nothing.
+	let mut heads: Vec<Path> = allowed
+		.iter()
+		.filter_map(|pattern| Path::new(pattern.head()).ok())
+		.collect();
 	heads.sort();
 	heads.dedup();
 	let covered = heads.clone();
@@ -2159,8 +2163,8 @@ impl Producer {
 	/// pattern can spell (`*` or `**`), [`Error::NavigationSegment`] for a literal `.` or `..`,
 	/// or [`Error::Closed`] once the origin's
 	/// [`Driver`] has been dropped.
-	pub fn create_broadcast(&self, path: impl Into<Path>) -> Result<Publication, Error> {
-		let full = self.root.join(&path.into());
+	pub fn create_broadcast(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Result<Publication, Error> {
+		let full = self.root.join(&path::convert(path)?)?;
 		let (broadcast, announcer) = self.create_withheld(full)?;
 		Ok(Publication {
 			broadcast: broadcast.with_announcer(announcer),
@@ -2177,7 +2181,7 @@ impl Producer {
 		// A decoded prefix and suffix are each within the wire limit, but their
 		// join might not be. Enforcing here bounds the table depth and guarantees the
 		// path can be re-encoded when forwarded.
-		if !full.fits_wire() {
+		if full.parts().count() > Path::MAX_PARTS {
 			return Err(BoundsExceeded.into());
 		}
 		// A path only a pattern could spell (a `*` segment) advertises nowhere, so
@@ -2227,7 +2231,7 @@ impl Producer {
 	}
 
 	/// Create and advertise a broadcast in one call.
-	pub fn publish(&self, path: impl Into<Path>, route: Route) -> Result<Publication, Error> {
+	pub fn publish(&self, path: impl TryInto<Path, Error: Into<Error>>, route: Route) -> Result<Publication, Error> {
 		let broadcast = self.create_broadcast(path)?;
 		broadcast.announce(route)?;
 		Ok(broadcast)
@@ -2242,11 +2246,11 @@ impl Producer {
 	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
 	pub(crate) fn create_source(
 		&self,
-		path: impl Into<Path>,
+		path: Path,
 		validity: crate::model::broadcast::RequestValidity,
 	) -> broadcast::Producer {
-		let path: Path = path.into();
-		let full = self.root.join(&path);
+		// The path came off a served request, whose root join already fit.
+		let full = self.root.join(&path).expect("request path fits");
 		let ingress = self.stats.ingress(&full);
 		broadcast::Info {
 			pool: self.pool.clone(),
@@ -2269,7 +2273,11 @@ impl Producer {
 	/// advertises through a broadcast ([`Publication::announce`]) or a
 	/// [`Dynamic`] handler, which serve what they claim.
 	#[cfg(test)]
-	pub(crate) fn announce(&self, prefix: impl Into<Path>, route: Route) -> Result<AnnounceProducer, Error> {
+	pub(crate) fn announce(
+		&self,
+		prefix: impl TryInto<Path, Error: Into<Error>>,
+		route: Route,
+	) -> Result<AnnounceProducer, Error> {
 		Announcing::new(self, prefix)?.announce(
 			route,
 			Serving {
@@ -2284,8 +2292,11 @@ impl Producer {
 	/// synced until the returned guard drops. Taken before the request goes out, so
 	/// nothing reads as synced in between.
 	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
-	pub(crate) fn snapshot(&self, prefix: impl Into<Path>) -> Snapshot {
-		let prefix = self.root.join(&prefix.into());
+	pub(crate) fn snapshot(&self, prefix: impl TryInto<Path, Error: std::fmt::Debug>) -> Snapshot {
+		let prefix = self
+			.root
+			.join(&prefix.try_into().expect("snapshot prefix"))
+			.expect("snapshot prefix fits");
 		self.shared.lock().snapshot(&self.shared, prefix, self.link)
 	}
 
@@ -2311,7 +2322,11 @@ impl Producer {
 			false => {
 				for prefix in state.routes.interests_from(&Path::empty()) {
 					for relative in listener.asks(&prefix) {
-						let snapshot = state.snapshot(&self.shared, self.root.join(&relative), self.link);
+						// A head too long to root covers no path, so nothing reads it.
+						let Ok(absolute) = self.root.join(&relative) else {
+							continue;
+						};
+						let snapshot = state.snapshot(&self.shared, absolute, self.link);
 						let _ = queue.try_push(InterestChange {
 							prefix: relative,
 							wanted: true,
@@ -2359,17 +2374,26 @@ impl Producer {
 	///
 	/// The prefix must overlap this producer's pattern scope. Individual requests
 	/// remain authoritative and are refused when they do not match the scope.
-	pub fn dynamic(&self, prefix: impl Into<Path>) -> Result<Dynamic, Error> {
+	pub fn dynamic(&self, prefix: impl TryInto<Path, Error: Into<Error>>) -> Result<Dynamic, Error> {
 		self.dynamic_inner(prefix, Route::default(), true)
 	}
 
 	/// Land a peer's claim with its wire route metadata.
 	#[cfg(any(feature = "async", test))]
-	pub(crate) fn dynamic_route(&self, prefix: impl Into<Path>, route: Route) -> Result<Dynamic, Error> {
+	pub(crate) fn dynamic_route(
+		&self,
+		prefix: impl TryInto<Path, Error: Into<Error>>,
+		route: Route,
+	) -> Result<Dynamic, Error> {
 		self.dynamic_inner(prefix, route, false)
 	}
 
-	fn dynamic_inner(&self, prefix: impl Into<Path>, route: Route, publishes: bool) -> Result<Dynamic, Error> {
+	fn dynamic_inner(
+		&self,
+		prefix: impl TryInto<Path, Error: Into<Error>>,
+		route: Route,
+		publishes: bool,
+	) -> Result<Dynamic, Error> {
 		let announcing = Announcing::new(self, prefix)?;
 		let serve = kio::Shared::<ServeState>::default();
 		serve.lock().requests.add_handler();
@@ -2395,8 +2419,8 @@ impl Producer {
 	/// the new root. Returns [`Error::Unauthorized`] when the requested scope has
 	/// no overlap with this producer's scope, or [`Error::BoundsExceeded`] when
 	/// rooting the patterns would exceed the path limit.
-	pub fn scope(&self, root: impl Into<Path>, patterns: &Patterns) -> Result<Producer, Error> {
-		let root = self.root.join(&root.into());
+	pub fn scope(&self, root: impl TryInto<Path, Error: Into<Error>>, patterns: &Patterns) -> Result<Producer, Error> {
+		let root = self.root.join(&path::convert(root)?)?;
 		let rooted = patterns.rooted(root.as_str()).map_err(|_| BoundsExceeded)?;
 		let scope = self.scope.narrow(&rooted).ok_or(Error::Unauthorized)?;
 		Ok(Producer {
@@ -2434,10 +2458,14 @@ impl Producer {
 	/// so a target is always read as the origin holds it. Mounts may share a target.
 	/// [`Error::BoundsExceeded`] if either rooted path exceeds [`Path::MAX_PARTS`] or 16 KiB,
 	/// and [`Error::InvalidPath`] if `at` holds a segment no pattern can spell.
-	pub fn mount(&self, at: impl Into<Path>, target: impl Into<Path>) -> Result<Producer, Error> {
-		let at = self.root.join(&at.into());
-		let target = self.root.join(&target.into());
-		if !at.fits_wire() || !target.fits_wire() {
+	pub fn mount(
+		&self,
+		at: impl TryInto<Path, Error: Into<Error>>,
+		target: impl TryInto<Path, Error: Into<Error>>,
+	) -> Result<Producer, Error> {
+		let at = self.root.join(&path::convert(at)?)?;
+		let target = self.root.join(&path::convert(target)?)?;
+		if at.parts().count() > Path::MAX_PARTS || target.parts().count() > Path::MAX_PARTS {
 			return Err(BoundsExceeded.into());
 		}
 		// A mount point no pattern can spell could never be announced or authorized.
@@ -2499,8 +2527,8 @@ impl Producer {
 	}
 
 	/// Converts a relative path to an absolute path.
-	pub fn absolute(&self, path: impl Into<Path>) -> Path {
-		self.root.join(&path.into())
+	pub fn absolute(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Result<Path, Error> {
+		Ok(self.root.join(&path::convert(path)?)?)
 	}
 }
 
@@ -2528,10 +2556,10 @@ struct Announcing {
 
 impl Announcing {
 	/// The requested prefix as-is, refused when its subtree does not overlap the scope.
-	fn new(producer: &Producer, prefix: impl Into<Path>) -> Result<Self, Error> {
-		let requested = producer.root.join(&prefix.into());
+	fn new(producer: &Producer, prefix: impl TryInto<Path, Error: Into<Error>>) -> Result<Self, Error> {
+		let requested = producer.root.join(&path::convert(prefix)?)?;
 		publish_path(&requested)?;
-		if !requested.fits_wire() {
+		if requested.parts().count() > Path::MAX_PARTS {
 			return Err(BoundsExceeded.into());
 		}
 		let claim = prefix_claim(&requested)?;
@@ -4588,7 +4616,7 @@ impl RouteNode {
 			if child.interests_below == 0 {
 				continue;
 			}
-			let path = at.join(&Path::new(part));
+			let path = at.rejoin(&Path::new(part).expect("a segment of a path fits"));
 			match child.interests > 0 {
 				true => out.push(path),
 				false => child.collect_interests(&path, out),
@@ -5076,12 +5104,11 @@ impl OriginState {
 		let mut changes = Vec::new();
 		for listener in &self.listeners {
 			for relative in listener.asks(prefix) {
-				changes.push((
-					listener.queue.clone(),
-					listener.root.join(&relative),
-					relative,
-					listener.link,
-				));
+				// A head too long to root covers no path, so nothing reads it.
+				let Ok(absolute) = listener.root.join(&relative) else {
+					continue;
+				};
+				changes.push((listener.queue.clone(), absolute, relative, listener.link));
 			}
 		}
 		for (queue, absolute, prefix, link) in changes {
@@ -5120,7 +5147,7 @@ impl OriginState {
 		let best = match presented.is_empty() {
 			true => cursor.best(routes.covering(&cursor.root)),
 			false => {
-				let absolute = cursor.root.join(presented);
+				let absolute = cursor.root.rejoin(presented);
 				cursor.best(routes.at(&absolute))
 			}
 		};
@@ -5885,7 +5912,10 @@ impl kio::Task for Routing {
 					if table.closed {
 						return Poll::Ready(Err(Error::Closed));
 					}
-					let named = self.consumer.root.join(&self.path);
+					let named = match self.consumer.root.join(&self.path) {
+						Ok(named) => named,
+						Err(err) => return Poll::Ready(Err(err.into())),
+					};
 					let Some(resolved) = self.consumer.scope.resolve(&named) else {
 						return Poll::Ready(Err(BoundsExceeded.into()));
 					};
@@ -6281,8 +6311,8 @@ impl Consumer {
 	/// The newest broadcast published on this origin at exactly `path`, if any.
 	/// Test-only: a request goes through the table like any other.
 	#[cfg(test)]
-	pub(crate) fn get_broadcast(&self, path: impl Into<Path>) -> Option<broadcast::Consumer> {
-		let full = self.root.join(&path.into());
+	pub(crate) fn get_broadcast(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Option<broadcast::Consumer> {
+		let full = self.root.join(&path::convert::<Error>(path).ok()?).ok()?;
 		if !self.scope.permits(&full) {
 			return None;
 		}
@@ -6306,7 +6336,7 @@ impl Consumer {
 	/// [`Self::routed_broadcast`]: pairing this with [`Self::request_broadcast`]
 	/// leaves a gap where the covering route can retract.
 	#[cfg(feature = "async")]
-	pub async fn routed(&self, path: impl Into<Path>) -> Option<Route> {
+	pub async fn routed(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Option<Route> {
 		// A follower's first event is always a start.
 		match self.follow(path).ok()?.next().await? {
 			AnnounceEvent::Start(announce) | AnnounceEvent::Update(announce) | AnnounceEvent::Restart(announce) => {
@@ -6325,8 +6355,8 @@ impl Consumer {
 	/// over, which subscriptions already ride out. Fails with [`Error::Unauthorized`] when
 	/// this consumer's scope can never cover the path, and with [`Error::InvalidPath`] when no
 	/// pattern can spell it (a segment containing `*`).
-	pub fn follow(&self, path: impl Into<Path>) -> Result<crate::announce::Follow, Error> {
-		let path: Path = path.into();
+	pub fn follow(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Result<crate::announce::Follow, Error> {
+		let path = path::convert(path)?;
 
 		// Scope down to the path itself, which still sees every route whose claim covers it:
 		// the rest of the origin never wakes it, and a route claiming only paths beneath it
@@ -6360,8 +6390,19 @@ impl Consumer {
 	/// [`Error::Unauthorized`] for a path outside this consumer's scope,
 	/// [`Error::Closed`] once the origin closes, and any other resolution
 	/// failure as-is. Await it, or poll it through [`kio::Task`].
-	pub fn routed_broadcast(&self, path: impl Into<Path>) -> kio::Pending<Routing> {
-		kio::Pending::new(self.routing(path.into(), None))
+	pub fn routed_broadcast(&self, path: impl TryInto<Path, Error: Into<Error>>) -> kio::Pending<Routing> {
+		let routing = match path::convert(path) {
+			Ok(path) => self.routing(path, None),
+			Err(err) => Routing {
+				consumer: self.clone(),
+				path: Path::empty(),
+				interest: None,
+				watch: None,
+				request: Some(Requesting::failed(err)),
+				epoch: None,
+			},
+		};
+		kio::Pending::new(routing)
 	}
 
 	/// [`Self::routed_broadcast`], refusing any instance but `epoch` when one is pinned.
@@ -6395,10 +6436,10 @@ impl Consumer {
 	/// cover the path, and with [`Error::InvalidPath`] when no pattern can spell it.
 	pub fn announced_broadcast(
 		&self,
-		path: impl Into<Path>,
+		path: impl TryInto<Path, Error: Into<Error>>,
 		epoch: impl Into<Option<crate::Epoch>>,
 	) -> Result<AnnouncedBroadcast, Error> {
-		let path: Path = path.into();
+		let path = path::convert(path)?;
 		let follow = self.follow(&path)?;
 		Ok(AnnouncedBroadcast::new(self.clone(), path, epoch.into(), follow))
 	}
@@ -6409,8 +6450,8 @@ impl Consumer {
 	/// the new root. Returns [`Error::Unauthorized`] when the requested scope has
 	/// no overlap with this consumer's scope, or [`Error::BoundsExceeded`] when
 	/// rooting the patterns would exceed the path limit.
-	pub fn scope(&self, root: impl Into<Path>, patterns: &Patterns) -> Result<Consumer, Error> {
-		let root = self.root.join(&root.into());
+	pub fn scope(&self, root: impl TryInto<Path, Error: Into<Error>>, patterns: &Patterns) -> Result<Consumer, Error> {
+		let root = self.root.join(&path::convert(root)?)?;
 		let rooted = patterns.rooted(root.as_str()).map_err(|_| BoundsExceeded)?;
 		let scope = self.scope.narrow(&rooted).ok_or(Error::Unauthorized)?;
 		Ok(Consumer {
@@ -6463,11 +6504,14 @@ impl Consumer {
 	/// [`Error::NotFound`] on its tracks instead.
 	pub fn request_broadcast(
 		&self,
-		path: impl Into<Path>,
+		path: impl TryInto<Path, Error: Into<Error>>,
 		epoch: impl Into<Option<crate::Epoch>>,
 	) -> kio::Pending<Requesting> {
 		let epoch = epoch.into();
-		self.request(path.into(), epoch.as_ref())
+		match path::convert(path) {
+			Ok(path) => self.request(path, epoch.as_ref()),
+			Err(err) => kio::Pending::new(Requesting::failed(err)),
+		}
 	}
 
 	/// [`Self::request_broadcast`], refused with [`Error::Unroutable`] unless the
@@ -6477,7 +6521,10 @@ impl Consumer {
 		// The path as this handle names it, absolute: what its scope authorizes and
 		// what its egress is counted under, so a read through a mount bills where
 		// the reader asked.
-		let named = self.root.join(&path);
+		let named = match self.root.join(&path) {
+			Ok(named) => named,
+			Err(err) => return kio::Pending::new(Requesting::failed(err.into())),
+		};
 		let scope = self.stats.egress(&named);
 		// The resolved handle is named by what *this* cursor asked for, not by the absolute
 		// path: a rooted cursor cannot name anything above its own root, so that is what a
@@ -6612,8 +6659,8 @@ impl Consumer {
 	}
 
 	/// Converts a relative path to an absolute path.
-	pub fn absolute(&self, path: impl Into<Path>) -> Path {
-		self.root.join(&path.into())
+	pub fn absolute(&self, path: impl TryInto<Path, Error: Into<Error>>) -> Result<Path, Error> {
+		Ok(self.root.join(&path::convert(path)?)?)
 	}
 }
 
@@ -6675,16 +6722,23 @@ impl AnnounceConsumer {
 	}
 
 	#[cfg(test)]
-	pub(crate) async fn expect_next_active(&mut self, expected: impl Into<Path>) -> Route {
+	pub(crate) async fn expect_next_active(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) -> Route {
 		let event = self.expect_next().await;
-		Self::active(event, &expected.into())
+		Self::active(event, &expected.try_into().expect("expected path"))
 	}
 
 	#[cfg(test)]
-	pub(crate) async fn expect_next_restarted(&mut self, expected: impl Into<Path>) -> Route {
+	pub(crate) async fn expect_next_restarted(
+		&mut self,
+		expected: impl TryInto<Path, Error: std::fmt::Debug>,
+	) -> Route {
 		match self.expect_next().await {
 			AnnounceEvent::Restart(announce) => {
-				assert_eq!(announce.prefix, expected.into(), "wrong prefix");
+				assert_eq!(
+					announce.prefix,
+					expected.try_into().expect("expected path"),
+					"wrong prefix"
+				);
 				announce.route
 			}
 			other => panic!("should be a restart: got {other:?}"),
@@ -6692,9 +6746,13 @@ impl AnnounceConsumer {
 	}
 
 	#[cfg(test)]
-	pub(crate) async fn expect_next_ended(&mut self, expected: impl Into<Path>) {
+	pub(crate) async fn expect_next_ended(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) {
 		match self.expect_next().await {
-			AnnounceEvent::End(announce) => assert_eq!(announce.prefix, expected.into(), "wrong prefix"),
+			AnnounceEvent::End(announce) => assert_eq!(
+				announce.prefix,
+				expected.try_into().expect("expected path"),
+				"wrong prefix"
+			),
 			other => panic!("should be a retraction: got {other:?}"),
 		}
 	}
@@ -6820,7 +6878,7 @@ impl AnnounceConsumer {
 	fn hand_out(&mut self, event: AnnounceEvent) -> AnnounceEvent {
 		match &event {
 			AnnounceEvent::Start(announce) | AnnounceEvent::Update(announce) | AnnounceEvent::Restart(announce) => {
-				let scope = self.stats.egress(self.root.join(&announce.prefix));
+				let scope = self.stats.egress(self.root.rejoin(&announce.prefix));
 				self.guards
 					.entry(announce.prefix.clone())
 					.or_insert_with(|| scope.announce());
@@ -6979,7 +7037,7 @@ impl AnnounceConsumer {
 				continue;
 			};
 			for (presented, CursorRoute { meta, captures, .. }) in &cursor.current {
-				let prefix = cursor.under.join(presented);
+				let prefix = cursor.under.rejoin(presented);
 				if revoked.contains(&prefix) {
 					state.apply_unannounce(prefix, meta.clone(), captures.clone());
 					continue;
@@ -7009,8 +7067,8 @@ impl AnnounceConsumer {
 	}
 
 	/// Converts an emitted prefix back to one rooted at the origin.
-	pub fn absolute(&self, prefix: impl Into<Path>) -> Path {
-		self.root.join(&prefix.into())
+	pub fn absolute(&self, prefix: impl TryInto<Path, Error: Into<Error>>) -> Result<Path, Error> {
+		Ok(self.root.join(&path::convert(prefix)?)?)
 	}
 }
 
@@ -7059,29 +7117,33 @@ impl AnnounceConsumer {
 	}
 
 	/// The next update must be an active route at `expected`; returns it.
-	pub fn assert_next_active(&mut self, expected: impl Into<Path>) -> Route {
+	pub fn assert_next_active(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) -> Route {
 		let event = kio::wait(|waiter| self.poll_next(waiter))
 			.now_or_never()
 			.expect("next blocked")
 			.expect("no next");
-		Self::active(event, &expected.into())
+		Self::active(event, &expected.try_into().expect("expected path"))
 	}
 
 	/// The `try_next` counterpart of [`Self::assert_next_active`].
-	pub fn assert_try_next_active(&mut self, expected: impl Into<Path>) -> Route {
+	pub fn assert_try_next_active(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) -> Route {
 		let event = self.try_next().expect("no next");
-		Self::active(event, &expected.into())
+		Self::active(event, &expected.try_into().expect("expected path"))
 	}
 
 	/// The next update must be a restart at `expected`; returns its route.
-	pub fn assert_next_restarted(&mut self, expected: impl Into<Path>) -> Route {
+	pub fn assert_next_restarted(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) -> Route {
 		match kio::wait(|waiter| self.poll_next(waiter))
 			.now_or_never()
 			.expect("next blocked")
 			.expect("no next")
 		{
 			AnnounceEvent::Restart(announce) => {
-				assert_eq!(announce.prefix, expected.into(), "wrong prefix");
+				assert_eq!(
+					announce.prefix,
+					expected.try_into().expect("expected path"),
+					"wrong prefix"
+				);
 				announce.route
 			}
 			other => panic!("should be a restart: got {other:?}"),
@@ -7089,13 +7151,17 @@ impl AnnounceConsumer {
 	}
 
 	/// The next update must be a retraction at `expected`.
-	pub fn assert_next_ended(&mut self, expected: impl Into<Path>) {
+	pub fn assert_next_ended(&mut self, expected: impl TryInto<Path, Error: std::fmt::Debug>) {
 		match kio::wait(|waiter| self.poll_next(waiter))
 			.now_or_never()
 			.expect("next blocked")
 			.expect("no next")
 		{
-			AnnounceEvent::End(announce) => assert_eq!(announce.prefix, expected.into(), "wrong prefix"),
+			AnnounceEvent::End(announce) => assert_eq!(
+				announce.prefix,
+				expected.try_into().expect("expected path"),
+				"wrong prefix"
+			),
 			other => panic!("should be a retraction: got {other:?}"),
 		}
 	}
@@ -7854,7 +7920,11 @@ mod tests {
 		let producer = origin(1).produce();
 		let _foo = producer.publish(".svc/p1/foo", Route::default()).unwrap();
 		let project = mounted(&producer, "p1", &["**"])
-			.with_stats(registry.tier(stats::Tier::default()).session("p1"))
+			.with_stats(
+				registry
+					.tier(stats::Tier::default())
+					.session(crate::Path::from_static("p1")),
+			)
 			.with_hidden(true);
 
 		let mut announced = project.announced();
@@ -8084,7 +8154,7 @@ mod tests {
 			let table = producer.shared.read();
 			(0..PATHS)
 				.map(|i| {
-					let path = Path::new(&format!("pool/job-{i}"));
+					let path = Path::new(&format!("pool/job-{i}")).unwrap();
 					let entry = table
 						.best_route(&path, Horizon::default(), &HashSet::new(), |_| true)
 						.expect("the pool serves every path");
@@ -8916,9 +8986,11 @@ mod tests {
 	#[moq_clock::test]
 	async fn announce_stats_follow_the_advertisement() {
 		let registry = stats::Registry::new(stats::Config::new());
-		let producer = origin(1)
-			.produce()
-			.with_stats(registry.tier(stats::Tier::default()).session("root"));
+		let producer = origin(1).produce().with_stats(
+			registry
+				.tier(stats::Tier::default())
+				.session(crate::Path::from_static("root")),
+		);
 		let announces = || {
 			registry
 				.snapshot()
@@ -9134,7 +9206,7 @@ mod tests {
 			let watches = table
 				.routes
 				.root
-				.find(Path::new("room/alice").parts())
+				.find(Path::from_static("room/alice").parts())
 				.map_or(0, |node| node.watches.len());
 			(table.fronts.len(), watches)
 		};
@@ -9301,7 +9373,7 @@ mod tests {
 		let producer = origin(1).produce();
 		let consumer = producer.consume();
 		let _published = producer.publish("room/alice", Route::default()).unwrap();
-		let path = consumer.absolute("room/alice");
+		let path = consumer.absolute("room/alice").unwrap();
 		let broadcast = broadcast::Info::new().produce();
 		// Held, so the front waits on its holder rather than retiring on its own.
 		let holder = broadcast.consume();
@@ -10203,7 +10275,7 @@ mod tests {
 			for (i, route) in far.into_iter().enumerate().rev() {
 				drop(route);
 				match announced.try_next() {
-					Some(AnnounceEvent::End(end)) => assert_eq!(end.prefix, Path::new(&format!("room/{i}"))),
+					Some(AnnounceEvent::End(end)) => assert_eq!(end.prefix, Path::new(&format!("room/{i}")).unwrap()),
 					other => panic!("should be a retraction: got {other:?}"),
 				}
 			}
@@ -10387,7 +10459,7 @@ mod tests {
 		let _relayed = peer
 			.dynamic_route("room", Route::default().with_hops(hops(&[9, 2, 3])))
 			.unwrap();
-		let path = Path::new("room/video");
+		let path = Path::from_static("room/video");
 		let id = producer
 			.shared
 			.read()
@@ -11083,7 +11155,7 @@ mod tests {
 			.map(|i| format!("s{i}"))
 			.collect::<Vec<_>>()
 			.join("/");
-		assert_eq!(Path::new(&path).parts().count(), Path::MAX_PARTS);
+		assert_eq!(Path::new(&path).unwrap().parts().count(), Path::MAX_PARTS);
 
 		assert!(consumer.allowed().matches(&path));
 
@@ -11460,7 +11532,7 @@ mod tests {
 			matches!(pinned.await, Err(Error::Unroutable)),
 			"a request pinned to the old epoch resolved"
 		);
-		let cached = dynamic.state.lock().served.get(&Path::new("room/alice"));
+		let cached = dynamic.state.lock().served.get(&Path::from_static("room/alice"));
 		assert!(
 			cached.is_some_and(|cached| cached.consume().is_clone(&fresh.consume())),
 			"the old answer was cached"
@@ -12861,8 +12933,20 @@ mod tests {
 		let route = producer.announce("room/a/b/c", Route::default()).unwrap();
 		{
 			let table = producer.shared.lock();
-			assert!(table.routes.root.find(Path::new("room/a/b/c").parts()).is_some());
-			assert!(table.routes.root.find(Path::new("other/deep/head").parts()).is_some());
+			assert!(
+				table
+					.routes
+					.root
+					.find(Path::from_static("room/a/b/c").parts())
+					.is_some()
+			);
+			assert!(
+				table
+					.routes
+					.root
+					.find(Path::from_static("other/deep/head").parts())
+					.is_some()
+			);
 			assert_eq!(table.routes.root.cursors_below, 2);
 		}
 
@@ -13005,7 +13089,7 @@ mod tests {
 		let broad = producer
 			.dynamic_route("room", Route::default().with_via(origin(2)))
 			.unwrap();
-		let selected = broad.request_validity(&Path::new("room/a")).unwrap();
+		let selected = broad.request_validity(&Path::from_static("room/a")).unwrap();
 		let pending = selected.current();
 		assert!(!pending.is_closed());
 		broad.update_route(broad.route().with_cost(Cost::from(7))).unwrap();
@@ -13037,7 +13121,7 @@ mod tests {
 		let route = producer
 			.dynamic_route("room", Route::default().with_via(origin(2)))
 			.unwrap();
-		let path = Path::new("room/a");
+		let path = Path::from_static("room/a");
 		let selected = route.request_validity(&path).unwrap();
 		let lease = selected.current();
 		drop(selected);
@@ -13050,7 +13134,10 @@ mod tests {
 	async fn watch_wakes_only_for_covering_changes() {
 		let producer = origin(1).produce();
 		let waiter = kio::Waiter::noop();
-		let watch = producer.shared.lock().watch(&producer.shared, &Path::new("room/a"));
+		let watch = producer
+			.shared
+			.lock()
+			.watch(&producer.shared, &Path::from_static("room/a"));
 		let seen = watch.seen();
 
 		// A route beside the path or beneath it covers nothing at the path.
@@ -13078,7 +13165,7 @@ mod tests {
 		let node = table
 			.routes
 			.root
-			.find(Path::new("room/a").parts())
+			.find(Path::from_static("room/a").parts())
 			.expect("route below keeps the node");
 		assert!(node.watches.is_empty());
 		assert_eq!(table.routes.root.watches_below, 0);

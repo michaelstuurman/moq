@@ -381,7 +381,7 @@ fn lite_tracks_interop() {
 
 	let version = lite::Version::Lite07;
 	let request = lite::Tracks {
-		broadcast: crate::Path::new("room"),
+		broadcast: crate::Path::from_static("room"),
 		epoch: None,
 	}
 	.encode_bytes(version)
@@ -462,7 +462,7 @@ fn ietf_track_status_interop() {
 			w.varint(<ietf::TrackStatus as ietf::Message>::ID).unwrap();
 			ietf::TrackStatus {
 				request_id: ietf::RequestId(id),
-				track_namespace: crate::Path::new(namespace),
+				track_namespace: crate::Path::new(namespace).unwrap(),
 				track_name: "video".into(),
 				properties_wanted: wanted,
 				epoch: None,

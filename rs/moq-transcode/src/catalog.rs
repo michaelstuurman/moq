@@ -766,7 +766,7 @@ mod tests {
 		video.insert("low", source(640, 360, None)).unwrap();
 		video.insert("high", source(1920, 1080, None)).unwrap();
 		let mut remote = source(3840, 2160, None);
-		remote.broadcast = Some(Relative::from("./other".to_string()));
+		remote.broadcast = Some(Relative::new("./other").unwrap());
 		video.insert("remote", remote).unwrap();
 
 		let (name, config) = choose_source(&video, &mut decodes_all()).await.unwrap();
@@ -979,7 +979,7 @@ mod tests {
 		audio.jitter = Some(std::time::Duration::from_millis(20));
 		child.audio.insert("audio", audio.clone()).unwrap();
 
-		let rel = Relative::from(".".to_string());
+		let rel = Relative::new(".").unwrap();
 		let mut out = moq_mux::catalog::hang::Catalog::<()>::default();
 		populate(&mut out, &child, &[], Some(&rel)).unwrap();
 
@@ -1001,7 +1001,7 @@ mod tests {
 			"video".to_string(),
 			hang::catalog::Timeline::new("video.timeline.z", 4_000),
 		);
-		archive.replay = Some(Relative::from("./recordings/clip".to_string()));
+		archive.replay = Some(Relative::new("./recordings/clip").unwrap());
 		archive.version = Some(hang::catalog::Archive::VERSION);
 		child.archive = Some(archive.clone());
 		let clock = hang::catalog::Clock::new(moq_net::Timestamp::from_micros(1_751_846_400_000_000).unwrap()).unwrap();

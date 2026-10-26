@@ -265,7 +265,7 @@ mod tests {
 				// Runs until the caller disconnects, then closes at once.
 				publish
 					.with_linger(Duration::ZERO)
-					.accept(&origin, "ingested/cam0")
+					.accept(&origin, moq_net::Path::from_static("ingested/cam0"))
 					.await
 					.ok();
 			}
@@ -306,7 +306,10 @@ mod tests {
 			let resource = request.resource().to_string();
 			let is_subscribe = matches!(request, Request::Subscribe(_));
 			if let Request::Subscribe(subscribe) = request {
-				subscribe.accept(&consumer, "live/cam0").await.ok();
+				subscribe
+					.accept(&consumer, moq_net::Path::from_static("live/cam0"))
+					.await
+					.ok();
 			}
 			(resource, is_subscribe)
 		});

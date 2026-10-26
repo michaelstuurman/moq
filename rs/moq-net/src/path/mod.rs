@@ -32,9 +32,20 @@ enum Repr {
 }
 
 const _: () = assert!(size_of::<Repr>() == INLINE + 2);
+// Every path fits `MAX_BYTES`, so a `Shared` offset into one always fits its `u16`.
+const _: () = assert!(Path::MAX_BYTES <= u16::MAX as usize);
 
 impl Repr {
-	fn copy(s: &str) -> Self {
+	fn copy(s: &str) -> Result<Self, TooLong> {
+		if s.len() > Path::MAX_BYTES {
+			return Err(TooLong);
+		}
+		Ok(Self::copy_bounded(s))
+	}
+
+	// `copy` for a string already known to fit `MAX_BYTES`.
+	fn copy_bounded(s: &str) -> Self {
+		debug_assert!(s.len() <= Path::MAX_BYTES);
 		if s.len() <= INLINE {
 			let mut buf = [0; INLINE];
 			buf[..s.len()].copy_from_slice(s.as_bytes());
@@ -51,13 +62,19 @@ impl Repr {
 	}
 }
 
+/// A path or relative reference is longer than [`Path::MAX_BYTES`].
+#[derive(Debug, Copy, Clone, Eq, PartialEq, thiserror::Error)]
+#[error("path is longer than {} bytes", Path::MAX_BYTES)]
+pub struct TooLong;
+
 /// A broadcast path that provides safe prefix matching operations.
 ///
 /// This type wraps a string but provides path-aware operations that respect
 /// delimiter boundaries, preventing issues like "foo" matching "foobar".
 ///
 /// Paths are automatically trimmed of leading and trailing slashes on creation,
-/// making all slashes implicit at boundaries. A path names a point in the origin's
+/// making all slashes implicit at boundaries. A path is at most [`Path::MAX_BYTES`] long,
+/// so building a longer one fails with [`TooLong`]. A path names a point in the origin's
 /// tree from its root; a leading slash never escapes that root. The same type names
 /// an exact broadcast and the prefix a route or announcement covers, so a broadcast's
 /// own path is the prefix it announces. See [`Relative`] for `..`-style references.
@@ -70,15 +87,16 @@ impl Repr {
 /// use moq_net::Path;
 ///
 /// // Creation automatically trims slashes
-/// let path1 = Path::new("/foo/bar/");
-/// let path2 = Path::new("foo/bar");
+/// let path1 = Path::from_static("/foo/bar/")?;
+/// let path2 = Path::from_static("foo/bar");
 /// assert_eq!(path1, path2);
 ///
-/// let base = Path::new("api/v1");
-/// assert!(base.has_prefix(&Path::new("api")));
+/// let base = Path::from_static("api/v1");
+/// assert!(base.has_prefix(&Path::from_static("api")));
 ///
-/// let joined = base.join(&Path::new("users"));
+/// let joined = base.join(&Path::from_static("users"))?;
 /// assert_eq!(joined.as_str(), "api/v1/users");
+/// # Ok::<(), moq_net::path::TooLong>(())
 /// ```
 #[derive(Clone)]
 pub struct Path(Repr);
@@ -91,39 +109,44 @@ impl Path {
 	/// and publishing one to an origin is rejected.
 	pub const MAX_PARTS: usize = 32;
 
-	// Longest path on the wire, in bytes: a quarter of the 64 KiB lite message limit,
-	// leaving room for every other field of a message that carries one.
-	pub(crate) const MAX_BYTES: usize = 16 * 1024;
-
-	// Whether this path fits the wire limits on depth and length.
-	pub(crate) fn fits_wire(&self) -> bool {
-		self.len() <= Self::MAX_BYTES && self.parts().count() <= Self::MAX_PARTS
-	}
+	/// Maximum length of a path in bytes.
+	///
+	/// A quarter of the 64 KiB moq-lite message limit, leaving room for every other
+	/// field of a message that carries a path.
+	pub const MAX_BYTES: usize = 16 * 1024;
 
 	/// Create a new Path by copying a string slice.
 	///
 	/// Leading and trailing slashes are automatically trimmed.
 	/// Multiple consecutive internal slashes are collapsed to single slashes.
-	pub fn new(s: &str) -> Self {
+	/// Fails if the normalized path is longer than [`Path::MAX_BYTES`].
+	pub fn new(s: &str) -> Result<Self, TooLong> {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
 		match normalize(trimmed) {
-			Some(normalized) => Self(Repr::copy(&normalized)),
-			None => Self(Repr::copy(trimmed)),
+			Some(normalized) => Ok(Self(Repr::copy(&normalized)?)),
+			None => Ok(Self(Repr::copy(trimmed)?)),
 		}
 	}
 
 	/// Create a new Path from a string literal without copying it, normalized like [`Path::new`].
+	///
+	/// # Panics
+	///
+	/// If the normalized literal is longer than [`Path::MAX_BYTES`].
 	pub fn from_static(s: &'static str) -> Self {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
-		match normalize(trimmed) {
-			Some(normalized) => Self(Repr::copy(&normalized)),
+		let normalized = normalize(trimmed);
+		let len = normalized.as_ref().map_or(trimmed.len(), String::len);
+		assert!(len <= Self::MAX_BYTES, "path literal is longer than Path::MAX_BYTES");
+		match normalized {
+			Some(normalized) => Self(Repr::copy_bounded(&normalized)),
 			None => Self(Repr::Static(trimmed)),
 		}
 	}
 
 	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
-	pub(crate) fn from_escaped(s: String) -> Path {
-		Path(Repr::copy(&s))
+	pub(crate) fn from_escaped(s: String) -> Result<Path, TooLong> {
+		Ok(Path(Repr::copy(&s)?))
 	}
 
 	// A copy of this path skipping the first `n` bytes, reusing the shared buffer when possible.
@@ -131,15 +154,12 @@ impl Path {
 		let rest = &self.as_str()[n..];
 		match &self.0 {
 			Repr::Static(s) => Path(Repr::Static(&s[n..])),
-			Repr::Shared { buf, start } if rest.len() > INLINE => match u16::try_from(*start as usize + n) {
-				Ok(start) => Path(Repr::Shared {
-					buf: buf.clone(),
-					start,
-				}),
-				// Only wire paths are capped, so a local path past 64 KiB copies the rest instead.
-				Err(_) => Path(Repr::copy(rest)),
-			},
-			_ => Path(Repr::copy(rest)),
+			Repr::Shared { buf, start } if rest.len() > INLINE => Path(Repr::Shared {
+				buf: buf.clone(),
+				// The offset stays within the buffer, which fits `MAX_BYTES` and so a `u16`.
+				start: *start + n as u16,
+			}),
+			_ => Path(Repr::copy_bounded(rest)),
 		}
 	}
 
@@ -155,13 +175,13 @@ impl Path {
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let path = Path::new("foo/bar");
-	/// assert!(path.has_prefix(&Path::new("foo")));
-	/// assert!(path.has_prefix(&Path::new("foo/")));
-	/// assert!(!path.has_prefix(&Path::new("fo")));
+	/// let path = Path::from_static("foo/bar");
+	/// assert!(path.has_prefix(&Path::from_static("foo")));
+	/// assert!(path.has_prefix(&Path::from_static("foo/")));
+	/// assert!(!path.has_prefix(&Path::from_static("fo")));
 	///
-	/// let path = Path::new("foobar");
-	/// assert!(!path.has_prefix(&Path::new("foo")));
+	/// let path = Path::from_static("foobar");
+	/// assert!(!path.has_prefix(&Path::from_static("foo")));
 	/// ```
 	pub fn has_prefix(&self, prefix: &Path) -> bool {
 		self.prefix_len(prefix).is_some()
@@ -205,7 +225,7 @@ impl Path {
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let path = Path::new("foo/bar/baz");
+	/// let path = Path::from_static("foo/bar/baz");
 	/// assert_eq!(path.parts().collect::<Vec<_>>(), ["foo", "bar", "baz"]);
 	/// assert_eq!(Path::empty().parts().count(), 0);
 	/// ```
@@ -249,43 +269,55 @@ impl Path {
 
 	/// Join this path with another path component.
 	///
+	/// Fails if the result is longer than [`Path::MAX_BYTES`].
+	///
 	/// # Examples
 	/// ```
 	/// use moq_net::Path;
 	///
-	/// let base = Path::new("foo");
-	/// let joined = base.join(&Path::new("bar"));
+	/// let base = Path::from_static("foo");
+	/// let joined = base.join(&Path::from_static("bar"))?;
 	/// assert_eq!(joined.as_str(), "foo/bar");
+	/// # Ok::<(), moq_net::path::TooLong>(())
 	/// ```
-	pub fn join(&self, other: &Path) -> Path {
+	pub fn join(&self, other: &Path) -> Result<Path, TooLong> {
 		if self.is_empty() {
-			other.clone()
+			Ok(other.clone())
 		} else if other.is_empty() {
-			self.clone()
+			Ok(self.clone())
 		} else {
 			Self::concat(self.as_str(), other.as_str())
 		}
 	}
 
+	// `join` where the result is known to fit, like a prefix and the suffix split from
+	// one path. Panics otherwise, since that breaks an internal invariant.
+	pub(crate) fn rejoin(&self, other: &Path) -> Path {
+		self.join(other).expect("a rejoined path fits")
+	}
+
 	// `a/b` for two non-empty normalized paths, built in place.
-	pub(crate) fn concat(a: &str, b: &str) -> Path {
+	pub(crate) fn concat(a: &str, b: &str) -> Result<Path, TooLong> {
 		let len = a.len() + 1 + b.len();
+		if len > Self::MAX_BYTES {
+			return Err(TooLong);
+		}
 		if len <= INLINE {
 			let mut buf = [0; INLINE];
 			buf[..a.len()].copy_from_slice(a.as_bytes());
 			buf[a.len()] = b'/';
 			buf[a.len() + 1..len].copy_from_slice(b.as_bytes());
-			Path(Repr::Inline { len: len as u8, buf })
+			Ok(Path(Repr::Inline { len: len as u8, buf }))
 		} else {
 			// Sized up front: `format!` guesses low and reallocates.
 			let mut buf = String::with_capacity(len);
 			buf.push_str(a);
 			buf.push('/');
 			buf.push_str(b);
-			Path(Repr::Shared {
+			Ok(Path(Repr::Shared {
 				buf: buf.into(),
 				start: 0,
-			})
+			}))
 		}
 	}
 
@@ -299,18 +331,21 @@ impl Path {
 	/// [`Relative::new`] strips empty and redundant `.` segments, but preserves a lone `.`
 	/// so it can reference the base's parent.
 	///
+	/// Fails if the result is longer than [`Path::MAX_BYTES`].
+	///
 	/// # Examples
 	/// ```
 	/// use moq_net::{Path, path::Relative};
 	///
-	/// let base = Path::new("a/b/c");
-	/// assert_eq!(base.resolve(&Relative::new("./d")).as_str(), "a/b/d");
-	/// assert_eq!(base.resolve(&Relative::new(".")).as_str(), "a/b");
-	/// assert_eq!(base.resolve(&Relative::new("../d")).as_str(), "a/d");
+	/// let base = Path::from_static("a/b/c");
+	/// assert_eq!(base.resolve(&Relative::new("./d")?)?.as_str(), "a/b/d");
+	/// assert_eq!(base.resolve(&Relative::new(".")?)?.as_str(), "a/b");
+	/// assert_eq!(base.resolve(&Relative::new("../d")?)?.as_str(), "a/d");
+	/// # Ok::<(), moq_net::path::TooLong>(())
 	/// ```
-	pub fn resolve(&self, rel: &Relative) -> Path {
+	pub fn resolve(&self, rel: &Relative) -> Result<Path, TooLong> {
 		if rel.is_empty() {
-			return self.clone();
+			return Ok(self.clone());
 		}
 
 		let mut segments: Vec<&str> = self.parts().collect();
@@ -326,10 +361,11 @@ impl Path {
 			}
 		}
 
-		Path(Repr::copy(&segments.join("/")))
+		Ok(Path(Repr::copy(&segments.join("/"))?))
 	}
 
-	/// Resolve a [`Relative`], returning `None` if it escapes above the root.
+	/// Resolve a [`Relative`], returning `None` if it escapes above the root or the
+	/// result is longer than [`Path::MAX_BYTES`].
 	///
 	/// Unlike [`Path::resolve`], this distinguishes a valid reference to the empty root
 	/// path from excess `..` segments. Use it when an untrusted relative reference must
@@ -352,7 +388,7 @@ impl Path {
 			}
 		}
 
-		Some(Path(Repr::copy(&segments.join("/"))))
+		Repr::copy(&segments.join("/")).ok().map(Path)
 	}
 
 	/// Express this path relative to `base`: the inverse of [`Path::resolve`].
@@ -367,26 +403,27 @@ impl Path {
 	///
 	/// Returns `None` for a target no reference can name: a path segment may literally be
 	/// `.` or `..`, which resolution reads as navigation instead of as a name. Only the
-	/// segments past the shared prefix matter, since the rest are never emitted.
+	/// segments past the shared prefix matter, since the rest are never emitted. A
+	/// reference longer than [`Path::MAX_BYTES`] can't be named either.
 	///
 	/// # Examples
 	/// ```
 	/// use moq_net::Path;
 	///
 	/// // The base names a broadcast, so its last segment is replaced, not descended into.
-	/// let base = Path::new("a/b");
-	/// assert_eq!(Path::new("a/b/c").relative(&base).unwrap().as_str(), "b/c");
-	/// assert_eq!(Path::new("a/c").relative(&base).unwrap().as_str(), "c");
-	/// assert_eq!(Path::new("c").relative(&base).unwrap().as_str(), "../c");
+	/// let base = Path::from_static("a/b");
+	/// assert_eq!(Path::from_static("a/b/c").relative(&base).unwrap().as_str(), "b/c");
+	/// assert_eq!(Path::from_static("a/c").relative(&base).unwrap().as_str(), "c");
+	/// assert_eq!(Path::from_static("c").relative(&base).unwrap().as_str(), "../c");
 	///
 	/// // The lone `.` names the base's parent, which the empty reference cannot.
-	/// assert_eq!(Path::new("a").relative(&base).unwrap().as_str(), ".");
+	/// assert_eq!(Path::from_static("a").relative(&base).unwrap().as_str(), ".");
 	///
 	/// // The base itself.
-	/// assert_eq!(Path::new("a/b").relative(&base).unwrap().as_str(), "");
+	/// assert_eq!(Path::from_static("a/b").relative(&base).unwrap().as_str(), "");
 	///
 	/// // A segment named `..` is a legal path component but an unnameable target.
-	/// assert!(Path::new("a/..").relative(&base).is_none());
+	/// assert!(Path::from_static("a/..").relative(&base).is_none());
 	/// ```
 	pub fn relative(&self, base: &Path) -> Option<Relative> {
 		// Only the empty reference can name a base whose last segment is itself `.` or `..`,
@@ -413,11 +450,31 @@ impl Path {
 
 		if rel.is_empty() {
 			// An empty reference resolves to the base itself, so name the parent explicitly.
-			return Some(Relative::new("."));
+			return Some(Relative(Path::from_static(".")));
 		}
 
-		Some(Relative::from(rel.join("/")))
+		Relative::new(&rel.join("/")).ok()
 	}
+}
+
+// `root/path` for logs, without building the joined path.
+#[cfg(feature = "async")]
+pub(crate) struct Rooted<'a>(pub &'a Path, pub &'a Path);
+
+#[cfg(feature = "async")]
+impl Display for Rooted<'_> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match (self.0.is_empty(), self.1.is_empty()) {
+			(_, true) => write!(f, "{}", self.0),
+			(true, false) => write!(f, "{}", self.1),
+			(false, false) => write!(f, "{}/{}", self.0, self.1),
+		}
+	}
+}
+
+// An entry point's path argument, failing with the entry point's own error type.
+pub(crate) fn convert<E>(path: impl TryInto<Path, Error: Into<E>>) -> Result<Path, E> {
+	path.try_into().map_err(Into::into)
 }
 
 // The normalized copy when `trimmed` holds consecutive slashes, else `None`.
@@ -478,14 +535,18 @@ impl serde::Serialize for Path {
 	}
 }
 
-impl From<&str> for Path {
-	fn from(s: &str) -> Self {
+impl TryFrom<&str> for Path {
+	type Error = TooLong;
+
+	fn try_from(s: &str) -> Result<Self, TooLong> {
 		Self::new(s)
 	}
 }
 
-impl From<&String> for Path {
-	fn from(s: &String) -> Self {
+impl TryFrom<&String> for Path {
+	type Error = TooLong;
+
+	fn try_from(s: &String) -> Result<Self, TooLong> {
 		Self::new(s)
 	}
 }
@@ -502,8 +563,10 @@ impl Default for Path {
 	}
 }
 
-impl From<String> for Path {
-	fn from(s: String) -> Self {
+impl TryFrom<String> for Path {
+	type Error = TooLong;
+
+	fn try_from(s: String) -> Result<Self, TooLong> {
 		// `Arc<str>` can't adopt a `String`'s buffer, so this copies like `new`.
 		Self::new(&s)
 	}
@@ -521,10 +584,22 @@ impl Display for Path {
 	}
 }
 
+impl From<TooLong> for DecodeError {
+	fn from(_: TooLong) -> Self {
+		DecodeError::BoundsExceeded
+	}
+}
+
+impl From<TooLong> for crate::Error {
+	fn from(_: TooLong) -> Self {
+		crate::Error::BoundsExceeded(crate::BoundsExceeded)
+	}
+}
+
 impl<V> Decode<V> for Path {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
-		let path: Path = r.string()?.into();
-		if !path.fits_wire() {
+		let path = Path::new(&r.string()?)?;
+		if path.parts().count() > Path::MAX_PARTS {
 			return Err(DecodeError::BoundsExceeded);
 		}
 		Ok(path)
@@ -533,7 +608,7 @@ impl<V> Decode<V> for Path {
 
 impl<V> Encode<V> for Path {
 	fn encode(&self, w: &mut Encoder<'_>, _: V) -> Result<(), EncodeError> {
-		if !self.fits_wire() {
+		if self.parts().count() > Path::MAX_PARTS {
 			return Err(EncodeError::BoundsExceeded);
 		}
 		w.string(self.as_str())
@@ -592,12 +667,13 @@ impl<V> Decode<V> for Patterns {
 /// ```
 /// use moq_net::{Path, path::Relative};
 ///
-/// let rel = Relative::new("./source");
-/// assert_eq!(Path::new("a/b").resolve(&rel).as_str(), "a/source");
+/// let rel = Relative::new("./source")?;
+/// assert_eq!(Path::from_static("a/b").resolve(&rel)?.as_str(), "a/source");
 ///
 /// // Redundant `.` segments are stripped on creation.
-/// assert_eq!(Relative::new("./a/./b").as_str(), "a/b");
-/// assert_eq!(Relative::new(".").as_str(), ".");
+/// assert_eq!(Relative::new("./a/./b")?.as_str(), "a/b");
+/// assert_eq!(Relative::new(".")?.as_str(), ".");
+/// # Ok::<(), moq_net::path::TooLong>(())
 /// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct Relative(Path);
@@ -613,13 +689,14 @@ impl Relative {
 	///
 	/// Leading and trailing slashes are trimmed, consecutive internal slashes collapse to one,
 	/// and redundant `.` segments are stripped. See the type-level doc for the full rules.
-	pub fn new(s: &str) -> Self {
+	/// Fails if the normalized reference is longer than [`Path::MAX_BYTES`].
+	pub fn new(s: &str) -> Result<Self, TooLong> {
 		let trimmed = s.trim_start_matches('/').trim_end_matches('/');
 
 		if needs_normalize_relative(trimmed) {
-			Self(Path(Repr::copy(&normalize_relative_segments(trimmed))))
+			Ok(Self(Path(Repr::copy(&normalize_relative_segments(trimmed))?)))
 		} else {
-			Self(Path(Repr::copy(trimmed)))
+			Ok(Self(Path(Repr::copy(trimmed)?)))
 		}
 	}
 
@@ -644,20 +721,26 @@ impl Relative {
 	}
 }
 
-impl From<&str> for Relative {
-	fn from(s: &str) -> Self {
+impl TryFrom<&str> for Relative {
+	type Error = TooLong;
+
+	fn try_from(s: &str) -> Result<Self, TooLong> {
 		Self::new(s)
 	}
 }
 
-impl From<&String> for Relative {
-	fn from(s: &String) -> Self {
+impl TryFrom<&String> for Relative {
+	type Error = TooLong;
+
+	fn try_from(s: &String) -> Result<Self, TooLong> {
 		Self::new(s)
 	}
 }
 
-impl From<String> for Relative {
-	fn from(s: String) -> Self {
+impl TryFrom<String> for Relative {
+	type Error = TooLong;
+
+	fn try_from(s: String) -> Result<Self, TooLong> {
 		Self::new(&s)
 	}
 }
@@ -698,7 +781,7 @@ impl<'de> serde::Deserialize<'de> for Relative {
 		D: serde::Deserializer<'de>,
 	{
 		let s = String::deserialize(deserializer)?;
-		Ok(Relative::from(s))
+		Relative::new(&s).map_err(serde::de::Error::custom)
 	}
 }
 
@@ -708,62 +791,101 @@ mod tests {
 
 	#[test]
 	fn test_has_prefix() {
-		let path = Path::new("foo/bar/baz");
+		let path = Path::from_static("foo/bar/baz");
 
 		// Valid prefixes - test with both &str and &Path
-		assert!(path.has_prefix(&Path::new("")));
-		assert!(path.has_prefix(&Path::new("foo")));
-		assert!(path.has_prefix(&Path::new("foo")));
-		assert!(path.has_prefix(&Path::new("foo/")));
-		assert!(path.has_prefix(&Path::new("foo/bar")));
-		assert!(path.has_prefix(&Path::new("foo/bar/")));
-		assert!(path.has_prefix(&Path::new("foo/bar/baz")));
+		assert!(path.has_prefix(&Path::from_static("")));
+		assert!(path.has_prefix(&Path::from_static("foo")));
+		assert!(path.has_prefix(&Path::from_static("foo")));
+		assert!(path.has_prefix(&Path::from_static("foo/")));
+		assert!(path.has_prefix(&Path::from_static("foo/bar")));
+		assert!(path.has_prefix(&Path::from_static("foo/bar/")));
+		assert!(path.has_prefix(&Path::from_static("foo/bar/baz")));
 
 		// Invalid prefixes - should not match partial components
-		assert!(!path.has_prefix(&Path::new("f")));
-		assert!(!path.has_prefix(&Path::new("fo")));
-		assert!(!path.has_prefix(&Path::new("foo/b")));
-		assert!(!path.has_prefix(&Path::new("foo/ba")));
-		assert!(!path.has_prefix(&Path::new("foo/bar/ba")));
+		assert!(!path.has_prefix(&Path::from_static("f")));
+		assert!(!path.has_prefix(&Path::from_static("fo")));
+		assert!(!path.has_prefix(&Path::from_static("foo/b")));
+		assert!(!path.has_prefix(&Path::from_static("foo/ba")));
+		assert!(!path.has_prefix(&Path::from_static("foo/bar/ba")));
 
 		// Edge case: "foobar" should not match "foo"
-		let path = Path::new("foobar");
-		assert!(!path.has_prefix(&Path::new("foo")));
-		assert!(path.has_prefix(&Path::new("foobar")));
+		let path = Path::from_static("foobar");
+		assert!(!path.has_prefix(&Path::from_static("foo")));
+		assert!(path.has_prefix(&Path::from_static("foobar")));
 	}
 
 	#[test]
 	fn test_strip_prefix() {
-		let path = Path::new("foo/bar/baz");
+		let path = Path::from_static("foo/bar/baz");
 
 		// Test with both &str and &Path
-		assert_eq!(path.strip_prefix(&Path::new("")).unwrap().as_str(), "foo/bar/baz");
-		assert_eq!(path.strip_prefix(&Path::new("foo")).unwrap().as_str(), "bar/baz");
-		assert_eq!(path.strip_prefix(&Path::new("foo/")).unwrap().as_str(), "bar/baz");
-		assert_eq!(path.strip_prefix(&Path::new("foo/bar")).unwrap().as_str(), "baz");
-		assert_eq!(path.strip_prefix(&Path::new("foo/bar/")).unwrap().as_str(), "baz");
-		assert_eq!(path.strip_prefix(&Path::new("foo/bar/baz")).unwrap().as_str(), "");
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("")).unwrap().as_str(),
+			"foo/bar/baz"
+		);
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("foo")).unwrap().as_str(),
+			"bar/baz"
+		);
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("foo/")).unwrap().as_str(),
+			"bar/baz"
+		);
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("foo/bar")).unwrap().as_str(),
+			"baz"
+		);
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("foo/bar/")).unwrap().as_str(),
+			"baz"
+		);
+		assert_eq!(
+			path.strip_prefix(&Path::from_static("foo/bar/baz")).unwrap().as_str(),
+			""
+		);
 
 		// Should fail for invalid prefixes
-		assert!(path.strip_prefix(&Path::new("fo")).is_none());
-		assert!(path.strip_prefix(&Path::new("bar")).is_none());
+		assert!(path.strip_prefix(&Path::from_static("fo")).is_none());
+		assert!(path.strip_prefix(&Path::from_static("bar")).is_none());
 	}
 
 	#[test]
 	fn test_join() {
 		// Test with both &str and &Path
-		assert_eq!(Path::new("foo").join(&Path::new("bar")).as_str(), "foo/bar");
-		assert_eq!(Path::new("foo/").join(&Path::new("bar")).as_str(), "foo/bar");
-		assert_eq!(Path::new("").join(&Path::new("bar")).as_str(), "bar");
-		assert_eq!(Path::new("foo/bar").join(&Path::new("baz")).as_str(), "foo/bar/baz");
+		assert_eq!(
+			Path::from_static("foo")
+				.join(&Path::from_static("bar"))
+				.unwrap()
+				.as_str(),
+			"foo/bar"
+		);
+		assert_eq!(
+			Path::from_static("foo/")
+				.join(&Path::from_static("bar"))
+				.unwrap()
+				.as_str(),
+			"foo/bar"
+		);
+		assert_eq!(
+			Path::from_static("").join(&Path::from_static("bar")).unwrap().as_str(),
+			"bar"
+		);
+		assert_eq!(
+			Path::from_static("foo/bar")
+				.join(&Path::from_static("baz"))
+				.unwrap()
+				.as_str(),
+			"foo/bar/baz"
+		);
 	}
 
 	#[test]
 	fn test_from_conversions() {
-		let path1 = Path::from("foo/bar");
-		let path2 = Path::from("foo/bar");
+		let path1 = crate::Path::from_static("foo/bar");
+		let path2 = crate::Path::from_static("foo/bar");
 		let s = String::from("foo/bar");
-		let path3 = Path::from(&s);
+		let path3 = crate::Path::try_from(&s).unwrap();
 
 		assert_eq!(path1.as_str(), "foo/bar");
 		assert_eq!(path2.as_str(), "foo/bar");
@@ -772,33 +894,33 @@ mod tests {
 
 	#[test]
 	fn test_path_prefix_join() {
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("bar/baz");
+		let path = prefix.join(&suffix).unwrap();
 		assert_eq!(path.as_str(), "foo/bar/baz");
 
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
+		let prefix = Path::from_static("foo/");
+		let suffix = Path::from_static("bar/baz");
+		let path = prefix.join(&suffix).unwrap();
 		assert_eq!(path.as_str(), "foo/bar/baz");
 
-		let prefix = Path::new("foo");
-		let suffix = Path::new("/bar/baz");
-		let path = prefix.join(&suffix);
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("/bar/baz");
+		let path = prefix.join(&suffix).unwrap();
 		assert_eq!(path.as_str(), "foo/bar/baz");
 
-		let prefix = Path::new("");
-		let suffix = Path::new("bar/baz");
-		let path = prefix.join(&suffix);
+		let prefix = Path::from_static("");
+		let suffix = Path::from_static("bar/baz");
+		let path = prefix.join(&suffix).unwrap();
 		assert_eq!(path.as_str(), "bar/baz");
 	}
 
 	#[test]
 	fn test_path_prefix_conversions() {
-		let prefix1 = Path::from("foo/bar");
-		let prefix2 = Path::from(String::from("foo/bar"));
+		let prefix1 = crate::Path::from_static("foo/bar");
+		let prefix2 = crate::Path::try_from(String::from("foo/bar")).unwrap();
 		let s = String::from("foo/bar");
-		let prefix3 = Path::from(&s);
+		let prefix3 = crate::Path::try_from(&s).unwrap();
 
 		assert_eq!(prefix1.as_str(), "foo/bar");
 		assert_eq!(prefix2.as_str(), "foo/bar");
@@ -807,10 +929,10 @@ mod tests {
 
 	#[test]
 	fn test_path_suffix_conversions() {
-		let suffix1 = Path::from("foo/bar");
-		let suffix2 = Path::from(String::from("foo/bar"));
+		let suffix1 = crate::Path::from_static("foo/bar");
+		let suffix2 = crate::Path::try_from(String::from("foo/bar")).unwrap();
 		let s = String::from("foo/bar");
-		let suffix3 = Path::from(&s);
+		let suffix3 = crate::Path::try_from(&s).unwrap();
 
 		assert_eq!(suffix1.as_str(), "foo/bar");
 		assert_eq!(suffix2.as_str(), "foo/bar");
@@ -819,21 +941,21 @@ mod tests {
 
 	#[test]
 	fn test_path_types_basic_operations() {
-		let prefix = Path::new("foo/bar");
+		let prefix = Path::from_static("foo/bar");
 		assert_eq!(prefix.as_str(), "foo/bar");
 		assert!(!prefix.is_empty());
 		assert_eq!(prefix.len(), 7);
 
-		let suffix = Path::new("baz/qux");
+		let suffix = Path::from_static("baz/qux");
 		assert_eq!(suffix.as_str(), "baz/qux");
 		assert!(!suffix.is_empty());
 		assert_eq!(suffix.len(), 7);
 
-		let empty_prefix = Path::new("");
+		let empty_prefix = Path::from_static("");
 		assert!(empty_prefix.is_empty());
 		assert_eq!(empty_prefix.len(), 0);
 
-		let empty_suffix = Path::new("");
+		let empty_suffix = Path::from_static("");
 		assert!(empty_suffix.is_empty());
 		assert_eq!(empty_suffix.len(), 0);
 	}
@@ -841,238 +963,267 @@ mod tests {
 	#[test]
 	fn test_prefix_has_prefix() {
 		// Test empty prefix (should match everything)
-		let prefix = Path::new("foo/bar");
-		assert!(prefix.has_prefix(&Path::new("")));
+		let prefix = Path::from_static("foo/bar");
+		assert!(prefix.has_prefix(&Path::from_static("")));
 
 		// Test exact matches
-		let prefix = Path::new("foo/bar");
-		assert!(prefix.has_prefix(&Path::new("foo/bar")));
+		let prefix = Path::from_static("foo/bar");
+		assert!(prefix.has_prefix(&Path::from_static("foo/bar")));
 
 		// Test valid prefixes
-		assert!(prefix.has_prefix(&Path::new("foo")));
-		assert!(prefix.has_prefix(&Path::new("foo/")));
+		assert!(prefix.has_prefix(&Path::from_static("foo")));
+		assert!(prefix.has_prefix(&Path::from_static("foo/")));
 
 		// Test invalid prefixes - partial matches should fail
-		assert!(!prefix.has_prefix(&Path::new("f")));
-		assert!(!prefix.has_prefix(&Path::new("fo")));
-		assert!(!prefix.has_prefix(&Path::new("foo/b")));
-		assert!(!prefix.has_prefix(&Path::new("foo/ba")));
+		assert!(!prefix.has_prefix(&Path::from_static("f")));
+		assert!(!prefix.has_prefix(&Path::from_static("fo")));
+		assert!(!prefix.has_prefix(&Path::from_static("foo/b")));
+		assert!(!prefix.has_prefix(&Path::from_static("foo/ba")));
 
 		// Test edge cases
-		let prefix = Path::new("foobar");
-		assert!(!prefix.has_prefix(&Path::new("foo")));
-		assert!(prefix.has_prefix(&Path::new("foobar")));
+		let prefix = Path::from_static("foobar");
+		assert!(!prefix.has_prefix(&Path::from_static("foo")));
+		assert!(prefix.has_prefix(&Path::from_static("foobar")));
 
 		// Test trailing slash handling
-		let prefix = Path::new("foo/bar/");
-		assert!(prefix.has_prefix(&Path::new("foo")));
-		assert!(prefix.has_prefix(&Path::new("foo/")));
-		assert!(prefix.has_prefix(&Path::new("foo/bar")));
-		assert!(prefix.has_prefix(&Path::new("foo/bar/")));
+		let prefix = Path::from_static("foo/bar/");
+		assert!(prefix.has_prefix(&Path::from_static("foo")));
+		assert!(prefix.has_prefix(&Path::from_static("foo/")));
+		assert!(prefix.has_prefix(&Path::from_static("foo/bar")));
+		assert!(prefix.has_prefix(&Path::from_static("foo/bar/")));
 
 		// Test single component
-		let prefix = Path::new("foo");
-		assert!(prefix.has_prefix(&Path::new("")));
-		assert!(prefix.has_prefix(&Path::new("foo")));
-		assert!(prefix.has_prefix(&Path::new("foo/"))); // "foo/" becomes "foo" after trimming
-		assert!(!prefix.has_prefix(&Path::new("f")));
+		let prefix = Path::from_static("foo");
+		assert!(prefix.has_prefix(&Path::from_static("")));
+		assert!(prefix.has_prefix(&Path::from_static("foo")));
+		assert!(prefix.has_prefix(&Path::from_static("foo/"))); // "foo/" becomes "foo" after trimming
+		assert!(!prefix.has_prefix(&Path::from_static("f")));
 
 		// Test empty prefix
-		let prefix = Path::new("");
-		assert!(prefix.has_prefix(&Path::new("")));
-		assert!(!prefix.has_prefix(&Path::new("foo")));
+		let prefix = Path::from_static("");
+		assert!(prefix.has_prefix(&Path::from_static("")));
+		assert!(!prefix.has_prefix(&Path::from_static("foo")));
 	}
 
 	#[test]
 	fn test_prefix_join() {
 		// Basic joining
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar");
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("bar");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar");
 
 		// Trailing slash on prefix
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar");
+		let prefix = Path::from_static("foo/");
+		let suffix = Path::from_static("bar");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar");
 
 		// Leading slash on suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("/bar");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar");
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("/bar");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar");
 
 		// Trailing slash on suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("bar/");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar"); // trailing slash is trimmed
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("bar/");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar"); // trailing slash is trimmed
 
 		// Both have slashes
-		let prefix = Path::new("foo/");
-		let suffix = Path::new("/bar");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar");
+		let prefix = Path::from_static("foo/");
+		let suffix = Path::from_static("/bar");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar");
 
 		// Empty suffix
-		let prefix = Path::new("foo");
-		let suffix = Path::new("");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo");
+		let prefix = Path::from_static("foo");
+		let suffix = Path::from_static("");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo");
 
 		// Empty prefix
-		let prefix = Path::new("");
-		let suffix = Path::new("bar");
-		assert_eq!(prefix.join(&suffix).as_str(), "bar");
+		let prefix = Path::from_static("");
+		let suffix = Path::from_static("bar");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "bar");
 
 		// Both empty
-		let prefix = Path::new("");
-		let suffix = Path::new("");
-		assert_eq!(prefix.join(&suffix).as_str(), "");
+		let prefix = Path::from_static("");
+		let suffix = Path::from_static("");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "");
 
 		// Complex paths
-		let prefix = Path::new("foo/bar");
-		let suffix = Path::new("baz/qux");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar/baz/qux");
+		let prefix = Path::from_static("foo/bar");
+		let suffix = Path::from_static("baz/qux");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar/baz/qux");
 
 		// Complex paths with slashes
-		let prefix = Path::new("foo/bar/");
-		let suffix = Path::new("/baz/qux/");
-		assert_eq!(prefix.join(&suffix).as_str(), "foo/bar/baz/qux"); // all slashes are trimmed
+		let prefix = Path::from_static("foo/bar/");
+		let suffix = Path::from_static("/baz/qux/");
+		assert_eq!(prefix.join(&suffix).unwrap().as_str(), "foo/bar/baz/qux"); // all slashes are trimmed
 	}
 
 	#[test]
 	fn test_path_ref() {
 		// Test PathRef creation and normalization
-		let ref1 = Path::new("/foo/bar/");
+		let ref1 = Path::from_static("/foo/bar/");
 		assert_eq!(ref1.as_str(), "foo/bar");
 
-		let ref2 = Path::from("///foo///");
+		let ref2 = crate::Path::from_static("///foo///");
 		assert_eq!(ref2.as_str(), "foo");
 
 		// Test PathRef normalizes multiple slashes
-		let ref3 = Path::new("foo//bar///baz");
+		let ref3 = Path::from_static("foo//bar///baz");
 		assert_eq!(ref3.as_str(), "foo/bar/baz");
 
 		// Test conversions
-		let path = Path::new("foo/bar");
+		let path = Path::from_static("foo/bar");
 		let path_ref = path;
 		assert_eq!(path_ref.as_str(), "foo/bar");
 
 		// Test that Path methods work with PathRef
-		let path2 = Path::new("foo/bar/baz");
+		let path2 = Path::from_static("foo/bar/baz");
 		assert!(path2.has_prefix(&path_ref));
 		assert_eq!(path2.strip_prefix(&path_ref).unwrap().as_str(), "baz");
 
 		// Test empty PathRef
-		let empty = Path::new("");
+		let empty = Path::from_static("");
 		assert!(empty.is_empty());
 		assert_eq!(empty.len(), 0);
 	}
 
 	#[test]
 	fn test_multiple_consecutive_slashes() {
-		let path = Path::new("foo//bar///baz");
+		let path = Path::from_static("foo//bar///baz");
 		// Multiple consecutive slashes are collapsed to single slashes
 		assert_eq!(path.as_str(), "foo/bar/baz");
 
 		// Test with leading and trailing slashes too
-		let path2 = Path::new("//foo//bar///baz//");
+		let path2 = Path::from_static("//foo//bar///baz//");
 		assert_eq!(path2.as_str(), "foo/bar/baz");
 
 		// Test empty segments are handled correctly
-		let path3 = Path::new("foo///bar");
+		let path3 = Path::from_static("foo///bar");
 		assert_eq!(path3.as_str(), "foo/bar");
 	}
 
 	#[test]
 	fn test_removes_multiple_slashes_comprehensively() {
 		// Test various multiple slash scenarios
-		assert_eq!(Path::new("foo//bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo///bar").as_str(), "foo/bar");
-		assert_eq!(Path::new("foo////bar").as_str(), "foo/bar");
+		assert_eq!(Path::from_static("foo//bar").as_str(), "foo/bar");
+		assert_eq!(Path::from_static("foo///bar").as_str(), "foo/bar");
+		assert_eq!(Path::from_static("foo////bar").as_str(), "foo/bar");
 
 		// Multiple occurrences of double slashes
-		assert_eq!(Path::new("foo//bar//baz").as_str(), "foo/bar/baz");
-		assert_eq!(Path::new("a//b//c//d").as_str(), "a/b/c/d");
+		assert_eq!(Path::from_static("foo//bar//baz").as_str(), "foo/bar/baz");
+		assert_eq!(Path::from_static("a//b//c//d").as_str(), "a/b/c/d");
 
 		// Mixed slash counts
-		assert_eq!(Path::new("foo//bar///baz////qux").as_str(), "foo/bar/baz/qux");
+		assert_eq!(Path::from_static("foo//bar///baz////qux").as_str(), "foo/bar/baz/qux");
 
 		// With leading and trailing slashes
-		assert_eq!(Path::new("//foo//bar//").as_str(), "foo/bar");
-		assert_eq!(Path::new("///foo///bar///").as_str(), "foo/bar");
+		assert_eq!(Path::from_static("//foo//bar//").as_str(), "foo/bar");
+		assert_eq!(Path::from_static("///foo///bar///").as_str(), "foo/bar");
 
 		// Edge case: only slashes
-		assert_eq!(Path::new("//").as_str(), "");
-		assert_eq!(Path::new("////").as_str(), "");
+		assert_eq!(Path::from_static("//").as_str(), "");
+		assert_eq!(Path::from_static("////").as_str(), "");
 
 		// Test that operations work correctly with normalized paths
-		let path_with_slashes = Path::new("foo//bar///baz");
-		assert!(path_with_slashes.has_prefix(&Path::new("foo/bar")));
+		let path_with_slashes = Path::from_static("foo//bar///baz");
+		assert!(path_with_slashes.has_prefix(&Path::from_static("foo/bar")));
 		assert_eq!(
-			path_with_slashes.strip_prefix(&Path::new("foo")).unwrap().as_str(),
+			path_with_slashes
+				.strip_prefix(&Path::from_static("foo"))
+				.unwrap()
+				.as_str(),
 			"bar/baz"
 		);
-		assert_eq!(path_with_slashes.join(&Path::new("qux")).as_str(), "foo/bar/baz/qux");
+		assert_eq!(
+			path_with_slashes.join(&Path::from_static("qux")).unwrap().as_str(),
+			"foo/bar/baz/qux"
+		);
 	}
 
 	#[test]
 	fn test_prefix_strip_prefix() {
 		// Test basic stripping
-		let prefix = Path::new("foo/bar/baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("")).unwrap().as_str(), "foo/bar/baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo")).unwrap().as_str(), "bar/baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/")).unwrap().as_str(), "bar/baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/bar")).unwrap().as_str(), "baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/bar/")).unwrap().as_str(), "baz");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/bar/baz")).unwrap().as_str(), "");
+		let prefix = Path::from_static("foo/bar/baz");
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("")).unwrap().as_str(),
+			"foo/bar/baz"
+		);
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo")).unwrap().as_str(),
+			"bar/baz"
+		);
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo/")).unwrap().as_str(),
+			"bar/baz"
+		);
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo/bar")).unwrap().as_str(),
+			"baz"
+		);
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo/bar/")).unwrap().as_str(),
+			"baz"
+		);
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo/bar/baz")).unwrap().as_str(),
+			""
+		);
 
 		// Test invalid prefixes
-		assert!(prefix.strip_prefix(&Path::new("fo")).is_none());
-		assert!(prefix.strip_prefix(&Path::new("bar")).is_none());
-		assert!(prefix.strip_prefix(&Path::new("foo/ba")).is_none());
+		assert!(prefix.strip_prefix(&Path::from_static("fo")).is_none());
+		assert!(prefix.strip_prefix(&Path::from_static("bar")).is_none());
+		assert!(prefix.strip_prefix(&Path::from_static("foo/ba")).is_none());
 
 		// Test edge cases
-		let prefix = Path::new("foobar");
-		assert!(prefix.strip_prefix(&Path::new("foo")).is_none());
-		assert_eq!(prefix.strip_prefix(&Path::new("foobar")).unwrap().as_str(), "");
+		let prefix = Path::from_static("foobar");
+		assert!(prefix.strip_prefix(&Path::from_static("foo")).is_none());
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foobar")).unwrap().as_str(), "");
 
 		// Test empty prefix
-		let prefix = Path::new("");
-		assert_eq!(prefix.strip_prefix(&Path::new("")).unwrap().as_str(), "");
-		assert!(prefix.strip_prefix(&Path::new("foo")).is_none());
+		let prefix = Path::from_static("");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("")).unwrap().as_str(), "");
+		assert!(prefix.strip_prefix(&Path::from_static("foo")).is_none());
 
 		// Test single component
-		let prefix = Path::new("foo");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo")).unwrap().as_str(), "");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/")).unwrap().as_str(), ""); // "foo/" becomes "foo" after trimming
+		let prefix = Path::from_static("foo");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foo")).unwrap().as_str(), "");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foo/")).unwrap().as_str(), ""); // "foo/" becomes "foo" after trimming
 
 		// Test trailing slash handling
-		let prefix = Path::new("foo/bar/");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo")).unwrap().as_str(), "bar");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/")).unwrap().as_str(), "bar");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/bar")).unwrap().as_str(), "");
-		assert_eq!(prefix.strip_prefix(&Path::new("foo/bar/")).unwrap().as_str(), "");
+		let prefix = Path::from_static("foo/bar/");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foo")).unwrap().as_str(), "bar");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foo/")).unwrap().as_str(), "bar");
+		assert_eq!(prefix.strip_prefix(&Path::from_static("foo/bar")).unwrap().as_str(), "");
+		assert_eq!(
+			prefix.strip_prefix(&Path::from_static("foo/bar/")).unwrap().as_str(),
+			""
+		);
 	}
 
 	// A long path shares one allocation through the clone and strip_prefix flow used by
 	// announce fan-out. A short one is stored inline instead, so its copies share nothing.
 	#[test]
 	fn test_long_paths_share_allocation() {
-		let path = Path::new("customer/room-0123456789/broadcast");
+		let path = Path::new("customer/room-0123456789/broadcast").unwrap();
 
 		// Cloning shares the buffer.
 		let cloned = path.clone();
 		assert_eq!(path.as_str().as_ptr(), cloned.as_str().as_ptr());
 
 		// Stripping a prefix leaving a long rest is offset arithmetic, not a copy.
-		let stripped = path.strip_prefix(&Path::new("customer")).unwrap();
+		let stripped = path.strip_prefix(&Path::from_static("customer")).unwrap();
 		assert_eq!(stripped.as_str(), "room-0123456789/broadcast");
 		assert_eq!(stripped.as_str().as_ptr(), path.as_str()["customer/".len()..].as_ptr());
 
 		// A short rest moves inline rather than keeping the long buffer alive.
-		let short = path.strip_prefix(&Path::new("customer/room-0123456789")).unwrap();
+		let short = path
+			.strip_prefix(&Path::from_static("customer/room-0123456789"))
+			.unwrap();
 		assert_eq!(short.as_str(), "broadcast");
 		assert!(matches!(short.0, Repr::Inline { .. }));
 
 		// join produces a path whose clones share.
-		let joined = path.join(&Path::new("alice"));
+		let joined = path.join(&Path::from_static("alice")).unwrap();
 		let joined2 = joined.clone();
 		assert_eq!(joined.as_str(), "customer/room-0123456789/broadcast/alice");
 		assert_eq!(joined.as_str().as_ptr(), joined2.as_str().as_ptr());
@@ -1082,46 +1233,75 @@ mod tests {
 	fn test_inline_boundary() {
 		let fits = "a".repeat(INLINE);
 		let spills = "a".repeat(INLINE + 1);
-		assert!(matches!(Path::new(&fits).0, Repr::Inline { .. }));
-		assert!(matches!(Path::new(&spills).0, Repr::Shared { .. }));
+		assert!(matches!(Path::new(&fits).unwrap().0, Repr::Inline { .. }));
+		assert!(matches!(Path::new(&spills).unwrap().0, Repr::Shared { .. }));
 
 		// A join exactly at the limit stays inline; one byte more spills.
-		let half = Path::new(&"b".repeat(INLINE / 2 - 1));
-		let joined = half.join(&Path::new(&"c".repeat(INLINE / 2)));
+		let half = Path::new(&"b".repeat(INLINE / 2 - 1)).unwrap();
+		let joined = half.join(&Path::new(&"c".repeat(INLINE / 2)).unwrap()).unwrap();
 		assert_eq!(joined.len(), INLINE);
 		assert!(matches!(joined.0, Repr::Inline { .. }));
 		assert_eq!(
 			joined.as_str(),
 			format!("{}/{}", "b".repeat(INLINE / 2 - 1), "c".repeat(INLINE / 2))
 		);
-		assert!(matches!(joined.join(&Path::new("d")).0, Repr::Shared { .. }));
+		assert!(matches!(
+			joined.join(&Path::from_static("d")).unwrap().0,
+			Repr::Shared { .. }
+		));
 
 		// Multi-byte characters survive the inline copy.
-		let wide = Path::new("caf\u{e9}/\u{1f3a5}");
+		let wide = Path::new("caf\u{e9}/\u{1f3a5}").unwrap();
 		assert!(matches!(wide.0, Repr::Inline { .. }));
 		assert_eq!(wide.as_str(), "caf\u{e9}/\u{1f3a5}");
 		assert_eq!(
-			wide.strip_prefix(&Path::new("caf\u{e9}")).unwrap().as_str(),
+			wide.strip_prefix(&Path::from_static("caf\u{e9}")).unwrap().as_str(),
 			"\u{1f3a5}"
 		);
 	}
 
 	#[test]
-	fn test_shared_offset_limit() {
-		// Stripping `head/` leaves an offset of exactly `u16::MAX`.
-		let head = "a".repeat(u16::MAX as usize - 1);
+	fn test_max_bytes() {
+		let longest = "a".repeat(Path::MAX_BYTES);
+		let longer = format!("{longest}b");
+
+		// Every constructor accepts the limit and refuses one byte more.
+		assert_eq!(Path::new(&longest).unwrap().len(), Path::MAX_BYTES);
+		assert_eq!(Path::new(&longer), Err(TooLong));
+		assert_eq!(Path::try_from(longer.clone()), Err(TooLong));
+		assert_eq!(Relative::new(&longer), Err(TooLong));
+
+		// The limit applies after normalizing.
+		let padded = format!(
+			"/{}//{}/",
+			"a".repeat(Path::MAX_BYTES / 2),
+			"b".repeat(Path::MAX_BYTES / 2 - 1)
+		);
+		assert_eq!(Path::new(&padded).unwrap().len(), Path::MAX_BYTES);
+
+		// So do joins and resolution, which can outgrow both sides.
+		let half = Path::new(&"a".repeat(Path::MAX_BYTES / 2)).unwrap();
+		let rest = Path::new(&"b".repeat(Path::MAX_BYTES / 2 - 1)).unwrap();
+		assert_eq!(half.join(&rest).unwrap().len(), Path::MAX_BYTES);
+		assert_eq!(half.join(&Path::new(&format!("{rest}b")).unwrap()), Err(TooLong));
+		let rel = Relative::new(&format!("x/{rest}b")).unwrap();
+		assert_eq!(Path::new(&format!("{half}/y")).unwrap().resolve(&rel), Err(TooLong));
+		assert_eq!(Path::new(&format!("{half}/y")).unwrap().try_resolve(&rel), None);
+
+		// A suffix at the deepest offset still shares the buffer.
 		let tail = "c".repeat(INLINE + 1);
-		let path = Path::new(&format!("{head}/b/{tail}"));
-
-		// The largest offset that fits shares the buffer.
-		let at = path.strip_prefix(&Path::new(&head)).unwrap();
+		let head = "a".repeat(Path::MAX_BYTES - tail.len() - 1);
+		let path = Path::new(&format!("{head}/{tail}")).unwrap();
+		let at = path.strip_prefix(&Path::new(&head).unwrap()).unwrap();
+		assert_eq!(at.as_str(), tail);
 		assert_eq!(at.as_str().as_ptr(), path.as_str()[head.len() + 1..].as_ptr());
+	}
 
-		// One past it copies, with the same contents.
-		let past = path.strip_prefix(&Path::new(&format!("{head}/b"))).unwrap();
-		assert_eq!(past.as_str(), tail);
-		assert!(matches!(past.0, Repr::Shared { start: 0, .. }));
-		assert_ne!(past.as_str().as_ptr(), path.as_str()[head.len() + 3..].as_ptr());
+	#[test]
+	#[should_panic(expected = "longer than Path::MAX_BYTES")]
+	fn test_from_static_too_long() {
+		let literal: &'static str = Box::leak("a".repeat(Path::MAX_BYTES + 1).into_boxed_str());
+		Path::from_static(literal);
 	}
 
 	#[test]
@@ -1132,7 +1312,7 @@ mod tests {
 		assert_eq!(path.as_str().as_ptr(), LITERAL[1..].as_ptr());
 
 		// A suffix of a static path borrows the literal too.
-		let rest = path.strip_prefix(&Path::new("static")).unwrap();
+		let rest = path.strip_prefix(&Path::from_static("static")).unwrap();
 		assert_eq!(rest.as_str().as_ptr(), LITERAL["/static/".len()..].as_ptr());
 
 		// Normalizing has to copy.
@@ -1142,8 +1322,11 @@ mod tests {
 	#[test]
 	fn test_parts() {
 		assert_eq!(Path::empty().parts().count(), 0);
-		assert_eq!(Path::new("foo").parts().collect::<Vec<_>>(), ["foo"]);
-		assert_eq!(Path::new("/foo//bar/").parts().collect::<Vec<_>>(), ["foo", "bar"]);
+		assert_eq!(Path::from_static("foo").parts().collect::<Vec<_>>(), ["foo"]);
+		assert_eq!(
+			Path::from_static("/foo//bar/").parts().collect::<Vec<_>>(),
+			["foo", "bar"]
+		);
 	}
 
 	#[test]
@@ -1159,10 +1342,11 @@ mod tests {
 		// Encode enforces the limit.
 		let mut buf = Vec::new();
 		Path::new(&ok)
+			.unwrap()
 			.encode(&mut Encoder::new(&mut buf, Version::Lite04.into()), Version::Lite04)
 			.unwrap();
 		assert!(matches!(
-			Path::new(&too_deep).encode_bytes(Version::Lite04),
+			Path::new(&too_deep).unwrap().encode_bytes(Version::Lite04),
 			Err(EncodeError::BoundsExceeded)
 		));
 
@@ -1170,7 +1354,7 @@ mod tests {
 		let decoded = crate::coding::decode_buf(&mut bytes::Bytes::from(buf), Version::Lite04, Path::decode).unwrap();
 		assert_eq!(decoded.as_str(), ok);
 
-		// Decode enforces the limit on a raw string that encode would have refused.
+		// Decode refuses a raw string longer than the limit.
 		let mut buf = Vec::new();
 		Encoder::new(&mut buf, Version::Lite04.into())
 			.string(too_deep.as_str())
@@ -1188,25 +1372,21 @@ mod tests {
 		let longest = "a".repeat(Path::MAX_BYTES);
 		let longer = format!("{longest}b");
 
-		// Encode enforces the limit, and decode round-trips at it.
-		let mut buf = Path::new(&longest).encode_bytes(Version::Lite04).unwrap();
+		// Decode round-trips at the limit.
+		let mut buf = Path::new(&longest).unwrap().encode_bytes(Version::Lite04).unwrap();
 		let decoded = crate::coding::decode_buf(&mut buf, Version::Lite04, Path::decode).unwrap();
 		assert_eq!(decoded.as_str(), longest);
-		assert!(matches!(
-			Path::new(&longer).encode_bytes(Version::Lite04),
-			Err(EncodeError::BoundsExceeded)
-		));
 
 		// A message carrying the longest path still fits the lite message limit.
 		let tracks = crate::lite::Tracks {
-			broadcast: Path::new(&longest),
+			broadcast: Path::new(&longest).unwrap(),
 			epoch: None,
 		};
 		let buf = tracks.encode_bytes(Version::Lite07).unwrap();
 		let (decoded, _) = crate::lite::Tracks::decode_slice(&buf, Version::Lite07).unwrap();
 		assert_eq!(decoded.broadcast.as_str(), longest);
 
-		// Decode enforces the limit on a raw string that encode would have refused.
+		// Decode refuses a raw string longer than the limit.
 		let mut buf = Vec::new();
 		Encoder::new(&mut buf, Version::Lite04.into())
 			.string(longer.as_str())
@@ -1220,45 +1400,46 @@ mod tests {
 	#[test]
 	fn test_owned_empty_paths() {
 		// Empty paths never allocate and stay well-behaved.
-		let empty = Path::new("");
+		let empty = Path::from_static("");
 		assert!(empty.is_empty());
 		assert_eq!(empty, Path::empty());
 
-		let path = Path::new("foo");
-		let rest = path.strip_prefix(&Path::new("foo")).unwrap();
+		let path = Path::from_static("foo");
+		let rest = path.strip_prefix(&Path::from_static("foo")).unwrap();
 		assert!(rest.is_empty());
 	}
 
 	#[test]
 	fn test_path_relative_normalize() {
-		assert_eq!(Relative::new("foo").as_str(), "foo");
-		assert_eq!(Relative::new("/foo/").as_str(), "foo");
-		assert_eq!(Relative::new("foo//bar").as_str(), "foo/bar");
-		assert_eq!(Relative::new("../foo").as_str(), "../foo");
-		assert_eq!(Relative::new("../../a/b").as_str(), "../../a/b");
-		assert!(Relative::new("").is_empty());
+		assert_eq!(Relative::new("foo").unwrap().as_str(), "foo");
+		assert_eq!(Relative::new("/foo/").unwrap().as_str(), "foo");
+		assert_eq!(Relative::new("foo//bar").unwrap().as_str(), "foo/bar");
+		assert_eq!(Relative::new("../foo").unwrap().as_str(), "../foo");
+		assert_eq!(Relative::new("../../a/b").unwrap().as_str(), "../../a/b");
+		assert!(Relative::new("").unwrap().is_empty());
 	}
 
 	#[test]
 	fn test_path_relative_normalizes_dot_segments() {
-		assert_eq!(Relative::new(".").as_str(), ".");
-		assert_eq!(Relative::new("././").as_str(), ".");
-		assert_eq!(Relative::new("./foo").as_str(), "foo");
-		assert_eq!(Relative::new("foo/./bar").as_str(), "foo/bar");
-		assert_eq!(Relative::new("./../foo").as_str(), "../foo");
-		// From<String> takes the same normalization.
-		assert_eq!(Relative::from("./foo".to_string()).as_str(), "foo");
-		assert_eq!(Relative::from(".".to_string()).as_str(), ".");
+		assert_eq!(Relative::new(".").unwrap().as_str(), ".");
+		assert_eq!(Relative::new("././").unwrap().as_str(), ".");
+		assert_eq!(Relative::new("./foo").unwrap().as_str(), "foo");
+		assert_eq!(Relative::new("foo/./bar").unwrap().as_str(), "foo/bar");
+		assert_eq!(Relative::new("./../foo").unwrap().as_str(), "../foo");
+		// TryFrom<String> takes the same normalization.
+		assert_eq!(Relative::try_from("./foo".to_string()).unwrap().as_str(), "foo");
+		assert_eq!(Relative::try_from(".".to_string()).unwrap().as_str(), ".");
 	}
 
 	#[test]
 	fn test_resolve_replaces_base_name() {
-		let base = Path::new("a/b");
-		assert_eq!(base.resolve(&Relative::new("c")).as_str(), "a/c");
-		assert_eq!(base.resolve(&Relative::new("c/d")).as_str(), "a/c/d");
+		let base = Path::from_static("a/b");
+		assert_eq!(base.resolve(&Relative::new("c").unwrap()).unwrap().as_str(), "a/c");
+		assert_eq!(base.resolve(&Relative::new("c/d").unwrap()).unwrap().as_str(), "a/c/d");
 		assert_eq!(
-			Path::new("foo.hang/catalog.pro")
-				.resolve(&Relative::new("./transcode.pro"))
+			Path::from_static("foo.hang/catalog.pro")
+				.resolve(&Relative::new("./transcode.pro").unwrap())
+				.unwrap()
 				.as_str(),
 			"foo.hang/transcode.pro"
 		);
@@ -1266,69 +1447,75 @@ mod tests {
 
 	#[test]
 	fn test_resolve_empty_rel_returns_base() {
-		let base = Path::new("a/b");
-		assert_eq!(base.resolve(&Relative::new("")).as_str(), "a/b");
+		let base = Path::from_static("a/b");
+		assert_eq!(base.resolve(&Relative::new("").unwrap()).unwrap().as_str(), "a/b");
 	}
 
 	#[test]
 	fn test_resolve_single_dotdot() {
-		let base = Path::new("a/b/c");
-		assert_eq!(base.resolve(&Relative::new("../d")).as_str(), "a/d");
-		assert_eq!(base.resolve(&Relative::new("..")).as_str(), "a");
+		let base = Path::from_static("a/b/c");
+		assert_eq!(base.resolve(&Relative::new("../d").unwrap()).unwrap().as_str(), "a/d");
+		assert_eq!(base.resolve(&Relative::new("..").unwrap()).unwrap().as_str(), "a");
 	}
 
 	#[test]
 	fn test_resolve_multiple_dotdot() {
-		let base = Path::new("a/b/c");
-		assert_eq!(base.resolve(&Relative::new("../../x")).as_str(), "x");
-		assert_eq!(base.resolve(&Relative::new("../../../x")).as_str(), "x");
+		let base = Path::from_static("a/b/c");
+		assert_eq!(base.resolve(&Relative::new("../../x").unwrap()).unwrap().as_str(), "x");
+		assert_eq!(
+			base.resolve(&Relative::new("../../../x").unwrap()).unwrap().as_str(),
+			"x"
+		);
 	}
 
 	#[test]
 	fn test_resolve_dotdot_clamps_at_root() {
-		let base = Path::new("a");
+		let base = Path::from_static("a");
 		// Excess `..` clamps at the root instead of escaping it.
-		assert_eq!(base.resolve(&Relative::new("../../../foo")).as_str(), "foo");
-		assert_eq!(base.resolve(&Relative::new("..")).as_str(), "");
+		assert_eq!(
+			base.resolve(&Relative::new("../../../foo").unwrap()).unwrap().as_str(),
+			"foo"
+		);
+		assert_eq!(base.resolve(&Relative::new("..").unwrap()).unwrap().as_str(), "");
 	}
 
 	#[test]
 	fn test_resolve_empty_base() {
 		let base = Path::empty();
-		assert_eq!(base.resolve(&Relative::new("foo")).as_str(), "foo");
-		assert_eq!(base.resolve(&Relative::new("..")).as_str(), "");
+		assert_eq!(base.resolve(&Relative::new("foo").unwrap()).unwrap().as_str(), "foo");
+		assert_eq!(base.resolve(&Relative::new("..").unwrap()).unwrap().as_str(), "");
 	}
 
 	#[test]
 	fn test_resolve_dot_names_parent() {
-		let base = Path::new("a/b");
-		assert_eq!(base.resolve(&Relative::new(".")).as_str(), "a");
-		assert_eq!(base.resolve(&Relative::new("./c")).as_str(), "a/c");
-		assert_eq!(base.resolve(&Relative::new("./../c")).as_str(), "c");
+		let base = Path::from_static("a/b");
+		assert_eq!(base.resolve(&Relative::new(".").unwrap()).unwrap().as_str(), "a");
+		assert_eq!(base.resolve(&Relative::new("./c").unwrap()).unwrap().as_str(), "a/c");
+		assert_eq!(base.resolve(&Relative::new("./../c").unwrap()).unwrap().as_str(), "c");
 	}
 
 	#[test]
 	fn test_resolve_self_reference_via_sibling_name() {
 		// Naming the base within its parent yields the base unchanged, which lets the
 		// caller compare resolved == base to detect a self-reference.
-		let base = Path::new("a/b");
-		assert_eq!(base.resolve(&Relative::new("./b")).as_str(), "a/b");
+		let base = Path::from_static("a/b");
+		assert_eq!(base.resolve(&Relative::new("./b").unwrap()).unwrap().as_str(), "a/b");
 	}
 
 	#[test]
 	fn test_try_resolve_distinguishes_root_from_escape() {
-		let base = Path::new("top");
-		assert_eq!(base.try_resolve(&Relative::new(".")).unwrap().as_str(), "");
-		assert!(base.try_resolve(&Relative::new("..")).is_none());
+		let base = Path::from_static("top");
+		assert_eq!(base.try_resolve(&Relative::new(".").unwrap()).unwrap().as_str(), "");
+		assert!(base.try_resolve(&Relative::new("..").unwrap()).is_none());
 
-		let nested = Path::new("a/b");
-		assert_eq!(nested.try_resolve(&Relative::new("..")).unwrap().as_str(), "");
-		assert!(nested.try_resolve(&Relative::new("../..")).is_none());
+		let nested = Path::from_static("a/b");
+		assert_eq!(nested.try_resolve(&Relative::new("..").unwrap()).unwrap().as_str(), "");
+		assert!(nested.try_resolve(&Relative::new("../..").unwrap()).is_none());
 	}
 
 	#[test]
 	fn test_relative() {
-		let rel = |target: &str, base: &str| Path::new(target).relative(&Path::new(base)).unwrap();
+		let rel = |target: &str, base: &str| Path::new(target).unwrap().relative(&Path::new(base).unwrap()).unwrap();
 
 		// Nested under the base: the base's own last segment is replaced, so it repeats.
 		assert_eq!(rel("foo/bar/baz", "foo/bar").as_str(), "bar/baz");
@@ -1353,17 +1540,28 @@ mod tests {
 	fn test_relative_rejects_unnameable_targets() {
 		// A segment literally named `.` or `..` is a legal path component, but resolution
 		// would walk on it instead of naming it.
-		assert!(Path::new("a/../b").relative(&Path::new("")).is_none());
-		assert!(Path::new("x/./y").relative(&Path::new("x/z")).is_none());
-		assert!(Path::new("a/..").relative(&Path::new("a/b")).is_none());
+		assert!(Path::from_static("a/../b").relative(&Path::from_static("")).is_none());
+		assert!(Path::from_static("x/./y").relative(&Path::from_static("x/z")).is_none());
+		assert!(Path::from_static("a/..").relative(&Path::from_static("a/b")).is_none());
 
 		// A base is always nameable by itself, however its last segment is spelled.
-		assert_eq!(Path::new("a/..").relative(&Path::new("a/..")).unwrap().as_str(), "");
+		assert_eq!(
+			Path::from_static("a/..")
+				.relative(&Path::from_static("a/.."))
+				.unwrap()
+				.as_str(),
+			""
+		);
 
 		// Dot segments inside the shared prefix are never emitted, so they are fine.
-		let rel = Path::new("a/../b/x").relative(&Path::new("a/../b/c")).unwrap();
+		let rel = Path::from_static("a/../b/x")
+			.relative(&Path::from_static("a/../b/c"))
+			.unwrap();
 		assert_eq!(rel.as_str(), "x");
-		assert_eq!(Path::new("a/../b/c").resolve(&rel).as_str(), "a/../b/x");
+		assert_eq!(
+			Path::from_static("a/../b/c").resolve(&rel).unwrap().as_str(),
+			"a/../b/x"
+		);
 	}
 
 	#[test]
@@ -1374,8 +1572,8 @@ mod tests {
 
 		for base in paths {
 			for target in paths {
-				let base = Path::new(base);
-				let target = Path::new(target);
+				let base = Path::new(base).unwrap();
+				let target = Path::new(target).unwrap();
 				let Some(rel) = target.relative(&base) else {
 					// Only an unnameable target may be refused, and never the base itself.
 					assert!(
@@ -1385,7 +1583,7 @@ mod tests {
 					continue;
 				};
 
-				assert_eq!(base.resolve(&rel), target, "{base} -> {target} via {rel}");
+				assert_eq!(base.resolve(&rel), Ok(target.clone()), "{base} -> {target} via {rel}");
 				// The reference is derived from a real target, so it never escapes the root.
 				assert!(
 					base.try_resolve(&rel).is_some(),

@@ -616,6 +616,13 @@ impl From<StreamError> for Error {
 	}
 }
 
+/// Lets an entry point taking `impl TryInto<Path, Error: Into<Error>>` accept a `Path` too.
+impl From<std::convert::Infallible> for Error {
+	fn from(never: std::convert::Infallible) -> Self {
+		match never {}
+	}
+}
+
 /// Which session code to send for a local error.
 ///
 /// Lossy on purpose: [`Error`] describes what went wrong locally, while the registry is what

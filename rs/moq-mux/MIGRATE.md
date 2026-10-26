@@ -6,7 +6,7 @@ How to update your code for each breaking change, newest first.
 
 ### `moq_net::Path` has no lifetime
 
-`Source::resolve_reference` takes `Option<&Relative>` and returns `Option<Path>`, and `ts::Programs::new` takes `impl Into<moq_net::Path>`: replace `PathOwned` with `Path` and drop `to_owned()` and `into_owned()` on paths. See moq-net's migration for the rest.
+`Source::resolve_reference` takes `Option<&Relative>` and returns `Option<Path>`, `ts::Programs::new` takes `impl Into<moq_net::Path>`, so pass a `Path`, and `follow::Instances::new` takes `impl TryInto<moq_net::Path, Error: Into<moq_net::Error>>`. Replace `PathOwned` with `Path` and drop `to_owned()` and `into_owned()` on paths. See moq-net's migration for the rest.
 
 ### JSON snapshot encoder options move to `json::Options`
 

@@ -130,7 +130,9 @@ impl Refresh {
 	}
 
 	fn valid(&self, grant: &Grant) -> bool {
-		let fresh = self.admitted.recheck(grant);
+		let Ok(fresh) = self.admitted.recheck(grant) else {
+			return false;
+		};
 		super::still_valid(grant).is_ok()
 			&& fresh.root == self.admitted.root
 			&& fresh.mounts == self.admitted.mounts
@@ -371,7 +373,7 @@ impl Refresh {
 					}
 				}
 				Event::Changed(id, Change::Grant(grant)) if self.valid(&grant) => {
-					let fresh = self.admitted.recheck(&grant);
+					let fresh = self.admitted.recheck(&grant).expect("checked by valid");
 					let credential = self.credentials.get_mut(&id).expect("observed credential");
 					credential.expires = grant.deadline();
 					if credential.initial {
@@ -605,8 +607,12 @@ mod tests {
 	async fn refused_before_setup(change: fn(&mut moq_auth::Grant)) {
 		let (producer, consumer) = lease::Producer::new(grant("a/**", 3000));
 		let registry = moq_net::stats::Registry::new(Default::default());
-		let stats = registry.tier(moq_net::stats::Tier::default()).session("room");
-		let lease = super::super::Lease::new("/room", consumer).with_stats(stats.clone());
+		let stats = registry
+			.tier(moq_net::stats::Tier::default())
+			.session(moq_net::Path::from_static("room"));
+		let lease = super::super::Lease::new("/room", consumer)
+			.unwrap()
+			.with_stats(stats.clone());
 		let (client_transport, server) = transports().await;
 		let now = moq_net::time::Instant::now();
 		let origin = moq_tokio::origin::spawn();
@@ -709,8 +715,10 @@ mod tests {
 		] {
 			let (producer, consumer) = lease::Producer::new(grant("a/**", 3000));
 			let registry = moq_net::stats::Registry::new(Default::default());
-			let stats = registry.tier(moq_net::stats::Tier::default()).session("room");
-			let lease = super::super::Lease::new("/room", consumer).with_stats(stats);
+			let stats = registry
+				.tier(moq_net::stats::Tier::default())
+				.session(moq_net::Path::from_static("room"));
+			let lease = super::super::Lease::new("/room", consumer).unwrap().with_stats(stats);
 			let (client, supervising) = sessions(lease).await;
 			producer.revoke(reason.clone());
 			supervising.await.unwrap();
@@ -920,7 +928,9 @@ mod tests {
 			admissions.next().await.unwrap().grant(consumer);
 		});
 		let registry = moq_net::stats::Registry::new(Default::default());
-		let stats = registry.tier(moq_net::stats::Tier::default()).session("room");
+		let stats = registry
+			.tier(moq_net::stats::Tier::default())
+			.session(moq_net::Path::from_static("room"));
 		let (client, session, mut lease) = connect(lease.unwrap().with_stats(stats)).await;
 		let auth = client.auth();
 		let (token, ()) = tokio::join!(

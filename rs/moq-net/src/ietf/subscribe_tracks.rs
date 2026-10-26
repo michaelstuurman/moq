@@ -193,7 +193,7 @@ mod tests {
 	fn paused() -> SubscribeTracks {
 		SubscribeTracks {
 			request_id: RequestId(4),
-			prefix: Path::new("room"),
+			prefix: Path::from_static("room"),
 			forward: false,
 			subscriber_priority: None,
 			group_order: None,
@@ -297,7 +297,7 @@ mod tests {
 	fn publish_skipped_round_trips() {
 		for version in [Version::Draft17, Version::Draft18, Version::Draft22] {
 			let msg = PublishSkipped {
-				suffix: Path::new("cam"),
+				suffix: Path::from_static("cam"),
 				track_name: "video".into(),
 			};
 			let decoded: PublishSkipped = decode(&encode(&msg, version), version).unwrap();

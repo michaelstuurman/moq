@@ -122,7 +122,7 @@ mod test {
 	#[test]
 	fn recording_roundtrips_replay_store_and_version() {
 		let mut archive = live();
-		archive.replay = Some(moq_net::path::Relative::new("./recordings/clip"));
+		archive.replay = Some(moq_net::path::Relative::new("./recordings/clip").unwrap());
 		archive.store = Some("https://objects.example/rec/".parse().unwrap());
 		archive.version = Some(Archive::VERSION);
 

@@ -388,7 +388,7 @@ mod tests {
 	#[test]
 	fn unsubscribe_namespace_names_the_prefix_then_the_request() {
 		let msg = UnsubscribeNamespace {
-			prefix: Path::new("cam/front"),
+			prefix: Path::from_static("cam/front"),
 			request_id: RequestId(6),
 		};
 		let mut v14 = bytes::Bytes::from(body(&msg, Version::Draft14));
@@ -422,7 +422,7 @@ mod tests {
 	fn cluster_namespace_round_trips() {
 		let version = Version::Draft18;
 		let msg = Namespace {
-			suffix: Path::new("alice.hang"),
+			suffix: Path::from_static("alice.hang"),
 			params: clustered(&[7, 9], 5),
 		};
 
@@ -435,7 +435,7 @@ mod tests {
 		// The base form is strictly shorter, and reading the extended bytes as base
 		// leaves the parameters behind rather than silently absorbing them.
 		let base = Namespace {
-			suffix: Path::new("alice.hang"),
+			suffix: Path::from_static("alice.hang"),
 			params: None,
 		};
 		let base_encoded = body(&base, version);
@@ -451,11 +451,11 @@ mod tests {
 	fn cluster_namespace_omits_zero_cost() {
 		let version = Version::Draft18;
 		let free = Namespace {
-			suffix: Path::new("a"),
+			suffix: Path::from_static("a"),
 			params: clustered(&[7], 0),
 		};
 		let priced = Namespace {
-			suffix: Path::new("a"),
+			suffix: Path::from_static("a"),
 			params: clustered(&[7], 1),
 		};
 		assert!(body(&free, version).len() < body(&priced, version).len());
@@ -472,7 +472,7 @@ mod tests {
 		let epoch = crate::Epoch::mint();
 		for epoch in [None, Some(epoch)] {
 			let msg = Namespace {
-				suffix: Path::new("a"),
+				suffix: Path::from_static("a"),
 				params: Some(AdvertParams {
 					cluster: None,
 					epoch: epoch.clone(),
@@ -491,7 +491,7 @@ mod tests {
 		let mut params = clustered(&[7], 3).unwrap();
 		params.epoch = Some(crate::Epoch::mint());
 		let msg = Namespace {
-			suffix: Path::new("a"),
+			suffix: Path::from_static("a"),
 			params: Some(params),
 		};
 		let encoded = body(&msg, version);
@@ -501,7 +501,7 @@ mod tests {
 
 		// Read as the base form, a single block is all that is left over.
 		let mut suffix = Vec::new();
-		encode_namespace(&mut Encoder::new(&mut suffix, version.into()), &Path::new("a")).unwrap();
+		encode_namespace(&mut Encoder::new(&mut suffix, version.into()), &Path::from_static("a")).unwrap();
 		let mut block = Vec::new();
 		super::super::publish_namespace::encode_advert_params(
 			&mut Encoder::new(&mut block, version.into()),
@@ -518,7 +518,7 @@ mod tests {
 	fn epoch_refused_unless_negotiated_and_well_formed() {
 		let version = Version::Draft22;
 		let msg = Namespace {
-			suffix: Path::new("a"),
+			suffix: Path::from_static("a"),
 			params: Some(AdvertParams {
 				cluster: clustered(&[7], 0).unwrap().cluster,
 				epoch: Some(crate::Epoch::mint()),
@@ -530,7 +530,7 @@ mod tests {
 		));
 
 		let mut buf = Vec::new();
-		encode_namespace(&mut Encoder::new(&mut buf, version.into()), &Path::new("a")).unwrap();
+		encode_namespace(&mut Encoder::new(&mut buf, version.into()), &Path::from_static("a")).unwrap();
 		let w = &mut Encoder::new(&mut buf, version.into());
 		w.varint(1).unwrap();
 		w.varint(super::super::epoch::EPOCH_PARAM).unwrap();
@@ -543,7 +543,7 @@ mod tests {
 	fn cluster_namespace_requires_hop_path() {
 		let version = Version::Draft18;
 		let mut buf = Vec::new();
-		encode_namespace(&mut Encoder::new(&mut buf, version.into()), &Path::new("a")).unwrap();
+		encode_namespace(&mut Encoder::new(&mut buf, version.into()), &Path::from_static("a")).unwrap();
 		// Number of Parameters = 0.
 		Encoder::new(&mut buf, version.into()).varint(0).unwrap();
 
@@ -561,7 +561,7 @@ mod tests {
 		let version = Version::Draft18;
 		let msg = super::super::PublishNamespace {
 			request_id: RequestId(1),
-			track_namespace: Path::new("a"),
+			track_namespace: Path::from_static("a"),
 			params: AdvertParams {
 				cluster: Some(cluster::Advert {
 					hops: hop_path(&[7]),
@@ -662,7 +662,7 @@ mod tests {
 	fn modern_round_trips() {
 		let msg = SubscribeNamespace {
 			request_id: RequestId(4),
-			namespace: Path::new("example/meeting"),
+			namespace: Path::from_static("example/meeting"),
 			hidden: false,
 		};
 		let mut buf = bytes::Bytes::from(body(&msg, Version::Draft18));
@@ -678,7 +678,7 @@ mod tests {
 		for hidden in [false, true] {
 			let msg = SubscribeNamespace {
 				request_id: RequestId(4),
-				namespace: Path::new("example"),
+				namespace: Path::from_static("example"),
 				hidden,
 			};
 			let mut buf = bytes::Bytes::from(body(&msg, Version::Draft18));
@@ -692,7 +692,7 @@ mod tests {
 			for version in [Version::Draft14, Version::Draft16, Version::Draft17] {
 				let msg = SubscribeNamespaceLegacy {
 					request_id: RequestId(4),
-					namespace: Path::new("example"),
+					namespace: Path::from_static("example"),
 					subscribe_options: SubscribeOptions::Namespace,
 					hidden,
 				};
@@ -714,7 +714,7 @@ mod tests {
 			] {
 				let msg = SubscribeNamespaceLegacy {
 					request_id: RequestId(4),
-					namespace: Path::new("example/meeting"),
+					namespace: Path::from_static("example/meeting"),
 					subscribe_options: options,
 					hidden: false,
 				};

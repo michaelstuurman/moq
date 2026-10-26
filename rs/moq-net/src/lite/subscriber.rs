@@ -194,7 +194,7 @@ impl Subscriber {
 					// Nothing references an announcement here, so there are no bases.
 					false => (suffix.rest, hops.literal),
 				};
-				let path = prefix.join(&suffix);
+				let path = prefix.join(&suffix)?;
 				if lite::update_supported(self.version)
 					&& !self.version.has_announce_id()
 					&& run.announced.contains(&path)
@@ -224,14 +224,14 @@ impl Subscriber {
 				}
 			}
 			lite::AnnounceBroadcast::Ended { suffix, .. } => {
-				let path = prefix.join(&suffix);
+				let path = prefix.join(&suffix)?;
 				tracing::debug!(broadcast = %self.log_path(&path), "unannounced");
 				run.announced.withdraw(&path);
 			}
 			lite::AnnounceBroadcast::EndedId { id } => {
 				// Resolve and retire the id; an unknown or already-retired id is a
 				// protocol violation.
-				let path = prefix.join(&run.decoder.end(id)?);
+				let path = prefix.join(&run.decoder.end(id)?)?;
 				tracing::debug!(broadcast = %self.log_path(&path), "unannounced");
 				run.announced.withdraw(&path);
 			}
@@ -239,7 +239,7 @@ impl Subscriber {
 				// Resolve the id; it stays live (the replacement reuses it). An unknown
 				// or retired id is a protocol violation.
 				let (suffix, hops) = run.decoder.update(id, hops)?;
-				let path = prefix.join(&suffix);
+				let path = prefix.join(&suffix)?;
 				self.update_announce(
 					path,
 					hops,
@@ -252,7 +252,7 @@ impl Subscriber {
 			lite::AnnounceBroadcast::Restart { id, epoch, hops, cost } => {
 				// Resolved like an update: the id stays live.
 				let (suffix, hops) = run.decoder.update(id, hops)?;
-				let path = prefix.join(&suffix);
+				let path = prefix.join(&suffix)?;
 				run.announced.restart(&path, epoch);
 				self.restart_announce(
 					path,
@@ -528,8 +528,8 @@ impl Subscriber {
 		Ok(())
 	}
 
-	fn log_path(&self, path: impl Into<Path>) -> Path {
-		self.origin.root().join(&path.into())
+	fn log_path<'a>(&'a self, path: &'a Path) -> crate::path::Rooted<'a> {
+		crate::path::Rooted(self.origin.root(), path)
 	}
 }
 
@@ -1739,7 +1739,7 @@ impl AnnouncePrefix {
 							.poll_decode_with(&mut cx, |r| lite::AnnounceInit::decode_within(r, version, budget))
 					)?;
 					for suffix in msg.suffixes {
-						let path = self.prefix.join(&suffix);
+						let path = self.prefix.join(&suffix)?;
 						// Lite01/02 don't carry hop information; the broadcast starts with
 						// an empty chain and an unpriced link. Stats are attributed in the
 						// model when this enters the origin via `create_broadcast`.
@@ -3416,7 +3416,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3488,7 +3488,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room"),
+			path: Path::from_static("room"),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3558,7 +3558,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".to_string(),
 			};
@@ -3617,7 +3617,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room"),
+			path: Path::from_static("room"),
 			epoch: None,
 			name: "video".to_string(),
 		};
@@ -3801,7 +3801,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber: subscriber.clone(),
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -3875,7 +3875,7 @@ mod tests {
 					validity: crate::model::broadcast::RequestValidity::token(Some(route.consume())),
 					route: None,
 					subscriber,
-					path: Path::new("room"),
+					path: Path::from_static("room"),
 					epoch: None,
 					name: "video".into(),
 				};
@@ -3948,7 +3948,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room"),
+					path: Path::from_static("room"),
 					epoch: None,
 					name: "video".to_string(),
 				},
@@ -3994,7 +3994,7 @@ mod tests {
 		let serve = SourceServe::new(
 			subscriber,
 			MintedSource {
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				source: crate::model::broadcast::SourceGuard::new(broadcast),
 				dynamic,
@@ -4122,7 +4122,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".to_string(),
 			},
@@ -4173,7 +4173,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host"),
+			path: Path::from_static("room/host"),
 			epoch: None,
 			name: "catalog.json".to_string(),
 		};
@@ -4240,7 +4240,7 @@ mod tests {
 			validity: Default::default(),
 			route: None,
 			subscriber,
-			path: Path::new("room/host"),
+			path: Path::from_static("room/host"),
 			epoch: None,
 			name: "audio".to_string(),
 		};
@@ -4309,7 +4309,7 @@ mod tests {
 					validity: Default::default(),
 					route: None,
 					subscriber,
-					path: Path::new("room/host"),
+					path: Path::from_static("room/host"),
 					epoch: None,
 					name: "catalog.json".to_string(),
 				},
@@ -4375,7 +4375,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4429,7 +4429,7 @@ mod tests {
 				validity: Default::default(),
 				route: None,
 				subscriber,
-				path: Path::new("room"),
+				path: Path::from_static("room"),
 				epoch: None,
 				name: "video".into(),
 			};
@@ -4779,7 +4779,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		let mut announced = Announced::default();
 		assert!(
 			subscriber
@@ -4839,7 +4839,7 @@ mod tests {
 			assert!(
 				subscriber
 					.start_announce(
-						Path::new(&format!("room/{i}")),
+						Path::new(&format!("room/{i}")).unwrap(),
 						None,
 						crate::Hops::new(),
 						crate::origin::Cost::default(),
@@ -4887,7 +4887,7 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let path = Path::new("pool");
+		let path = Path::from_static("pool");
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
@@ -4959,7 +4959,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("pool"),
+				Path::from_static("pool"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::default(),
@@ -5013,7 +5013,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		let mut announced = Announced::default();
 
 		// A chain that already names us is a reflection, declined but still recorded.
@@ -5072,7 +5072,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		let mut announced = Announced::default();
 		let mut reflected = crate::Hops::new();
 		reflected.push(assigned).unwrap();
@@ -5138,7 +5138,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host"),
+				Path::from_static("room/host"),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5204,7 +5204,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host"),
+				Path::from_static("room/host"),
 				None,
 				hops,
 				crate::origin::Cost::default(),
@@ -5263,7 +5263,7 @@ mod tests {
 		let mut announced = Announced::default();
 		let accepted = subscriber
 			.start_announce(
-				Path::new("room/host"),
+				Path::from_static("room/host"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5310,7 +5310,7 @@ mod tests {
 		assert!(
 			subscriber
 				.start_announce(
-					Path::new("room/host"),
+					Path::from_static("room/host"),
 					None,
 					hops,
 					crate::origin::Cost::UNKNOWN,
@@ -5338,7 +5338,7 @@ mod tests {
 		let mut announced = Announced::default();
 		subscriber
 			.start_announce(
-				Path::new("room/host"),
+				Path::from_static("room/host"),
 				None,
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
@@ -5357,7 +5357,7 @@ mod tests {
 		// A reprice from the same unnamed publisher stays anonymous and in place.
 		subscriber
 			.update_announce(
-				Path::new("room/host"),
+				Path::from_static("room/host"),
 				crate::Hops::new(),
 				crate::origin::Cost::UNKNOWN,
 				4,
@@ -5396,7 +5396,7 @@ mod tests {
 		let (mut subscriber, consumer) = restart_subscriber(SinkSession::new(Default::default()));
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5437,7 +5437,7 @@ mod tests {
 		let auth = subscriber.auth.clone();
 
 		let mut announced = Announced::default();
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		subscriber
 			.start_announce(
 				path.clone(),
@@ -5496,7 +5496,7 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 
-		let path = Path::new("room/host");
+		let path = Path::from_static("room/host");
 		let hops = crate::Hops::try_from(vec![crate::Hop::new(7).unwrap()]).unwrap();
 		let mut announced = Announced::default();
 		subscriber
@@ -5545,7 +5545,7 @@ mod tests {
 		const VERSION: Version = Version::Lite06;
 		let start = |suffix| lite::AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: lite::PathRef::literal(Path::new(suffix)),
+			suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 			hops: lite::HopsRef::literal(crate::Hops::new()),
 			cost: crate::origin::Cost::default(),
 		};
@@ -5579,7 +5579,11 @@ mod tests {
 			going_away: Default::default(),
 			auth: crate::auth::Link::new(false),
 		});
-		let mut prefix = AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot(""));
+		let mut prefix = AnnouncePrefix::new(
+			subscriber.clone(),
+			Path::from_static(""),
+			subscriber.origin.snapshot(""),
+		);
 		let mut cursor = consumer.announced();
 
 		let mut run = std::pin::pin!(kio::wait(|waiter| prefix.poll(waiter)));
@@ -5615,7 +5619,7 @@ mod tests {
 		move |w| {
 			lite::AnnounceBroadcast::Active {
 				epoch: None,
-				suffix: lite::PathRef::literal(Path::new(suffix)),
+				suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 				hops: lite::HopsRef::literal(crate::Hops::new()),
 				cost: crate::origin::Cost::default(),
 			}
@@ -5644,7 +5648,11 @@ mod tests {
 			auth: crate::auth::Link::new(false),
 		});
 		(
-			AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot("")),
+			AnnouncePrefix::new(
+				subscriber.clone(),
+				Path::from_static(""),
+				subscriber.origin.snapshot(""),
+			),
 			consumer,
 		)
 	}
@@ -5762,7 +5770,7 @@ mod tests {
 		const VERSION: Version = Version::Lite02;
 		let init = |w: &mut crate::coding::Encoder<'_>| {
 			lite::AnnounceInit {
-				suffixes: vec![Path::new("a")],
+				suffixes: vec![Path::from_static("a")],
 			}
 			.encode(w, VERSION)
 			.unwrap()
@@ -5786,7 +5794,7 @@ mod tests {
 		const VERSION: Version = Version::Lite06;
 		let start = |suffix| lite::AnnounceBroadcast::Active {
 			epoch: None,
-			suffix: lite::PathRef::literal(Path::new(suffix)),
+			suffix: lite::PathRef::literal(Path::new(suffix).unwrap()),
 			hops: lite::HopsRef::literal(crate::Hops::new()),
 			cost: crate::origin::Cost::default(),
 		};
@@ -5819,7 +5827,11 @@ mod tests {
 		});
 		let slots = crate::session::Slots::new(2);
 		subscriber.announces = slots.clone();
-		let mut prefix = AnnouncePrefix::new(subscriber.clone(), Path::new(""), subscriber.origin.snapshot(""));
+		let mut prefix = AnnouncePrefix::new(
+			subscriber.clone(),
+			Path::from_static(""),
+			subscriber.origin.snapshot(""),
+		);
 
 		let err = kio::wait(|waiter| prefix.poll(waiter))
 			.await
@@ -6134,7 +6146,7 @@ impl Announced {
 				} else {
 					crate::model::broadcast::RequestValidity::for_source(&entry.dynamic, request.path())
 				};
-				let source = subscriber.origin.create_source(&path, validity);
+				let source = subscriber.origin.create_source(path.clone(), validity);
 				// The handler exists before the requester sees the source, so a track it
 				// asks for before the serve machine first runs queues instead of failing
 				// `NotFound`. Accepted before the push, so the requester holds the source

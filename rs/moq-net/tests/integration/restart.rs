@@ -183,7 +183,10 @@ struct Worker {
 impl Worker {
 	fn new(hop: u64) -> Self {
 		let origin = produce_origin(hop);
-		let claim = Rc::new(moq_net::fuzz::dynamic_route(&origin, "pool", origin::Route::default()).unwrap());
+		let claim = Rc::new(
+			moq_net::fuzz::dynamic_route(&origin, moq_net::Path::from_static("pool"), origin::Route::default())
+				.unwrap(),
+		);
 		let outputs = Rc::new(RefCell::new(Vec::new()));
 		let (handler, served) = (claim.clone(), outputs.clone());
 		drop(moq_clock::sim::spawn(async move {
@@ -268,7 +271,7 @@ impl Claim {
 	fn new(origin: &origin::Producer, epoch: Option<Epoch>) -> Self {
 		let mut route = origin::Route::default();
 		route.epoch = epoch;
-		let dynamic = Rc::new(moq_net::fuzz::dynamic_route(origin, "live", route).unwrap());
+		let dynamic = Rc::new(moq_net::fuzz::dynamic_route(origin, moq_net::Path::from_static("live"), route).unwrap());
 		let outputs = Rc::new(RefCell::new(Vec::new()));
 		let (handler, served) = (dynamic.clone(), outputs.clone());
 		drop(moq_clock::sim::spawn(async move {

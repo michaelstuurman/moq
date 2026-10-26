@@ -731,20 +731,28 @@ mod tests {
 			let ingest = downstream.clone();
 			let server = tokio::spawn(async move {
 				match accept_stream(server_io, peer).await.unwrap().unwrap() {
-					Request::Publish(publish) => {
-						publish.with_linger(linger).accept(&ingest, "live/cam0").await.unwrap()
-					}
-					Request::Play(play) => play.accept(&served, "live/cam0").await.unwrap(),
+					Request::Publish(publish) => publish
+						.with_linger(linger)
+						.accept(&ingest, moq_net::Path::from_static("live/cam0"))
+						.await
+						.unwrap(),
+					Request::Play(play) => play
+						.accept(&served, moq_net::Path::from_static("live/cam0"))
+						.await
+						.unwrap(),
 				}
 			});
 			let exported = upstream.consume();
 			let client = tokio::spawn(async move {
 				let client = Client::with_stream(client_io, "live").await.unwrap();
 				match push {
-					true => client.publish("cam0", exported, "live/cam0").await.unwrap(),
+					true => client
+						.publish("cam0", exported, moq_net::Path::from_static("live/cam0"))
+						.await
+						.unwrap(),
 					false => client
 						.with_linger(linger)
-						.pull("cam0", &pulled, "live/cam0")
+						.pull("cam0", &pulled, moq_net::Path::from_static("live/cam0"))
 						.await
 						.unwrap(),
 				}
@@ -820,12 +828,14 @@ mod tests {
 			else {
 				panic!("expected a publish request");
 			};
-			let _ = publish.accept(&ingest, "live/cam0").await;
+			let _ = publish.accept(&ingest, moq_net::Path::from_static("live/cam0")).await;
 		});
 		let exported = upstream.consume();
 		let pushed = tokio::spawn(async move {
 			let client = Client::with_stream(client_io, "live").await.unwrap();
-			client.publish("cam0", exported, "live/cam0").await
+			client
+				.publish("cam0", exported, moq_net::Path::from_static("live/cam0"))
+				.await
 		});
 
 		// Read what reaches the remote back out as FLV.
@@ -907,7 +917,9 @@ mod tests {
 			let Request::Play(play) = request else {
 				panic!("expected a play request");
 			};
-			play.accept(&consumer, "live/cam0").await.unwrap();
+			play.accept(&consumer, moq_net::Path::from_static("live/cam0"))
+				.await
+				.unwrap();
 		});
 
 		// Client: dial, connect(`live`), play(`cam0`), republish into our own origin.
@@ -916,7 +928,10 @@ mod tests {
 		let pull_origin = client_origin.clone();
 		let pull = tokio::spawn(async move {
 			let client = Client::connect(addr, "live").await.unwrap();
-			client.pull("cam0", &pull_origin, "pulled/cam0").await.unwrap();
+			client
+				.pull("cam0", &pull_origin, moq_net::Path::from_static("pulled/cam0"))
+				.await
+				.unwrap();
 		});
 
 		// The republished broadcast should show up in the client's origin.

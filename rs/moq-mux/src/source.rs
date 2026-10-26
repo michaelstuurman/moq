@@ -476,7 +476,7 @@ mod tests {
 		settle().await;
 		let source = resolved(&origin, "pub").await;
 		let dynamic = origin.dynamic("media").unwrap();
-		let binding = source.bind(Some(&Relative::new("media")), None).unwrap();
+		let binding = source.bind(Some(&Relative::new("media").unwrap()), None).unwrap();
 		let request = dynamic.requested_broadcast().await.unwrap();
 
 		assert!(
@@ -511,7 +511,7 @@ mod tests {
 		let _catalog = origin.publish("pub", Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "pub").await;
-		let media = Relative::new("media");
+		let media = Relative::new("media").unwrap();
 		let binding = source.bind(Some(&media), None).unwrap();
 		settle().await;
 		assert!(binding.poll_broadcast(&kio::Waiter::noop()).is_pending());
@@ -582,7 +582,7 @@ mod tests {
 			.expect("the catalog resolves")
 			.unwrap();
 		let source = Source::new(consumer, catalog);
-		let sibling = tokio::time::timeout(timeout, source.resolve(Some(&Relative::new("./source")), None))
+		let sibling = tokio::time::timeout(timeout, source.resolve(Some(&Relative::new("./source").unwrap()), None))
 			.await
 			.expect("the sibling resolves without the stalled session")
 			.unwrap();
@@ -590,7 +590,7 @@ mod tests {
 
 		// Nothing serves a later sibling yet and the stalled session never syncs, so its
 		// lookup keeps waiting rather than failing, and resolves once it is published.
-		let binding = source.bind(Some(&Relative::new("./late")), None).unwrap();
+		let binding = source.bind(Some(&Relative::new("./late").unwrap()), None).unwrap();
 		settle().await;
 		assert!(binding.poll_broadcast(&kio::Waiter::noop()).is_pending());
 		let _late = healthy.publish("a/late", Default::default()).unwrap();
@@ -609,7 +609,7 @@ mod tests {
 		let _old = origin.publish("a/source", Default::default()).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
-		let sibling = Relative::new("./source");
+		let sibling = Relative::new("./source").unwrap();
 		let first = source
 			.resolve(Some(&sibling), None)
 			.await
@@ -644,7 +644,7 @@ mod tests {
 		let _sibling = origin.publish("a/source", route(&sibling)).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
-		let rel = Relative::new("./source");
+		let rel = Relative::new("./source").unwrap();
 
 		let first = source.resolve(Some(&rel), None).await.unwrap();
 		assert_eq!(first.info().epoch.as_ref(), Some(&sibling));
@@ -668,7 +668,7 @@ mod tests {
 		let _new = origin.publish("a/source", route(&new_epoch)).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
-		let rel = Relative::new("./source");
+		let rel = Relative::new("./source").unwrap();
 
 		assert!(is_mismatch(
 			source.resolve(Some(&rel), Some(&old_epoch)).await,
@@ -689,7 +689,7 @@ mod tests {
 		let _old = origin.publish("a/source", route(&old_epoch)).unwrap();
 		settle().await;
 		let source = resolved(&origin, "a/pub").await;
-		let rel = Relative::new("./source");
+		let rel = Relative::new("./source").unwrap();
 		let first = source.resolve(Some(&rel), Some(&old_epoch)).await.unwrap();
 
 		let _new = origin.publish("a/source", route(&new_epoch)).unwrap();
@@ -724,7 +724,7 @@ mod tests {
 		let source = resolved(&origin, "a/pub").await;
 
 		for reference in [None, Some("./pub")] {
-			let rel = reference.map(Relative::new);
+			let rel = reference.map(|rel| Relative::new(rel).unwrap());
 			let own = source.resolve(rel.as_ref(), Some(&catalog)).await.unwrap();
 			assert!(own.is_clone(&source.broadcast()), "{reference:?}");
 			assert!(is_mismatch(source.resolve(rel.as_ref(), Some(&other)).await, &other));
@@ -746,8 +746,11 @@ mod tests {
 		let source = resolved(&origin, "a/pub").await;
 		let epoch = moq_net::Epoch::mint();
 
-		let sibling = source.resolve(Some(&Relative::new("./source")), Some(&epoch)).await;
-		assert!(sibling.unwrap().info().epoch.is_none());
+		let sibling = source
+			.resolve(Some(&Relative::new("./source").unwrap()), Some(&epoch))
+			.await
+			.unwrap();
+		assert!(sibling.info().epoch.is_none());
 		assert!(source.resolve(None, Some(&epoch)).await.is_ok());
 	}
 
@@ -764,7 +767,7 @@ mod tests {
 		settle().await;
 
 		for reference in [None, Some(""), Some("live"), Some("./live"), Some("../a/live")] {
-			let rel = reference.map(Relative::new);
+			let rel = reference.map(|rel| Relative::new(rel).unwrap());
 			let bound = source.bind(rel.as_ref(), None).unwrap().broadcast().await.unwrap();
 			assert!(
 				bound.is_closed(),
@@ -825,7 +828,7 @@ mod tests {
 		let source = resolved(&origin, "a/pub").await;
 
 		// Names the catalog within its own parent.
-		let rel = Relative::new("./pub");
+		let rel = Relative::new("./pub").unwrap();
 		source
 			.subscribe_track(Some(&rel), None, "video")
 			.await
@@ -852,7 +855,7 @@ mod tests {
 		// above the root. A lone `..` stops at the root, which still names a broadcast, so
 		// it is not in this set.
 		for reference in ["../../elsewhere", "../..", "../../.."] {
-			let rel = Relative::new(reference);
+			let rel = Relative::new(reference).unwrap();
 			assert!(
 				source.resolve_reference(Some(&rel)).is_none(),
 				"{reference} should escape"
@@ -890,9 +893,9 @@ mod tests {
 			level: 0x1e,
 			inline: false,
 		});
-		escaped.broadcast = Some(Relative::new("../../source"));
+		escaped.broadcast = Some(Relative::new("../../source").unwrap());
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source"));
+		sibling.broadcast = Some(Relative::new("./source").unwrap());
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.video.renditions.insert("escaped".to_string(), escaped);
@@ -938,9 +941,9 @@ mod tests {
 		let source = created(&origin);
 
 		let mut escaped = hang::catalog::TextConfig::new(hang::catalog::TextFormat::Vtt);
-		escaped.broadcast = Some(Relative::new("../../source"));
+		escaped.broadcast = Some(Relative::new("../../source").unwrap());
 		let mut sibling = escaped.clone();
-		sibling.broadcast = Some(Relative::new("./source"));
+		sibling.broadcast = Some(Relative::new("./source").unwrap());
 
 		let mut catalog = hang::Catalog::<()>::default();
 		catalog.text.renditions.insert("escaped".to_string(), escaped);
@@ -966,7 +969,7 @@ mod tests {
 		let source = resolved(&origin, "a/pub").await;
 
 		// The reference resolves to `a/source`, whose "video" track answers the subscribe.
-		let rel = Relative::new("./source");
+		let rel = Relative::new("./source").unwrap();
 		source
 			.subscribe_track(Some(&rel), None, "video")
 			.await
@@ -986,7 +989,7 @@ mod tests {
 		settle().await;
 
 		let source = resolved(&origin, "a/source/transcode").await;
-		let rel = Relative::new(".");
+		let rel = Relative::new(".").unwrap();
 		source
 			.subscribe_track(Some(&rel), None, "video")
 			.await
@@ -1006,7 +1009,7 @@ mod tests {
 		settle().await;
 
 		let source = resolved(&origin, "top").await;
-		let rel = Relative::new(".");
+		let rel = Relative::new(".").unwrap();
 		source
 			.subscribe_track(Some(&rel), None, "video")
 			.await

@@ -334,11 +334,12 @@ impl Echo {
 			if prefix.is_none() {
 				tracing::warn!(path = %echo.path.as_str(), "the catalog solicits feedback above the connection root");
 			}
-			Some(prefix?.join(&hang::moq_net::Path::from(format!(
-				"{}{}",
-				self.target.name.0,
-				hang::echo::SUFFIX
-			))))
+			let prefix = prefix?;
+			let name = format!("{}{}", self.target.name.0, hang::echo::SUFFIX);
+			hang::moq_net::Path::new(&name)
+				.and_then(|name| prefix.join(&name))
+				.inspect_err(|err| tracing::warn!(%err, path = %echo.path.as_str(), "the feedback path is too long"))
+				.ok()
 		});
 		if self.feedback.as_ref().map(|feedback| &feedback.path) == target.as_ref() {
 			return;
@@ -492,7 +493,7 @@ async fn write_echo(
 ) -> anyhow::Result<()> {
 	// Announcements leave hidden routes out unless asked, and a prefix naming one asks.
 	let hidden = prefix.split('/').any(|segment| segment.starts_with('.'));
-	let prefix = moq_net::Path::new(&prefix);
+	let prefix = moq_net::Path::new(&prefix)?;
 	let mut announced = origin.clone().with_hidden(hidden).announced();
 	let (lines, mut written) = tokio::sync::mpsc::channel::<String>(LINES);
 	let mut readers = Readers::default();
@@ -669,7 +670,7 @@ mod tests {
 	#[tokio::test(start_paused = true)]
 	async fn a_drained_reader_is_forgotten() {
 		let mut readers = Readers::default();
-		let path = moq_net::Path::new("viewer.echo");
+		let path = moq_net::Path::from_static("viewer.echo");
 
 		readers.start(path.clone(), tokio::spawn(std::future::pending()));
 		readers.end(path.clone());

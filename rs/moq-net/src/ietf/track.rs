@@ -265,7 +265,7 @@ mod tests {
 	fn test_track_status_v14_round_trip() {
 		let msg = TrackStatus {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::from_static("test/ns"),
 			track_name: "video".into(),
 			properties_wanted: true,
 			epoch: None,
@@ -283,7 +283,7 @@ mod tests {
 	fn test_track_status_v15_round_trip() {
 		let msg = TrackStatus {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::from_static("test/ns"),
 			track_name: "video".into(),
 			properties_wanted: true,
 			epoch: None,
@@ -301,7 +301,7 @@ mod tests {
 	fn test_track_status_v17_round_trip() {
 		let msg = TrackStatus {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::from_static("test/ns"),
 			track_name: "video".into(),
 			properties_wanted: true,
 			epoch: None,
@@ -319,7 +319,7 @@ mod tests {
 	fn test_track_status_v16_round_trip() {
 		let msg = TrackStatus {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::from_static("test/ns"),
 			track_name: "video".into(),
 			properties_wanted: true,
 			epoch: None,
@@ -337,7 +337,7 @@ mod tests {
 	fn test_track_status_v18_round_trip() {
 		let msg = TrackStatus {
 			request_id: RequestId(1),
-			track_namespace: Path::new("test/ns"),
+			track_namespace: Path::from_static("test/ns"),
 			track_name: "video".into(),
 			properties_wanted: true,
 			epoch: None,
@@ -368,7 +368,7 @@ mod tests {
 			for wanted in [true, false] {
 				let msg = TrackStatus {
 					request_id: RequestId(1),
-					track_namespace: Path::new("ns"),
+					track_namespace: Path::from_static("ns"),
 					track_name: "video".into(),
 					properties_wanted: wanted,
 					epoch: None,

@@ -1977,7 +1977,7 @@ mod tests {
 	fn publish_namespace(request_id: RequestId, namespace: &str) -> ietf::PublishNamespace {
 		ietf::PublishNamespace {
 			request_id,
-			track_namespace: crate::Path::new(namespace),
+			track_namespace: crate::Path::new(namespace).unwrap(),
 			params: Default::default(),
 			authorization_token: None,
 		}
@@ -2071,11 +2071,11 @@ mod tests {
 	#[test]
 	fn test_namespace_reverse_lookup_v14() {
 		let namespaces = Namespaces::default();
-		namespaces.register(Direction::Incoming, crate::Path::new("test/ns"), RequestId(42));
+		namespaces.register(Direction::Incoming, crate::Path::from_static("test/ns"), RequestId(42));
 
 		let body = encode_body(
 			&ietf::PublishNamespaceDone {
-				track_namespace: crate::Path::new("test/ns"),
+				track_namespace: crate::Path::from_static("test/ns"),
 				request_id: RequestId(0),
 			},
 			Version::Draft14,
@@ -2093,7 +2093,7 @@ mod tests {
 		let (shared, mut ours, mut theirs) = mesh("cluster/ns", version, Direction::Outgoing).await;
 
 		let done = ietf::PublishNamespaceDone {
-			track_namespace: crate::Path::new("cluster/ns"),
+			track_namespace: crate::Path::from_static("cluster/ns"),
 			request_id: RequestId(0),
 		};
 		let route = classify(
@@ -2119,7 +2119,7 @@ mod tests {
 		let (shared, mut ours, mut theirs) = mesh("cluster/ns", version, Direction::Incoming).await;
 
 		let cancel = ietf::PublishNamespaceCancel {
-			track_namespace: crate::Path::new("cluster/ns"),
+			track_namespace: crate::Path::from_static("cluster/ns"),
 			request_id: RequestId(0),
 			error_code: 0,
 			reason_phrase: "".into(),
@@ -2142,7 +2142,7 @@ mod tests {
 	/// Classify the peer withdrawing its own advertisement of `namespace`.
 	fn done(shared: &Arc<Shared>, namespace: &str, version: Version) -> Route {
 		let msg = ietf::PublishNamespaceDone {
-			track_namespace: crate::Path::new(namespace),
+			track_namespace: crate::Path::new(namespace).unwrap(),
 			request_id: RequestId(0),
 		};
 		classify(
@@ -2157,7 +2157,7 @@ mod tests {
 	/// Classify the peer rejecting our advertisement of `namespace`.
 	fn cancel(shared: &Arc<Shared>, namespace: &str, version: Version) -> Route {
 		let msg = ietf::PublishNamespaceCancel {
-			track_namespace: crate::Path::new(namespace),
+			track_namespace: crate::Path::new(namespace).unwrap(),
 			request_id: RequestId(0),
 			error_code: 0,
 			reason_phrase: "".into(),
@@ -2205,7 +2205,7 @@ mod tests {
 		let mut theirs = receive(&shared, "cluster/ns", version, RequestId(7)).await;
 
 		let msg = ietf::PublishNamespaceDone {
-			track_namespace: crate::Path::new("cluster/ns"),
+			track_namespace: crate::Path::from_static("cluster/ns"),
 			request_id: RequestId(0),
 		};
 		shared.close(RequestId(7), encode_msg(&msg, version));
@@ -2239,7 +2239,7 @@ mod tests {
 	/// The peer withdrawing `namespace` on `request_id`, as the read loop routes it.
 	fn withdraw(shared: &Arc<Shared>, namespace: &str, version: Version, request_id: RequestId) {
 		let msg = ietf::PublishNamespaceDone {
-			track_namespace: crate::Path::new(namespace),
+			track_namespace: crate::Path::new(namespace).unwrap(),
 			request_id,
 		};
 		let route = classify(
@@ -2363,7 +2363,7 @@ mod tests {
 						}
 						let fourth = (0..4).find(|id| *id != first && *id != second && *id != third).unwrap();
 						let namespaces = Namespaces::default();
-						let name = crate::Path::new("ns");
+						let name = crate::Path::from_static("ns");
 						for id in 0..4 {
 							namespaces.register(direction, name.clone(), RequestId(id));
 						}
@@ -2432,7 +2432,7 @@ mod tests {
 		};
 		for version in [Version::Draft14, Version::Draft15, Version::Draft16] {
 			let registry = Registry::new(Default::default());
-			let stats = registry.tier(Tier::default()).session("");
+			let stats = registry.tier(Tier::default()).session(crate::Path::from_static(""));
 			let msg = ietf::FetchCancel {
 				request_id: RequestId(0),
 			};

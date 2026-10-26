@@ -6,7 +6,7 @@ How to update your code for each breaking change, newest first.
 
 ### `moq_net::Path` has no lifetime
 
-Entry points that took `impl moq_net::AsPath` take `impl Into<moq_net::Path>`; `&str`, `String`, and `&Path` arguments still work. See moq-net's migration for the rest.
+Entry points that took `impl moq_net::AsPath` take `impl Into<moq_net::Path>`: pass a `Path` or `&Path`, from `moq_net::Path::new(s)?` or `moq_net::Path::from_static`, since a string can be too long. See moq-net's migration for the rest.
 
 ### `run` and `Config` are removed
 

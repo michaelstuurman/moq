@@ -110,13 +110,13 @@ mod test {
 
 	#[test]
 	fn echo_prefix_cannot_escape_the_catalog_root() {
-		let base = moq_net::Path::from("room/live");
+		let base = moq_net::Path::from_static("room/live");
 		let mut catalog = Catalog::<()>::from_str(include_str!("../../fixtures/catalog-stats-echo.json")).unwrap();
 		assert!(check_resolvable(&base, &catalog).is_ok());
 		let echo = catalog.echo.as_mut().unwrap();
-		echo.path = moq_net::path::Relative::from("../viewers");
+		echo.path = moq_net::path::Relative::new("../viewers").unwrap();
 		assert!(check_resolvable(&base, &catalog).is_ok());
-		catalog.echo.as_mut().unwrap().path = moq_net::path::Relative::from("../../viewers");
+		catalog.echo.as_mut().unwrap().path = moq_net::path::Relative::new("../../viewers").unwrap();
 		assert!(matches!(
 			check_resolvable(&base, &catalog),
 			Err(crate::Error::EscapingBroadcast(_))
@@ -127,7 +127,7 @@ mod test {
 	async fn subscribe_validates_echo_prefix_before_yielding() {
 		for (reference, accepted) in [("viewers", true), ("../../viewers", false)] {
 			let mut info = moq_net::broadcast::Info::new();
-			info.path = "room/live".into();
+			info.path = moq_net::Path::from_static("room/live");
 			let broadcast = info.produce();
 			let track = broadcast
 				.create_track(Catalog::DEFAULT_NAME, Catalog::default_track_info())

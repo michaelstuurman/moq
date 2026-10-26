@@ -106,19 +106,19 @@ pub async fn run(moq: MoqSide, args: Args, net: Net) -> anyhow::Result<()> {
 	};
 	config.resize.output = args.frames.0;
 
-	let source_path = moq_net::Path::from(
+	let source_path = moq_net::Path::try_from(
 		moq.broadcast
 			.clone()
 			.context("`transcode` requires the source broadcast: pass --broadcast <name>")?,
-	);
+	)?;
 	if source_path.is_empty() {
 		anyhow::bail!("`transcode` requires the source broadcast: pass --broadcast <name>");
 	}
-	let output_path = moq_net::Path::from(
+	let output_path = moq_net::Path::try_from(
 		args.output
 			.clone()
 			.unwrap_or_else(|| format!("{source_path}/transcode.hang")),
-	);
+	)?;
 
 	// Publish the derivative through one origin and consume the source through
 	// another, over a single auto-reconnecting session.
@@ -232,8 +232,8 @@ mod tests {
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),
-			source_path: "source".into(),
-			output_path: "derived".into(),
+			source_path: hang::moq_net::Path::from_static("source"),
+			output_path: hang::moq_net::Path::from_static("derived"),
 			config: Default::default(),
 		};
 		let task = tokio::spawn(following.run());
@@ -279,8 +279,8 @@ mod tests {
 		let following = Following {
 			origin: origin.consume(),
 			publish: publish.clone(),
-			source_path: "source".into(),
-			output_path: "derived".into(),
+			source_path: hang::moq_net::Path::from_static("source"),
+			output_path: hang::moq_net::Path::from_static("derived"),
 			config: Default::default(),
 		};
 		let task = tokio::spawn(following.run());

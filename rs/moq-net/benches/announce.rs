@@ -52,7 +52,7 @@ fn initial(c: &mut Criterion) {
 				.flat_map(|cost| {
 					(0..routes).map(move |route| {
 						announce::Event::Update(announce::Announce {
-							prefix: format!("route/{route}").into(),
+							prefix: moq_net::Path::new(&format!("route/{route}")).unwrap(),
 							captures: None,
 							route: moq_net::origin::Route::default().with_cost(cost),
 						})
@@ -129,12 +129,12 @@ fn health(n: u64) -> (Path, Hops) {
 		n % 16,
 		1_700_000_000 + n
 	);
-	(path.into(), hops(&[id(origin), id(100), id(101)]))
+	(Path::new(&path).unwrap(), hops(&[id(origin), id(100), id(101)]))
 }
 
 fn unique(n: u64) -> (Path, Hops) {
 	(
-		format!("{:x}", id(n)).into(),
+		moq_net::Path::new(&format!("{:x}", id(n))).unwrap(),
 		hops(&[id(n + 1_000_000), id(n + 2_000_000)]),
 	)
 }

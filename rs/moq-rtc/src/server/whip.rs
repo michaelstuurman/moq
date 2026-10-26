@@ -81,7 +81,13 @@ async fn accept_offer(
 		return Err(Error::InvalidSdp("expected Content-Type: application/sdp".into()));
 	}
 	let offer = std::str::from_utf8(&body).map_err(|err| Error::InvalidSdp(err.to_string()))?;
-	accept(server, publisher, path, offer).await
+	accept(
+		server,
+		publisher,
+		moq_net::Path::new(path).map_err(moq_net::Error::from)?,
+		offer,
+	)
+	.await
 }
 
 #[cfg(feature = "server")]
@@ -222,7 +228,9 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
+		let session = accept(&server, &origin, moq_net::Path::from_static("live/cam0"), &offer())
+			.await
+			.unwrap();
 		let broadcast = consumer.request_broadcast("live/cam0", None).await.unwrap();
 		let mut catalog = broadcast
 			.track(hang::Catalog::DEFAULT_NAME)
@@ -251,7 +259,9 @@ mod tests {
 		let server = Server::new(crate::server::Config::default());
 		let origin = moq_tokio::origin::spawn();
 		let consumer = origin.consume();
-		let _stale_session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
+		let _stale_session = accept(&server, &origin, moq_net::Path::from_static("live/cam0"), &offer())
+			.await
+			.unwrap();
 		let stale = consumer.request_broadcast("live/cam0", None).await.unwrap();
 		let mut catalog = stale
 			.track(hang::Catalog::DEFAULT_NAME)
@@ -260,7 +270,9 @@ mod tests {
 			.await
 			.unwrap();
 
-		let _fresh_session = accept(&server, &origin, "live/cam0", &offer()).await.unwrap();
+		let _fresh_session = accept(&server, &origin, moq_net::Path::from_static("live/cam0"), &offer())
+			.await
+			.unwrap();
 		// The session binds a real UDP socket, so this runs on the wall clock.
 		let stale_viewer = tokio::time::timeout(std::time::Duration::from_millis(200), async {
 			loop {
