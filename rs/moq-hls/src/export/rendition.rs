@@ -373,6 +373,11 @@ impl Rendition {
 		normalize_audio(current) == normalize_audio(config)
 	}
 
+	/// The catalog's `hls` field this rendition lists records from.
+	pub fn hls(&self) -> &Hls {
+		&self.hls
+	}
+
 	/// The advertised bitrate in bits per second, for the master playlist `BANDWIDTH` attribute
 	/// and the DASH `bandwidth`. Falls back to a per-kind default when the catalog carries none.
 	pub fn bandwidth(&self) -> u64 {
@@ -779,7 +784,6 @@ impl Rendition {
 			.max()
 			.unwrap_or(0)
 			.max(1);
-		let program_date_time = window.segments.first().and_then(|first| self.wall_clock(first.pts));
 		let mut previous = None;
 		let segments = window
 			.segments
@@ -792,6 +796,7 @@ impl Rendition {
 					duration: s.duration,
 					gap: s.stop,
 					discontinuity,
+					program_date_time: self.wall_clock(s.pts),
 				}
 			})
 			.collect();
@@ -801,7 +806,6 @@ impl Rendition {
 			discontinuity_sequence: window.discontinuity,
 			segments,
 			finished,
-			program_date_time,
 			generation,
 		}
 	}

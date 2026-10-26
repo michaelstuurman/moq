@@ -1915,7 +1915,7 @@ mod tests {
 		let _ = tokio::time::timeout(Duration::from_secs(5), rendition.playable()).await;
 
 		let snapshot = rendition.snapshot();
-		assert_eq!(snapshot.program_date_time, Some(wall));
+		assert_eq!(snapshot.segments[0].program_date_time, Some(wall));
 		let playlist = rendition.media_playlist(None).unwrap().expect("playlist renders");
 		assert!(
 			playlist.contains("#EXT-X-PROGRAM-DATE-TIME:2020-01-01T00:00:00.000Z\n"),
@@ -1975,7 +1975,7 @@ mod tests {
 		let rendition = broadcaster.rendition(Kind::Video, "video0").expect("video discovered");
 		let _ = tokio::time::timeout(Duration::from_secs(5), rendition.playable()).await;
 
-		assert_eq!(rendition.snapshot().program_date_time, None);
+		assert_eq!(rendition.snapshot().segments[0].program_date_time, None);
 		let playlist = rendition.media_playlist(None).unwrap().expect("playlist renders");
 		assert!(!playlist.contains("PROGRAM-DATE-TIME"), "{playlist}");
 
