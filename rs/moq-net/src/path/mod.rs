@@ -599,11 +599,12 @@ impl From<TooLong> for crate::Error {
 impl<V> Decode<V> for Path {
 	fn decode(r: &mut Decoder<'_>, _: V) -> Result<Self, DecodeError> {
 		// Measured before normalization, so redundant slashes can't smuggle a longer string.
-		let raw = r.string()?;
+		let raw = r.str()?;
 		if raw.len() > Path::MAX_BYTES {
 			return Err(DecodeError::BoundsExceeded);
 		}
-		let path = Path::new(&raw)?;
+		// Borrowed from the wire bytes, so the path's own copy is the only one.
+		let path = Path::new(raw)?;
 		if path.parts().count() > Path::MAX_PARTS {
 			return Err(DecodeError::BoundsExceeded);
 		}
