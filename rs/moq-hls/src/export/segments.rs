@@ -422,31 +422,24 @@ impl Producer {
 		older.into_iter().chain([newest.groups.start]).collect()
 	}
 
-	/// Whether the playlist has anything to serve yet (at least one segment, or the records
-	/// already ended).
-	#[cfg_attr(
-		not(feature = "server"),
-		allow(dead_code, reason = "only the `server` feature uses it")
-	)]
-	pub fn is_playable(&self) -> bool {
-		let state = self.state.read();
-		state.ended || !state.rows.is_empty()
-	}
-
-	/// Poll until [`is_playable`](Self::is_playable) or the window failed, for the serve path's
-	/// long-poll.
-	pub fn poll_playable(&self, waiter: &kio::Waiter) -> Poll<()> {
+	/// Poll until the window lists a row, returning the oldest, or `None` once it failed, ended
+	/// empty, or closed empty. A returned row still registers `waiter` for the window's next
+	/// change, so a caller waiting on that row's alignment also wakes when the front moves.
+	pub fn poll_front(&self, waiter: &kio::Waiter) -> Poll<Option<Row>> {
+		let mut front = None;
 		let poll = self.state.poll_ref(waiter, |state| {
-			if state.ended || state.failed.is_some() || !state.rows.is_empty() {
-				Poll::Ready(())
-			} else {
-				Poll::Pending
+			if state.failed.is_some() || (state.ended && state.rows.is_empty()) {
+				return Poll::Ready(());
 			}
+			front = state.rows.front().cloned();
+			// Pending even with a row, so the waiter registers.
+			Poll::Pending
 		});
 		match poll {
-			// Ready, or the channel closed (no more rows will arrive): stop waiting either way.
-			Poll::Ready(_) => Poll::Ready(()),
-			Poll::Pending => Poll::Pending,
+			Poll::Ready(Ok(())) => Poll::Ready(None),
+			// Closed: no more rows arrive, so the front is final.
+			Poll::Ready(Err(_)) => Poll::Ready(front),
+			Poll::Pending => front.map_or(Poll::Pending, |row| Poll::Ready(Some(row))),
 		}
 	}
 

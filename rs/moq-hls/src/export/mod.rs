@@ -3625,6 +3625,38 @@ mod tests {
 		assert_eq!(numbers(&test.listed("video1", 4).await), [0, 1, 2, 3, 4]);
 	}
 
+	// A rendition whose first segment waits on the lead is not advertised yet, so no player
+	// starts on a playlist that lists nothing.
+	#[tokio::test(start_paused = true)]
+	async fn a_rendition_is_advertised_once_the_lead_lists_its_first_segment() {
+		let test = Records::new();
+		let (_t0, mut video0) = test.publish("video0");
+		let (_t1, mut video1) = test.publish("video1");
+		video1.push(&gop(0)).unwrap();
+		video1.push(&gop(1)).unwrap();
+		settle().await;
+		let rendition = test.rendition("video1");
+		assert!(!rendition.is_advertised(), "segment 0 waits on the lead");
+		assert_eq!(rendition.media_playlist(None).unwrap(), None);
+		// Spawned, so only a wake polls it again.
+		let mut playable = tokio::spawn({
+			let rendition = rendition.clone();
+			async move { rendition.playable().await }
+		});
+		settle().await;
+		assert!(!playable.is_finished(), "segment 0 waits on the lead");
+
+		video0.push(&gop(0)).unwrap();
+		video0.push(&gop(1)).unwrap();
+		tokio::time::timeout(Duration::from_secs(1), &mut playable)
+			.await
+			.expect("the lead listing segment 0 wakes it")
+			.unwrap();
+		assert!(rendition.is_advertised());
+		let rendered = rendition.media_playlist(None).unwrap().expect("playable");
+		assert!(rendered.contains("#EXTINF:"), "{rendered}");
+	}
+
 	// A cursor waiting on a stalled lead resumes once the lead hands over.
 	#[tokio::test(start_paused = true)]
 	async fn a_cursor_waiting_on_the_lead_follows_a_handover() {

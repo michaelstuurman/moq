@@ -713,13 +713,18 @@ impl Rendition {
 		kio::wait(|waiter| self.poll_playable(waiter)).await;
 	}
 
-	/// Poll until this rendition is playable, its media is denied, or its window failed.
+	/// Poll until this rendition is playable (its first segment's alignment is decided, or its
+	/// records ended empty), its media is denied, or its window failed.
 	pub(crate) fn poll_playable(&self, waiter: &kio::Waiter) -> Poll<()> {
 		self.poll_media(waiter);
 		if self.media.refusal().is_some() {
 			return Poll::Ready(());
 		}
-		self.live.poll_playable(waiter)
+		match self.live.poll_front(waiter) {
+			Poll::Ready(Some(front)) => self.poll_resolved(waiter, &front),
+			Poll::Ready(None) => Poll::Ready(()),
+			Poll::Pending => Poll::Pending,
+		}
 	}
 
 	/// End the window if the bound sibling ended, registering `waiter` to wake when it does, and
@@ -757,9 +762,9 @@ impl Rendition {
 		let Some(init) = self.built_init(&run) else {
 			return Ok(None);
 		};
-		Ok(self
-			.is_playable()
-			.then(|| super::render_media(&snapshot, &init.hash, query)))
+		// A segment still waiting on the lead is not listed, so check what renders.
+		let playable = !snapshot.segments.is_empty() || snapshot.finished;
+		Ok(playable.then(|| super::render_media(&snapshot, &init.hash, query)))
 	}
 
 	/// Wait until the media playlist is servable, then render it: at least one segment is
@@ -898,13 +903,6 @@ impl Rendition {
 		rows.iter()
 			.map(|row| (row, self.resolve(row)))
 			.take_while(|(_, content)| *content != Content::Pending)
-	}
-
-	/// Whether the playlist has anything to serve yet (at least one segment, or the records
-	/// already ended).
-	pub(crate) fn is_playable(&self) -> bool {
-		self.media.sync(&self.live);
-		self.live.is_playable()
 	}
 
 	/// Whether the multivariant playlist advertises this rendition, i.e. a player can start it.
