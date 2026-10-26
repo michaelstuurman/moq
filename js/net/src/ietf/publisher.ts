@@ -1924,8 +1924,7 @@ export class Publisher {
 	 * MAX_REQUEST_UPDATES the peer set without reading it; a change landing meanwhile waits
 	 * for the next turn. The answer decides whether the peer still holds the namespace: a
 	 * REQUEST_ERROR closes the peer's side and withdraws the advertisement, so ours is
-	 * finished too (with nothing more sent on draft 16, where the peer cancels it), a draft-16
-	 * cancel ends it the same way, and an unanswered update is dropped, since a peer that
+	 * finished too, and an unanswered update is dropped, since a peer that
 	 * ignored it cannot be assumed to hold either price. Either way the retry re-offers it fresh.
 	 *
 	 * A different original publisher is an update like any other: the receiver drains what

@@ -17,6 +17,7 @@ pub struct Client {
 	stats: stats::Session,
 	versions: Versions,
 	url: Option<url::Url>,
+	setup_token: Option<setup::Token>,
 	cost: Option<u64>,
 	peer_hop: Option<crate::Hop>,
 	limits: crate::session::Limits,
@@ -153,6 +154,19 @@ impl Client {
 			Some(port) => format!("{host}:{port}"),
 			None => host.to_owned(),
 		})
+	}
+
+	/// Present `token` as the connection credential in SETUP, on versions that carry one
+	/// (moq-lite-07+ and every moq-transport draft we speak). The session's empty-token
+	/// AUTH stream then answers with its grant.
+	///
+	/// Other versions send nothing, so a caller that may negotiate one also puts the
+	/// token in the URL query. moq-lite carries no Token Type, so only
+	/// [`Token::OUT_OF_BAND`](setup::Token::OUT_OF_BAND) reaches it; another type fails
+	/// the handshake.
+	pub fn with_token(mut self, token: setup::Token) -> Self {
+		self.setup_token = Some(token);
+		self
 	}
 
 	/// Build every session on `auth`, so each presents the tokens it holds and a route
@@ -293,6 +307,8 @@ impl Client {
 				cost: self.cost,
 				// Filled by `lite::start` from the attached origin handles.
 				hop: None,
+				// Older versions carry the credential in the URL query instead.
+				token: self.setup_token.clone().filter(|_| version.has_auth()),
 				ietf: self.extensions.ietf && version.has_ietf(),
 				implementation: self.implementation(),
 			}
@@ -378,6 +394,7 @@ impl Client {
 					version: draft,
 					path: self.setup_path(session.address()),
 					authority: self.setup_authority(session.address()),
+					token: self.setup_token.clone(),
 					peer_setup_stream: None,
 					peer_declared: None,
 					auth: auth.clone(),

@@ -61,8 +61,9 @@ test.each([Lite.ALPN_07_WIP, ...Object.values(Ietf.ALPN)])(
 	"%s follows the aggregate priority upstream",
 	async (protocol) => {
 		const origin = new OriginProducer();
-		const broadcast = origin.createBroadcast(path);
-		broadcast.announce();
+		const broadcastPublication = origin.createBroadcast(path);
+		const broadcast = broadcastPublication.broadcast;
+		broadcastPublication.announce();
 		const video = broadcast.createTrack("video", { timescale: Timescale.MILLI });
 		const [client, server] = await session(protocol, origin);
 
@@ -100,8 +101,9 @@ test.each(Object.values(Ietf.ALPN))("%s ends a subscription mid-update without a
 		await nextTask();
 	});
 	const origin = new OriginProducer();
-	const broadcast = origin.createBroadcast(path);
-	broadcast.announce();
+	const broadcastPublication = origin.createBroadcast(path);
+	const broadcast = broadcastPublication.broadcast;
+	broadcastPublication.announce();
 	const video = broadcast.createTrack("video", { timescale: Timescale.MILLI });
 	const [client, server] = await session(protocol, origin);
 	let closed: Error | null | undefined;
@@ -136,8 +138,9 @@ test.each(Object.values(Ietf.ALPN))("%s ends a subscription mid-update without a
 // update of defaults first, as on lite and in Rust.
 test.each(Object.values(Ietf.ALPN))("%s sends no update when the last subscriber leaves", async (protocol) => {
 	const origin = new OriginProducer();
-	const broadcast = origin.createBroadcast(path);
-	broadcast.announce();
+	const broadcastPublication = origin.createBroadcast(path);
+	const broadcast = broadcastPublication.broadcast;
+	broadcastPublication.announce();
 	const video = broadcast.createTrack("video", { timescale: Timescale.MILLI });
 	const [client, server] = await session(protocol, origin);
 	try {
@@ -162,8 +165,9 @@ test.each(Object.values(Ietf.ALPN))("%s sends no update when the last subscriber
 // track with the error rather than leaving it at a stale priority. Nothing reaches the wire.
 test.each(Object.values(Ietf.ALPN))("%s ends the track when an update fails to encode", async (protocol) => {
 	const origin = new OriginProducer();
-	const broadcast = origin.createBroadcast(path);
-	broadcast.announce();
+	const broadcastPublication = origin.createBroadcast(path);
+	const broadcast = broadcastPublication.broadcast;
+	broadcastPublication.announce();
 	const video = broadcast.createTrack("video", { timescale: Timescale.MILLI });
 	const [client, server] = await session(protocol, origin);
 	let closed: Error | null | undefined;

@@ -40,7 +40,7 @@ export class ObjectDatagram {
 	groupId: number;
 	/** The Object ID, or `undefined` when the ZERO_OBJECT_ID bit omits it (Object 0). */
 	objectId?: number;
-	/** The Publisher Priority, or `undefined` to inherit the subscription's (draft-15+). */
+	/** The Publisher Priority, or `undefined` to inherit the subscription's. */
 	publisherPriority?: number;
 	/** No Object past this one exists in the group. */
 	endOfGroup: boolean;

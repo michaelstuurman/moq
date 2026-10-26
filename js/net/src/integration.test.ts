@@ -34,8 +34,9 @@ import { withTimeout } from "./util/timeout.ts";
 import { wireOf } from "./wire.ts";
 
 function publish(origin: OriginProducer, path: Path.Valid) {
-	const broadcast = origin.createBroadcast(path);
-	broadcast.announce();
+	const broadcastPublication = origin.createBroadcast(path);
+	const broadcast = broadcastPublication.broadcast;
+	broadcastPublication.announce();
 	return broadcast;
 }
 
@@ -783,8 +784,7 @@ for (const [name, protocol, version] of [
 			);
 			expect(datagram?.sequence).toBe(7);
 			expect(dec.decode(datagram?.payload)).toBe("dgram");
-			// Drafts 14-16 cannot declare TIMESCALE, so their datagrams arrive untimed.
-			if (timed && !["draft-14", "draft-15", "draft-16"].includes(name)) {
+			if (timed) {
 				expect(datagram?.timestamp?.as(Timescale.MILLI)).toBe(1234);
 			} else {
 				expect(datagram?.timestamp).toBeUndefined();
@@ -950,8 +950,9 @@ test("integration: a peer is served the cheaper route it was offered, not the lo
 	const path = Path.from("test");
 	// One publisher instance, so the two compete on cost alone.
 	const epoch = Epoch.mint();
-	const local = origin.createBroadcast(path);
-	local.announce({ epoch, cost: 5n });
+	const localPublication = origin.createBroadcast(path);
+	const local = localPublication.broadcast;
+	localPublication.announce({ epoch, cost: 5n });
 	const dynamic = origin.dynamicRoute(path, { epoch, cost: 1n });
 
 	const [client, server] = await Promise.all([
@@ -2583,11 +2584,12 @@ test("create then announce is discoverable on the wire", async () => {
 	]);
 
 	const announced = client.announced();
-	const broadcast = origin.createBroadcast(Path.from("later"));
+	const broadcastPublication = origin.createBroadcast(Path.from("later"));
+	const broadcast = broadcastPublication.broadcast;
 	broadcast.createTrack("chat", { timescale: Timescale.MILLI });
 
 	const pending = announced.next();
-	broadcast.announce();
+	broadcastPublication.announce();
 	const entry = await pending;
 	expect(entry?.prefix).toBe("later" as Path.Valid);
 	expect(entry?.kind).toBe("start");

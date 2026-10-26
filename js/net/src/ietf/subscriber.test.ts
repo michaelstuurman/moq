@@ -822,7 +822,6 @@ test("an object without a Timestamp on a TIMESCALE track is malformed", async ()
 });
 
 test("a compact END_OF_TRACK at object 5 with properties is subgroup 5, refused without ending the track", async () => {
-	// Draft 14 allows the properties and draft 15 refuses them, but the subgroup is refused first.
 	for (const version of [Version.DRAFT_18]) {
 		const { subscriber, track } = await subscribeTrack({ version });
 		const header = stampedGroup(0);
@@ -1179,8 +1178,8 @@ test("a clear FIRST_OBJECT past object 0 is dropped", async () => {
 
 /**
  * A header-only stream with FIRST_OBJECT clear carries none of its group, so it is dropped
- * like any headless stream. With the bit set, or on drafts 14-17 that cannot clear it, the
- * same stream is an empty group. Matches the Rust rule.
+ * like any headless stream. With the bit set, the same stream is an
+ * empty group. Matches the Rust rule.
  */
 test.each([
 	[VERSION, false, [4]],

@@ -22,7 +22,7 @@ async function session(protocol: string, client: string | undefined, server: str
 	return { client: peers[0], server: peers[1] };
 }
 
-// The lite Setup Stream, a draft-17+ uni SETUP, and a draft-14 to 16 bidi SETUP each carry it on their own path.
+// The lite Setup Stream and the moq-transport uni SETUP each carry it on their own path.
 for (const protocol of [Lite.ALPN_06, Ietf.ALPN.DRAFT_18]) {
 	test(`each side reads the other's implementation over ${protocol}`, async () => {
 		expect(await session(protocol, "client/1", "server/2")).toEqual({ client: "server/2", server: "client/1" });
