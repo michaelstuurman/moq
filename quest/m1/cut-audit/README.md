@@ -63,7 +63,6 @@ leaving JS-only redesigns of `js/net` to [rs2ts](/quest/m2/rs2ts/README.md).
 - [Withdrawing a moq-transport FETCH or TRACK_STATUS ends it](/quest/m1/cut-audit/ietf-withdraw-resolve.md) - withdrawal during resolution releases the request
 - [A media hole in the player keeps the timeline](/quest/m1/cut-audit/watch-audio-hole.md) - a skipped group re-primes decoders without flushing audio or re-anchoring sync
 - [A description-less AAC rendition means one thing](/quest/m1/cut-audit/aac-description-less.md) - every player and exporter agrees on the frame format
-- [A malformed MKV track fails the import](/quest/m1/cut-audit/mkv-import-errors.md) - no silently missing tracks or collapsed timestamps
 - [RTMP sessions follow one strict path](/quest/m1/cut-audit/rtmp-session-strict.md) - idle sockets, repeated requests, rewinds, and stalled servers are handled
 - [The export jitter buffer admits only frames due within its window](/quest/m1/cut-audit/jitter-admission.md) - a fast track is backpressured, not buffered without bound
 - [Peer-driven receive loops yield on a per-message budget](/quest/m1/cut-audit/peer-loop-budget.md) - small-message floods cannot monopolize a session driver
