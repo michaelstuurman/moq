@@ -6,6 +6,10 @@ How to update your code for each breaking change, newest first.
 
 The hand-written crate never published as moq-c: a libmoq 0.6 user applies these entries before moving to the generated API.
 
+### Paths with an empty segment are refused (#6648)
+
+`moq_origin_create_broadcast`, `moq_origin_dynamic`, `moq_origin_announced_broadcast`, and `moq_origin_request` return an error for a path with a leading, trailing, or doubled `/` instead of collapsing it. Pass the canonical path, such as `room/cam`. The generated API refuses the same paths.
+
 ### Sessions report a lifecycle snapshot
 
 `moq_session_connect` and `moq_session_request_accept` take a `moq_state_callback` instead of a `moq_status_callback`: `void on_state(void *user_data, const moq_connection_state *state)`.
