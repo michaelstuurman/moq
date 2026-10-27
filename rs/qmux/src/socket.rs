@@ -54,6 +54,8 @@ impl RateFilter {
 	pub(crate) fn update(&mut self, now: moq_clock::Instant, rate: u64, app_limited: bool) -> u64 {
 		let expired = |at: &moq_clock::Instant| now.saturating_duration_since(*at) > Self::WINDOW;
 		let usable = !app_limited || self.samples.front().is_none_or(|(_, max)| rate >= *max);
+		// A rejected sample changes nothing, not even expiry: it is no evidence the
+		// path got slower, so only a usable sample may retire an old maximum.
 		if usable {
 			while self.samples.front().is_some_and(|(at, _)| expired(at)) {
 				self.samples.pop_front();
@@ -62,10 +64,6 @@ impl RateFilter {
 				self.samples.pop_back();
 			}
 			self.samples.push_back((now, rate));
-		} else {
-			while self.samples.len() > 1 && self.samples.front().is_some_and(|(at, _)| expired(at)) {
-				self.samples.pop_front();
-			}
 		}
 		self.samples.front().map_or(rate, |(_, max)| *max)
 	}
@@ -379,6 +377,19 @@ mod rate_filter_tests {
 		// A real, lower measurement waits for the older maximum to expire.
 		assert_eq!(f.update(at(t, 1_000), 5_000_000, false), 80_000_000);
 		assert_eq!(f.update(at(t, 10_500), 5_000_000, false), 5_000_000);
+	}
+
+	#[test]
+	fn app_limited_samples_do_not_expire_the_maximum() {
+		let t = moq_clock::now();
+		let mut f = RateFilter::default();
+		f.update(t, 80_000_000, false);
+		f.update(at(t, 1_000), 5_000_000, false);
+		// Both measurements have expired, but an app-limited sample cannot retire them.
+		assert_eq!(f.update(at(t, 20_000), 1_000_000, true), 80_000_000);
+		assert_eq!(f.update(at(t, 30_000), 1_000_000, true), 80_000_000);
+		// The next real measurement does.
+		assert_eq!(f.update(at(t, 31_000), 4_000_000, false), 4_000_000);
 	}
 
 	#[test]
