@@ -55,9 +55,10 @@ function delayMillis(value: number): ReturnType<typeof u53> | undefined {
 	return u53(Math.ceil(value));
 }
 
-// Hang stores jitter as whole milliseconds; round MSF's fractional value up. u53 still rejects a negative one.
+// Hang stores jitter as whole milliseconds; round MSF's fractional value up. A negative value goes
+// to u53 unrounded, so it is rejected even between -1 and 0, where rounding up would give -0.
 function jitterMillis(value: number): ReturnType<typeof u53> {
-	return u53(Math.ceil(value));
+	return u53(value < 0 ? value : Math.ceil(value));
 }
 
 function toVideoConfig(track: Msf.Track): Catalog.VideoConfig | undefined {

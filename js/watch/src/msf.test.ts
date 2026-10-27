@@ -96,10 +96,15 @@ test("rounds a fractional MSF jitter up, and rejects a negative one", () => {
 	expect(hang.video?.renditions.video?.jitter).toBe(u53(34));
 	expect(hang.audio?.renditions.audio?.jitter).toBe(u53(21));
 
-	const negative: Msf.Catalog = {
-		tracks: [{ name: "audio", packaging: "loc", role: "audio", codec: "opus", jitter: -1 }],
-	};
-	expect(() => toHang(negative)).toThrow();
+	for (const jitter of [-1, -0.5]) {
+		const negative: Msf.Catalog = {
+			tracks: [
+				{ name: "video", packaging: "loc", role: "video", codec: "vp09.00.10.08", jitter },
+				{ name: "audio", packaging: "loc", role: "audio", codec: "opus", jitter },
+			],
+		};
+		expect(() => toHang(negative)).toThrow();
+	}
 });
 
 test("keeps loc packaging as the loc container", () => {
