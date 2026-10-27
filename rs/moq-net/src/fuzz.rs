@@ -1501,7 +1501,7 @@ impl RequestValidity {
 	/// Capture the lifetime of one pending request.
 	pub fn start(&self) -> kio::Consumer<()> {
 		match self.0.start() {
-			crate::model::broadcast::RequestValidity::Period(route, _) => route,
+			crate::model::broadcast::RequestValidity::Period(route, ..) => route,
 			_ => unreachable!("a source watch always captures a route lease"),
 		}
 	}
