@@ -176,7 +176,7 @@ impl Relay {
 			for tier in &self.tiers {
 				moq_net::fuzz::bump_publisher_bytes(
 					&self.registry,
-					moq_net::Path::new(&path.as_str()).unwrap(),
+					moq_net::Path::new(path.as_str()).unwrap(),
 					tier,
 					1,
 				);
@@ -308,7 +308,7 @@ impl Presence {
 			.map(|label| {
 				registry
 					.tier(stats::Tier::default())
-					.session(moq_net::Path::new(&label.as_str()).unwrap())
+					.session(moq_net::Path::new(label.as_str()).unwrap())
 			})
 			.collect();
 		// One set of wire counters per connection, independently of held presence tracks.
