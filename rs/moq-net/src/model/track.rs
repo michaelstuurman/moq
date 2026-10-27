@@ -1795,7 +1795,7 @@ impl TrackState {
 
 	/// Record that the live feed delivered `sequence`, then fold the gaps that aged out.
 	fn record_arrival(&mut self, sequence: u64, now: crate::time::Instant) {
-		self.arrivals.account(sequence..sequence.saturating_add(1), now);
+		self.arrivals.arrive(sequence, now);
 		// A feed still delivering keeps the gap above its last arrival open.
 		if self.tail.is_some() {
 			self.tail = Some(now);

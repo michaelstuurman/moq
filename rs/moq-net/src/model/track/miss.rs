@@ -767,6 +767,106 @@ mod tests {
 	use super::*;
 
 	#[moq_clock::test]
+	async fn a_recreated_accounted_group_clears_its_earlier_fill_refusal() {
+		let broadcast = crate::broadcast::Info::default().produce();
+		let mut track = broadcast
+			.create_track("recreated", crate::track::Info::default())
+			.unwrap();
+		let budget = Duration::from_secs(5);
+		let _reader = track.subscribe(Subscription::default().with_max_delay(budget));
+		for sequence in [0, 4] {
+			track
+				.create_group(crate::group::Info { sequence })
+				.unwrap()
+				.finish()
+				.unwrap();
+		}
+		track.start_at(3).unwrap();
+		let mut misses = Misses::default();
+		let mut given_up = Vec::new();
+		let waiter = kio::Waiter::noop();
+		let state = track.state.read();
+		let drift = Drift {
+			budget,
+			bounded: false,
+			edge: state.drift_edge(&Servable::ALL),
+		};
+		let asks = misses.judge(
+			&state,
+			(0, 0, None),
+			|span| [span].into_iter().collect(),
+			&drift,
+			&mut given_up,
+			&waiter,
+		);
+		let fills = state.fills.clone();
+		drop(state);
+		misses.ask(
+			&track.state.consume(),
+			&fills,
+			&asks,
+			&Asking {
+				priority: 0,
+				max_delay: Some(budget),
+				order: Order::Ascending,
+			},
+			&mut given_up,
+		);
+		assert!(
+			misses.refused.contains(&2),
+			"a missing fill is refused while the live gap stays open"
+		);
+
+		// An arrival and cut happen while the cursor is idle. The drop suppresses asking
+		// again, and reclaiming the cut removes the cached incarnation before the probe.
+		track
+			.create_group(crate::group::Info { sequence: 2 })
+			.unwrap()
+			.abort(Error::Cancel)
+			.unwrap();
+		track.drop_groups(2..3, crate::StreamError::Old);
+		track.modify().unwrap().uncache(2);
+		let state = track.state.read();
+		assert!(state.drops.contains_key(&2));
+		assert!(!state.lookup.contains_key(&2));
+		misses.judge(
+			&state,
+			(0, 0, None),
+			|_| panic!("the edge has not moved"),
+			&drift,
+			&mut given_up,
+			&waiter,
+		);
+		assert!(misses.refused.contains(&2));
+		let revision = state.arrivals.changes().revision();
+		drop(state);
+		track
+			.create_group(crate::group::Info { sequence: 2 })
+			.unwrap()
+			.finish()
+			.unwrap();
+		let state = track.state.read();
+		assert!(state.drops.is_empty(), "recreation removed the last drop run");
+		assert!(state.arrivals.covers(2..3));
+		assert!(
+			state.arrivals.changes().revision() > revision,
+			"the real incarnation invalidates its current run"
+		);
+		misses.judge(
+			&state,
+			(0, 0, None),
+			|_| panic!("recreation extends no span"),
+			&drift,
+			&mut given_up,
+			&waiter,
+		);
+		assert!(
+			!misses.refused.contains(&2),
+			"the live cached incarnation is no longer refused"
+		);
+		assert!(given_up.is_empty(), "a live recreation is never given up");
+	}
+	#[moq_clock::test]
 	async fn unchanged_probes_and_late_arrivals_keep_other_gap_deadlines() {
 		let broadcast = crate::broadcast::Info::default().produce();
 		let track = broadcast.create_track("sparse", crate::track::Info::default()).unwrap();

@@ -155,6 +155,19 @@ impl Ledger {
 		self.changes.insert(first..end);
 	}
 
+	/// Account a live arrival, refreshing a cached incarnation even if its sequence was
+	/// accounted before. Its gap ages stay unchanged, but readers must revisit a refusal.
+	pub fn arrive(&mut self, sequence: u64, now: Instant) {
+		let revision = self.changes.revision();
+		self.account(sequence..sequence.saturating_add(1), now);
+		if self.changes.revision() == revision
+			&& let Some((&start, run)) = self.runs.range(..=sequence).next_back()
+			&& sequence < run.end
+		{
+			self.changes.insert(start..run.end);
+		}
+	}
+
 	/// Fold every gap older than the grace into the runs around it.
 	pub fn expire(&mut self, now: Instant) {
 		let Some((&first, _)) = self.runs.first_key_value() else {
