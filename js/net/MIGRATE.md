@@ -6,7 +6,7 @@ How to update your code for each breaking change, newest first.
 
 ### `Path.from` refuses empty segments (#6648)
 
-`Path.from` throws on a component with a leading, trailing, or doubled `/` instead of collapsing it, so a path has one spelling, and `Path.decode` refuses one off the wire.
+`Path.from` throws on a component with a leading, trailing, or doubled `/` instead of collapsing it, so a path has one spelling, and `Path.decode` refuses one off the wire. A moq-transport namespace field ending in `/`, which escapes to an empty segment, is refused too.
 Pass canonical components: `Path.from("room/cam")` or `Path.from(prefix, "cam")`, where an empty component is the root, rather than ``Path.from(`${prefix}/cam`)`` or `Path.from("room/")`.
 
 ### Publication handles own announcement control

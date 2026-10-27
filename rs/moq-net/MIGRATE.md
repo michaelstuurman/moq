@@ -36,7 +36,7 @@ Replace `moq_net::time::now()` with `moq_net::time::Instant::now()`, the one way
 `Path::new` returns `Result<Path, Error>` and fails with `Error::EmptySegment` on a leading, trailing, or doubled `/` instead of collapsing it, so a path has one spelling. The empty path is still the root.
 `AsPath` is implemented only for `Path` and `&Path`, so every API taking a path takes one built up front: replace `origin.create_broadcast("room/cam")` with `origin.create_broadcast(Path::new("room/cam")?)`, and convert an owned `String` with `PathOwned::try_from(s)?` or `s.parse::<PathOwned>()?`. `From<&str>` and `From<String>` are gone.
 A prefix needs no trailing `/`: `Path::new("room")?` covers `room/cam`.
-moq-lite decoding refuses a path with an empty segment as a protocol violation.
+moq-lite decoding refuses a path with an empty segment as a protocol violation, and moq-transport decoding refuses a namespace field ending in `/`, which escapes to one.
 
 ### Published names refuse navigation segments
 

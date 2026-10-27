@@ -306,9 +306,9 @@ impl Discovery {
 
 /// `path` and every prefix above it, up to the root, narrowest first.
 fn covering(path: &Path) -> Vec<PathOwned> {
-	std::iter::successors(Some(path.as_str()), |path| {
-		(!path.is_empty()).then(|| path.rfind('/').map_or("", |slash| &path[..slash]))
-	})
-	.map(|path| Path::from_valid(path).to_owned())
-	.collect()
+	(0..=path.parts().count())
+		.rev()
+		.filter_map(|n| path.head(n))
+		.map(|head| head.to_owned())
+		.collect()
 }

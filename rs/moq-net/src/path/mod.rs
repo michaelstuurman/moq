@@ -117,18 +117,6 @@ impl<'a> Path<'a> {
 		Self(Repr::Borrowed(s))
 	}
 
-	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
-	pub(crate) fn from_escaped(s: String) -> PathOwned {
-		if s.is_empty() {
-			Path::empty()
-		} else {
-			Path(Repr::Shared {
-				buf: s.into(),
-				start: 0,
-			})
-		}
-	}
-
 	// A copy of this path skipping the first `n` bytes, reusing the shared buffer when possible.
 	pub(crate) fn slice_from(&'a self, n: usize) -> Path<'a> {
 		match &self.0 {
@@ -208,6 +196,31 @@ impl<'a> Path<'a> {
 		}
 
 		Some(self.slice_from(prefix.len() + 1))
+	}
+
+	/// The first `n` segments, or `None` if the path has fewer.
+	///
+	/// # Examples
+	/// ```
+	/// use moq_net::Path;
+	///
+	/// let path = Path::new("foo/bar/baz")?;
+	/// assert_eq!(path.head(2), Some(Path::new("foo/bar")?));
+	/// assert_eq!(path.head(0), Some(Path::empty()));
+	/// assert_eq!(path.head(4), None);
+	/// # Ok::<(), moq_net::Error>(())
+	/// ```
+	pub fn head(&self, n: usize) -> Option<Path<'_>> {
+		if n == 0 {
+			return Some(Path::empty());
+		}
+		let s = self.as_str();
+		let mut ends = s
+			.match_indices('/')
+			.map(|(i, _)| i)
+			.chain((!s.is_empty()).then_some(s.len()));
+		// A run of whole segments of a valid path is itself valid.
+		ends.nth(n - 1).map(|end| Path(Repr::Borrowed(&s[..end])))
 	}
 
 	/// Iterate over the slash-separated parts of the path.

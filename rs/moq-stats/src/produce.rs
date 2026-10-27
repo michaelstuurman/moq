@@ -862,8 +862,8 @@ fn group_info() -> track::Info {
 }
 
 impl GroupTrack {
-	fn create(broadcast: &broadcast::Producer, group: &str) -> Result<Self, moq_net::Error> {
-		let name = crate::group_track(Path::new(group).expect("a group key is a run of a path's segments"));
+	fn create(broadcast: &broadcast::Producer, group: &Path) -> Result<Self, moq_net::Error> {
+		let name = crate::group_track(group);
 		let track = broadcast.create_track(name.as_str(), group_info())?;
 		Ok(Self {
 			name,
@@ -1016,7 +1016,7 @@ impl NodePublisher {
 
 		let mut groups = HashMap::new();
 		if task.depth == 0 {
-			match GroupTrack::create(&broadcast, "") {
+			match GroupTrack::create(&broadcast, &Path::empty()) {
 				Ok(track) => {
 					groups.insert(String::new(), track);
 				}
@@ -1099,13 +1099,13 @@ impl NodePublisher {
 			slots.seen = tick;
 			let publisher = slots.publisher.observe(entry.publisher);
 			let subscriber = slots.subscriber.observe(entry.subscriber);
-			let key = group_key(entry.path.as_str(), depth);
+			let key = group_key(&entry.path, depth);
 			if let Some(track) = Self::group(broadcast, groups, key) {
 				track.add_traffic(entry, publisher, subscriber);
 			}
 		}
 		for entry in &report.sessions {
-			let key = group_key(entry.label.as_str(), depth);
+			let key = group_key(&entry.label, depth);
 			if let Some(track) = Self::group(broadcast, groups, key) {
 				track.add_sessions(&entry.label, &entry.tier, entry.presence, entry.closed);
 			}
@@ -1116,20 +1116,20 @@ impl NodePublisher {
 	fn group<'a>(
 		broadcast: &broadcast::Producer,
 		groups: &'a mut HashMap<String, GroupTrack>,
-		key: &str,
+		key: Path<'_>,
 	) -> Option<&'a mut GroupTrack> {
-		if !groups.contains_key(key) {
-			match GroupTrack::create(broadcast, key) {
+		if !groups.contains_key(key.as_str()) {
+			match GroupTrack::create(broadcast, &key) {
 				Ok(track) => {
-					groups.insert(key.to_string(), track);
+					groups.insert(key.as_str().to_string(), track);
 				}
 				Err(err) => {
-					tracing::warn!(?err, group = key, "stats: failed to create group track");
+					tracing::warn!(?err, group = key.as_str(), "stats: failed to create group track");
 					return None;
 				}
 			}
 		}
-		groups.get_mut(key)
+		groups.get_mut(key.as_str())
 	}
 
 	/// End group tracks that lingered empty, publish the pending frames, then
@@ -1337,14 +1337,8 @@ struct SideSlots {
 }
 
 /// The leading `depth` segments of `path`, the group it publishes under.
-fn group_key(path: &str, depth: usize) -> &str {
-	if depth == 0 {
-		return "";
-	}
-	match path.match_indices('/').nth(depth - 1) {
-		Some((end, _)) => &path[..end],
-		None => path,
-	}
+fn group_key<'a>(path: &'a Path<'_>, depth: usize) -> Path<'a> {
+	path.head(depth).unwrap_or_else(|| path.borrow())
 }
 
 /// `<prefix>/node/<node>`, or `<prefix>/node` without a node. The fixed `node`
@@ -2778,10 +2772,12 @@ mod tests {
 
 	#[test]
 	fn group_key_uses_leading_segments() {
-		assert_eq!(group_key("acme/room/cam", 0), "");
-		assert_eq!(group_key("acme/room/cam", 1), "acme");
-		assert_eq!(group_key("acme/room/cam", 2), "acme/room");
-		assert_eq!(group_key("acme/room", 3), "acme/room");
+		let path = Path::new("acme/room/cam").unwrap();
+		assert_eq!(group_key(&path, 0).as_str(), "");
+		assert_eq!(group_key(&path, 1).as_str(), "acme");
+		assert_eq!(group_key(&path, 2).as_str(), "acme/room");
+		let path = Path::new("acme/room").unwrap();
+		assert_eq!(group_key(&path, 3).as_str(), "acme/room");
 	}
 
 	/// A name no tier could produce is still rejected.
