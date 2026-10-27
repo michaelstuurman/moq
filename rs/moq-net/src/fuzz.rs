@@ -98,7 +98,7 @@ const LITE_VERSIONS: &[lite::Version] = &[
 const IETF_VERSIONS: &[ietf::Version] = &[ietf::Version::Draft18, ietf::Version::Draft22];
 
 /// How many types [`lite_wire`] dispatches over.
-const LITE_KINDS: u8 = 24;
+const LITE_KINDS: u8 = 30;
 
 /// How many types [`ietf_wire`] dispatches over.
 const IETF_KINDS: u8 = 27;
@@ -124,8 +124,14 @@ where
 	T: Decode<V> + Encode<V>,
 	V: Copy + Into<Form>,
 {
-	let Ok((decoded, _)) = T::decode_slice(data, version) else {
-		return false;
+	let mut reader = Decoder::new(data, version.into());
+	let decoded = match T::decode(&mut reader, version) {
+		Ok(decoded) => decoded,
+		Err(coding::DecodeError::Short) => {
+			assert!(reader.need() > data.len(), "short read inside a complete body");
+			return false;
+		}
+		Err(_) => return false,
 	};
 
 	let Ok(first) = decoded.encode_bytes(version) else {
@@ -217,8 +223,14 @@ pub fn lite_wire(data: &[u8]) -> bool {
 		19 => datagram(rest, version),
 		20 => roundtrip::<lite::Parameters, _>(rest, version),
 		21 => roundtrip::<lite::ietf::TrackProperties, _>(rest, version),
-		22 => roundtrip::<crate::setup::Client, _>(rest, crate::Version::Lite(version)),
-		23 => roundtrip::<crate::setup::Server, _>(rest, crate::Version::Lite(version)),
+		22 => roundtrip::<lite::Tracks<'static>, _>(rest, version),
+		23 => roundtrip::<lite::TracksEvent<'static>, _>(rest, version),
+		24 => roundtrip::<lite::Auth, _>(rest, version),
+		25 => roundtrip::<lite::AuthOk, _>(rest, version),
+		26 => roundtrip::<lite::AuthError, _>(rest, version),
+		27 => roundtrip::<lite::AuthReply, _>(rest, version),
+		28 => roundtrip::<crate::setup::Client, _>(rest, crate::Version::Lite(version)),
+		29 => roundtrip::<crate::setup::Server, _>(rest, crate::Version::Lite(version)),
 		_ => unreachable!("kind is taken modulo LITE_KINDS"),
 	}
 }
@@ -1041,6 +1053,17 @@ pub fn seeds() -> Vec<Seed> {
 		}
 	}
 
+	// A typed empty TRACKS_SYNCED and AUTH_OK reply need nonuniform envelope bytes.
+	for (kind, body) in [(23, &[4, 0][..]), (27, &[0, 3, 0, 0, 0][..])] {
+		let mut data = vec![(LITE_VERSIONS.len() - 1) as u8, kind];
+		data.extend_from_slice(body);
+		seeds.push(Seed {
+			target: "lite",
+			kind,
+			data,
+		});
+	}
+
 	for version in 0..IETF_VERSIONS.len() as u8 {
 		for kind in 0..IETF_KINDS {
 			for fill in FILLS {
@@ -1098,7 +1121,7 @@ pub fn seeds() -> Vec<Seed> {
 		let (Ok(client), Ok(server)) = (client.encode_bytes(outer), server.encode_bytes(outer)) else {
 			continue;
 		};
-		for (kind, message) in [(22, client), (23, server)] {
+		for (kind, message) in [(28, client), (29, server)] {
 			let mut data = vec![index as u8, kind];
 			data.extend(message);
 			seeds.push(Seed {
