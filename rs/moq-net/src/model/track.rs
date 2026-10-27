@@ -446,6 +446,7 @@ pub(crate) struct TrackState {
 	drops: RangeMap<u64, StreamError>,
 	// Bumped on every insert into `drops`, so a cursor rescans it only after a change.
 	drops_revision: u64,
+	drops_changes: ledger::Changes,
 
 	// Whether the cache reflects the live feed: readers get nothing from it while it does
 	// not, since how stale it is cannot be told; fetches still do. A track is live from
@@ -886,7 +887,26 @@ impl TrackState {
 			return;
 		}
 		self.cache.wakes().arrived(groups.clone());
-		self.drops.insert(groups, err);
+		self.change_drops(groups, Some(err));
+	}
+
+	/// Keep the change index aligned with the range map, including the neighbours an
+	/// insertion coalesces and the two pieces a removal can leave.
+	fn change_drops(&mut self, groups: ops::Range<u64>, err: Option<StreamError>) {
+		let mut affected = groups.start.saturating_sub(1)..groups.end.saturating_add(1);
+		let old: Vec<_> = self.drops.overlapping(&affected).map(|(run, _)| run.clone()).collect();
+		for run in old {
+			self.drops_changes.remove(run.start);
+			affected.start = affected.start.min(run.start);
+			affected.end = affected.end.max(run.end);
+		}
+		match err {
+			Some(err) => self.drops.insert(groups, err),
+			None => self.drops.remove(groups),
+		}
+		for (run, _) in self.drops.overlapping(&affected) {
+			self.drops_changes.insert(run.clone());
+		}
 		self.drops_revision += 1;
 	}
 
@@ -1908,8 +1928,7 @@ impl TrackState {
 			&& self.drops.contains_key(&sequence)
 			&& let Some(end) = sequence.checked_add(1)
 		{
-			self.drops.remove(sequence..end);
-			self.drops_revision += 1;
+			self.change_drops(sequence..end, None);
 		}
 		let now = self.cache.pool().now_wall();
 		if visible {
@@ -6384,7 +6403,17 @@ impl Cursor {
 			misses.judge(
 				&state,
 				(from, revision, cap),
-				|| below(window.missable(from), cap),
+				|span| {
+					let end = cap.map_or(*span.end(), |cap| (*span.end()).min(cap.saturating_sub(1)));
+					if cap == Some(0) || *span.start() > end {
+						return RangeInclusiveSet::new();
+					}
+					window
+						.missable(*span.start())
+						.take_while(|run| *run.start() <= end)
+						.map(|run| *run.start()..=(*run.end()).min(end))
+						.collect()
+				},
 				drift,
 				&mut given_up,
 				waiter,
@@ -8073,6 +8102,35 @@ mod test {
 	/// normally born from a [`broadcast::Producer`].
 	fn track_producer(name: impl Into<Arc<str>>, info: impl Into<Option<Info>>) -> Producer {
 		Producer::new(Arc::new(broadcast::Info::default()), name, info)
+	}
+
+	#[test]
+	fn drop_changes_follow_split_coalesced_and_recreated_runs() {
+		let producer = track_producer("test", Info::default());
+		let indexed = || {
+			let state = producer.state.read();
+			let mut changed: Vec<_> = state.drops_changes.since(0).collect();
+			changed.sort_by_key(|run| run.start);
+			let current: Vec<_> = state.drops.iter().map(|(run, _)| run.clone()).collect();
+			assert_eq!(changed, current, "one change entry per current drop run");
+		};
+		producer.drop_groups(10..20, StreamError::Old);
+		producer.drop_groups(20..30, StreamError::Old);
+		indexed();
+		producer.drop_groups(15..25, StreamError::Cancel);
+		indexed();
+		producer
+			.create_group(group::Info { sequence: 17 })
+			.unwrap()
+			.finish()
+			.unwrap();
+		indexed();
+		producer.drop_groups(14..26, StreamError::Old);
+		indexed();
+		assert_eq!(
+			producer.state.read().drops_changes.since(0).collect::<Vec<_>>(),
+			vec![10..30]
+		);
 	}
 
 	/// Let `duration` pass on the cache pool `producer`'s groups charge into.
