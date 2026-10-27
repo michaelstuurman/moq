@@ -44,4 +44,3 @@ Public API: breaking renames and deletions in every language. Wire: none.
 ## Required
 
 - [moq-net names say one thing](/quest/m1/api-audit/net-names.md) - lands group demand's first `wanted` shape
-- [One lifecycle vocabulary](/quest/m1/api-audit/lifecycle.md) - settles close and demand semantics this renames
