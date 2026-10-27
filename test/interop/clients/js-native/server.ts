@@ -26,7 +26,7 @@ const marker = markerPublication.broadcast;
 const ready = marker.createTrack("ready");
 const markerGroup = ready.appendGroup();
 markerGroup.writeFrame({ payload: new Uint8Array([42]) });
-markerGroup.close();
+markerGroup.finish();
 markerPublication.announce();
 
 type Socket = {
@@ -129,7 +129,7 @@ try {
 	while (demand.wanted.peek() === undefined) await demand.wanted.changed();
 	const group = video.appendGroup();
 	group.writeFrame({ payload: new Uint8Array(32) });
-	group.close();
+	group.finish();
 	assert.equal((await commands.next()).value, "first group");
 	await initial.control.writer.u53(GoAway.id);
 	await new GoAway({
@@ -141,7 +141,7 @@ try {
 	initial.connection.abort();
 	const next = video.appendGroup();
 	next.writeFrame({ payload: new Uint8Array(32).fill(1) });
-	next.close();
+	next.finish();
 	assert.equal((await commands.next()).value, "done");
 	console.error("js goaway redirect resumed");
 } finally {

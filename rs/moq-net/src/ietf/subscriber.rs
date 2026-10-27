@@ -241,11 +241,11 @@ impl State {
 				request.reject(Error::Cancel);
 			}
 			if let Some(producer) = track.producer {
-				let _ = producer.close();
+				let _ = producer.abort(Error::Stream(crate::StreamError::Session(SessionError::Cancel)));
 			}
 		}
 		for (_, producer) in self.lingering.drain() {
-			let _ = producer.close();
+			let _ = producer.abort(Error::Stream(crate::StreamError::Session(SessionError::Cancel)));
 		}
 	}
 }
@@ -3870,7 +3870,7 @@ impl Subscriber {
 		}
 		let resume = loop {
 			let step = kio::wait(|waiter| {
-				if idle.track.poll_closed(waiter).is_ready() {
+				if idle.track.poll_aborted(waiter).is_ready() {
 					return Poll::Ready(Step::Closed);
 				}
 				if gate.poll_denied(waiter).is_ready() {
@@ -4072,7 +4072,7 @@ impl Subscriber {
 				let mut opening = this.session.clone();
 				let mut stream = kio::wait(|waiter| {
 					validity.check(waiter)?;
-					if let Poll::Ready(err) = track.poll_closed(waiter) {
+					if let Poll::Ready(err) = track.poll_aborted(waiter) {
 						return Poll::Ready(Err(err));
 					}
 					Stream::poll_open(&mut opening, this.version, &mut waiter.context())
@@ -4452,7 +4452,7 @@ impl Subscriber {
 				&mut reading
 			)));
 			kio::wait(|waiter| {
-				if let Poll::Ready(err) = track.poll_closed(waiter) {
+				if let Poll::Ready(err) = track.poll_aborted(waiter) {
 					return Poll::Ready(Err(err));
 				}
 				waiter.poll_future(open.as_mut())
@@ -4507,10 +4507,10 @@ impl Subscriber {
 		ingest.expected_first = Some(start);
 		let res = {
 			kio::wait(|waiter| {
-				if let Poll::Ready(err) = track.poll_closed(waiter) {
+				if let Poll::Ready(err) = track.poll_aborted(waiter) {
 					return Poll::Ready(Err(err));
 				}
-				if let Poll::Ready(err) = observing.poll_closed(waiter) {
+				if let Poll::Ready(err) = observing.poll_aborted(waiter) {
 					return Poll::Ready(Err(err));
 				}
 				ingest.poll(stream, &mut producer, waiter)
@@ -4868,7 +4868,7 @@ impl Subscriber {
 	) -> Result<Option<(group::Producer, u64)>, Error> {
 		reading.park();
 		let settled = kio::wait(|waiter| {
-			if let Poll::Ready(err) = track.poll_closed(waiter) {
+			if let Poll::Ready(err) = track.poll_aborted(waiter) {
 				return Poll::Ready(Err(err));
 			}
 
@@ -5044,7 +5044,7 @@ impl Subscriber {
 				multiple
 			)));
 			kio::wait(|waiter| {
-				if let Poll::Ready(err) = track.poll_closed(waiter) {
+				if let Poll::Ready(err) = track.poll_aborted(waiter) {
 					return Poll::Ready(Err(err));
 				}
 				waiter.poll_future(serve.as_mut())
@@ -5342,7 +5342,7 @@ impl Subscriber {
 		let mut opening = self.session.clone();
 		let mut stream = match kio::wait(|waiter| {
 			validity.check(waiter)?;
-			if let Poll::Ready(err) = fill.poll_closed(waiter) {
+			if let Poll::Ready(err) = fill.poll_aborted(waiter) {
 				return Poll::Ready(Err(err));
 			}
 			if fill.poll_unwanted_groups(run.clone(), waiter).is_ready() {
@@ -5421,7 +5421,7 @@ impl Subscriber {
 					if let Err(err) = validity.check(waiter) {
 						return Poll::Ready(SetupResponse::Cancelled(err));
 					}
-					if let Poll::Ready(err) = fill.poll_closed(waiter) {
+					if let Poll::Ready(err) = fill.poll_aborted(waiter) {
 						return Poll::Ready(SetupResponse::Cancelled(err));
 					}
 					if let Poll::Ready(res) = response {
@@ -5539,7 +5539,7 @@ impl Subscriber {
 					Poll::Pending => {}
 				}
 			}
-			if let Poll::Ready(err) = fill.poll_closed(waiter) {
+			if let Poll::Ready(err) = fill.poll_aborted(waiter) {
 				// Completed history stays cached. Only this FETCH's unfinished group is
 				// ours to abort; closing a track never cascades into cached siblings.
 				let state = slot.read();
@@ -5667,7 +5667,7 @@ impl Subscriber {
 				let mut aborted = Error::Cancel;
 				slot.poll(waiter, |state| match &**state {
 					GroupFetch::Cancelled => Poll::Ready(()),
-					GroupFetch::Receiving(Some(group)) => group.poll_closed(waiter).map(|err| aborted = err),
+					GroupFetch::Receiving(Some(group)) => group.poll_aborted(waiter).map(|err| aborted = err),
 					_ => Poll::Pending,
 				})
 				.map(|_| Err(aborted))
@@ -13503,7 +13503,10 @@ mod stitch_tests {
 		let mut stream = h.stream().await;
 		let res = h.subscriber.clone().recv_fill(&mut stream).await;
 		assert!(matches!(res, Err(Error::MalformedTrack)), "{res:?}");
-		assert!(matches!(h.track.closed().now_or_never(), Some(Error::MalformedTrack)));
+		assert!(matches!(
+			h.track.closed().now_or_never(),
+			Some(Err(Error::MalformedTrack))
+		));
 	}
 
 	/// A subgroup object without a Timestamp on a timed track makes the whole track
@@ -13532,7 +13535,10 @@ mod stitch_tests {
 		let mut stream = h.stream().await;
 		let res = h.subscriber.clone().recv_group(&mut stream).await;
 		assert!(matches!(res, Err(Error::MalformedTrack)), "{res:?}");
-		assert!(matches!(h.track.closed().now_or_never(), Some(Error::MalformedTrack)));
+		assert!(matches!(
+			h.track.closed().now_or_never(),
+			Some(Err(Error::MalformedTrack))
+		));
 	}
 
 	/// END_OF_TRACK after a group's last object ends the track right after that group.
@@ -13547,7 +13553,7 @@ mod stitch_tests {
 
 		h.subscriber.clone().recv_group(&mut stream).await.unwrap();
 		assert_eq!(
-			h.track.end(),
+			h.track.finished(),
 			Some(track::Position {
 				group: SEQUENCE,
 				frame: 1
@@ -13569,7 +13575,7 @@ mod stitch_tests {
 		let h = Harness::new(Fill::Done, vec![marker]);
 		let mut stream = h.stream().await;
 		h.subscriber.clone().recv_group(&mut stream).await.unwrap();
-		assert_eq!(h.track.end(), Some(track::Position { group: 5, frame: 5 }));
+		assert_eq!(h.track.finished(), Some(track::Position { group: 5, frame: 5 }));
 		assert_eq!(
 			h.track.latest_sequence(),
 			None,
@@ -13591,7 +13597,7 @@ mod stitch_tests {
 		assert!(matches!(res, Err(Error::ProtocolViolation)), "{res:?}");
 		assert!(matches!(
 			h.track.closed().now_or_never(),
-			Some(Error::ProtocolViolation)
+			Some(Err(Error::ProtocolViolation))
 		));
 	}
 
@@ -13606,7 +13612,7 @@ mod stitch_tests {
 		let mut stream = h.stream().await;
 
 		h.subscriber.clone().recv_group(&mut stream).await.unwrap();
-		assert_eq!(h.track.end(), Some(track::Position::group(SEQUENCE)));
+		assert_eq!(h.track.finished(), Some(track::Position::group(SEQUENCE)));
 		assert_eq!(h.track.latest_sequence(), None, "no group was created");
 	}
 
@@ -14221,7 +14227,7 @@ mod stitch_tests {
 		assert!(matches!(res, Err(Error::MalformedTrack)), "{res:?}");
 		assert!(matches!(
 			futures::FutureExt::now_or_never(track.closed()),
-			Some(Error::MalformedTrack)
+			Some(Err(Error::MalformedTrack))
 		));
 	}
 
@@ -15403,7 +15409,10 @@ mod joining_fetch_tests {
 			};
 			if !complete && let Some(observed) = observed {
 				assert!(
-					matches!(observed.poll_closed(&kio::Waiter::noop()), Poll::Ready(Error::Cancel)),
+					matches!(
+						observed.poll_closed(&kio::Waiter::noop()),
+						Poll::Ready(Err(Error::Cancel))
+					),
 					"partial group must abort"
 				);
 			}
