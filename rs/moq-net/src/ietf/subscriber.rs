@@ -5770,7 +5770,9 @@ impl Subscriber {
 /// Read past one fetch object's payload, for a group this fetch does not write.
 async fn skip_fetch_payload(stream: &mut Reader<crate::transport::boxed::RecvStream, Version>) -> Result<(), Error> {
 	let mut left = stream.varint().await?;
+	let mut budget = kio::coop::Budget::new(32);
 	while left > 0 {
+		kio::wait(|waiter| budget.poll_yield(waiter)).await;
 		let max = usize::try_from(left).unwrap_or(usize::MAX);
 		let chunk = std::future::poll_fn(|cx| stream.poll_read_chunk(cx, max))
 			.await?
