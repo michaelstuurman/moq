@@ -30,9 +30,7 @@ Decided 2026-10-25 (maintainer), extending
   replacing `unused()`. Check that it returns `None` once no reader is left.
 - kio `Producer`/`ProducerWeak` rename too: `wanted() -> bool` and
   `wanted_changed()`; delete the test-only async variants.
-- The Announce consumer count from
-  [lifecycle](/quest/m1/api-audit/lifecycle.md) is a `wanted`-shaped signal,
-  not a new `unused()`.
+- The Announce consumer count is a `wanted`-shaped signal, not a new `unused()`.
 - moq-c's `MOQ_DEMAND_USED/UNUSED` become `WANTED/UNWANTED`; moq-c takes the
   break with every binding.
 
