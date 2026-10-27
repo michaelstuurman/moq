@@ -11,7 +11,7 @@ import * as Extensions from "./extensions.ts";
 export const DEFAULT_TIMEOUT = Milli(30_000);
 
 /**
- * Draft-17+ SETUP exchange. Each side opens a uni stream, writes its Setup
+ * Draft-18+ SETUP exchange. Each side opens a uni stream, writes its Setup
  * message, and reads the peer's Setup off an incoming uni stream. The two
  * halves run in parallel and the protocol is symmetric, so both `connect`
  * (client) and `accept` (server) use this same function.

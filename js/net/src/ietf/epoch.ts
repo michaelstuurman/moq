@@ -10,7 +10,7 @@ import { SetupOption, type SetupOptions } from "./setup_options.ts";
  * that resolves one (SUBSCRIBE, FETCH, and TRACK_STATUS). A namespace and an EPOCH name one
  * broadcast; a request carrying one is refused rather than served by another instance.
  *
- * Negotiated on draft-17+ only, where SETUP is a Key-Value-Pair block, and only when both
+ * Negotiated on draft-18+ only, where SETUP is a Key-Value-Pair block, and only when both
  * endpoints declare the option.
  *
  * @module

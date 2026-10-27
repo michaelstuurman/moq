@@ -2050,7 +2050,7 @@ test("a republish withdraws the PUBLISH_NAMESPACE and advertises again", async (
 
 		republish(origin, broadcast);
 
-		// Draft-17+ withdraws by cancelling the request, never a FIN.
+		// Draft-18+ withdraws by cancelling the request, never a FIN.
 		expect(await old.reader.done().catch(error)).toMatchObject({ code: StreamCode.Cancel });
 		const next = await take(streams);
 		expect(await acceptClustered(next)).toMatchObject({ cost: 4n });

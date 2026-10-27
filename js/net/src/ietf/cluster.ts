@@ -11,7 +11,7 @@
  *   and a PUBLISH_NAMESPACE is repriced with the same parameters on a REQUEST_UPDATE.
  *
  * These are the semantics moq-lite carries natively on every announcement (see
- * `lite/announce.ts`); this module is the moq-transport binding, negotiated on draft-17+
+ * `lite/announce.ts`); this module is the moq-transport binding, negotiated on draft-18+
  * only, where SETUP is a Key-Value-Pair block.
  *
  * A broadcast we produce carries a single-entry HOP_PATH and a cost of 0, and a route we
