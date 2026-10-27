@@ -3691,12 +3691,22 @@ impl Subscription {
 	/// transport's datagram limit or the send fails (congestion / no capacity right now).
 	/// Returns whether it was handed to the transport.
 	fn serve_datagram(&mut self, datagram: crate::model::datagram::Stored) -> bool {
-		// Only the `ietf` extension can say a datagram is a status rather than a payload.
+		// Only the `ietf` extension carries distinct Object IDs and non-payload statuses.
 		let status = datagram
 			.wire
 			.as_ref()
 			.is_some_and(|wire| wire.status.is_some_and(|status| status != 0));
-		if status && !self.ietf {
+		if !self.ietf
+			&& let Some(wire) = &datagram.wire
+			&& (status || wire.object_id.is_some_and(|id| id > 0))
+		{
+			tracing::debug!(
+				subscribe = self.id,
+				sequence = datagram.sequence,
+				object_id = wire.object_id,
+				status = wire.status,
+				"dropping datagram whose object state needs the ietf extension"
+			);
 			return false;
 		}
 		let Ok(timestamp) = self
@@ -5800,7 +5810,7 @@ mod serve_group_test {
 		assert!(order > 1);
 	}
 
-	/// The peer's frame bounds cut datagrams by Object ID: a public datagram is frame 0, a
+	/// With `ietf` negotiated, frame bounds cut datagrams by Object ID: a public datagram is frame 0, a
 	/// relayed moq-transport one keeps its own, and both ends are inclusive.
 	#[moq_clock::test]
 	async fn frame_bounds_cut_datagrams_by_object_id() {
@@ -5820,7 +5830,8 @@ mod serve_group_test {
 			let subscriber = track.subscribe(track::Subscription::default().with_max_delay(Duration::from_secs(3600)));
 			let session = SinkSession::new(Log::default()).with_groups().with_datagrams(1200);
 			let log = session.log.clone();
-			let (mut run, mut writer, _) = lite_run(Version::Lite06, session.clone(), subscriber);
+			let (mut run, mut writer, _) = lite_run(Version::Lite07, session.clone(), subscriber);
+			run.ctx.ietf = true;
 			run.ctx.group = crate::transport::poll::Session::send_group(&mut run.ctx.session, 3);
 			run.update(lite::SubscribeUpdate {
 				wanted_group: None,

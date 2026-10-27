@@ -6535,9 +6535,8 @@ impl Cursor {
 
 	/// The next datagram inside this subscriber's range, dropping the ones outside it.
 	///
-	/// The range is the one groups get: the floor, the cap, and the frames its group's
-	/// ranges cover, matched by Object ID.
-	/// Plain datagrams have Object ID 0. A datagram is judged when the cursor reaches
+	/// The floor, cap and time/group ranges select whole datagram groups here; frame
+	/// bounds are applied by the sending session. A datagram is judged when the cursor reaches
 	/// it, against the range in force then, and one outside it is gone for good: unlike a
 	/// group past the cap, nothing holds it for a later raise.
 	fn poll_recv_datagram(&mut self, waiter: &kio::Waiter) -> Poll<Result<Option<super::datagram::Stored>>> {
@@ -7095,6 +7094,9 @@ impl Subscriber {
 	/// buffer. Later arrival-order delivery is unchanged, and any outside its group range
 	/// are skipped. A consumer that falls too far behind silently loses the oldest datagrams.
 	///
+	/// A moq-transport group delivers only its normal Object ID 0 payload here. Other
+	/// Object IDs and statuses are skipped; relay paths preserve them with their IDs intact.
+	///
 	/// Returns `Poll::Ready(Ok(Some(datagram)))` when one is available,
 	/// `Poll::Ready(Ok(None))` when the track is finished, `Poll::Ready(Err(e))` when the track
 	/// is aborted, or `Poll::Pending` when none is buffered yet.
@@ -7103,12 +7105,16 @@ impl Subscriber {
 			let Some(datagram) = ready!(self.poll_recv_stored_datagram(waiter))? else {
 				return Poll::Ready(Ok(None));
 			};
-			// A moq-transport status is no datagram an application can read.
-			if datagram
-				.wire
-				.as_ref()
-				.is_some_and(|wire| wire.status.is_some_and(|status| status != 0))
+			// A plain payload cannot identify another object in the same group or a status.
+			if let Some(wire) = &datagram.wire
+				&& (wire.object_id.is_some_and(|id| id > 0) || wire.status.is_some_and(|status| status != 0))
 			{
+				tracing::debug!(
+					sequence = datagram.sequence,
+					object_id = wire.object_id,
+					status = wire.status,
+					"dropping datagram not representable as a plain payload"
+				);
 				continue;
 			}
 			self.meter_datagram(datagram.payload.len() as u64);
@@ -9321,6 +9327,59 @@ mod test {
 			.insert_datagram(5, Timestamp::ZERO, bytes::Bytes::from_static(b"x"))
 			.unwrap();
 		assert_eq!(recv_datagram(&mut subscriber).sequence, 5);
+	}
+
+	/// Plain readers cannot identify another object in the same datagram group. Skipping it
+	/// must neither consume a late object 0 nor alter the typed reader's arrival stream.
+	#[test]
+	fn plain_datagrams_never_substitute_another_object() {
+		for objects in [&[0, 1, 2][..], &[1, 2, 0], &[1, 2]] {
+			let mut producer = track_producer("test", Info::default());
+			let mut plain = producer.subscribe(None);
+			let mut typed = producer.subscribe(None);
+			let waiter = kio::Waiter::noop();
+			for &object in objects {
+				let stored = super::super::datagram::Stored {
+					datagram: Datagram {
+						sequence: 5,
+						timestamp: None,
+						payload: bytes::Bytes::from(vec![object as u8]),
+					},
+					wire: Some(Arc::new(super::super::datagram::Wire {
+						object_id: Some(object),
+						priority: Some(200),
+						end_of_group: object == 2,
+						status: None,
+						properties: Default::default(),
+					})),
+					deflated: None,
+				};
+				producer.insert_wire_datagram(stored.clone()).unwrap();
+				let Poll::Ready(Ok(Some(kept))) = typed.poll_recv_stored_datagram(&waiter) else {
+					panic!("typed reader lost object {object}");
+				};
+				assert_eq!(kept, stored);
+				match object {
+					0 => {
+						let Poll::Ready(Ok(Some(datagram))) = plain.poll_recv_datagram(&waiter) else {
+							panic!("object 0 was lost in {objects:?}");
+						};
+						assert_eq!((datagram.sequence, &datagram.payload[..]), (5, &[0][..]));
+					}
+					_ => assert!(
+						plain.poll_recv_datagram(&waiter).is_pending(),
+						"object {object} substituted"
+					),
+				}
+			}
+			producer.insert_datagram(6, None, b"next".as_slice()).unwrap();
+			producer.finish().unwrap();
+			let Poll::Ready(Ok(Some(datagram))) = plain.poll_recv_datagram(&waiter) else {
+				panic!("the next datagram was lost in {objects:?}");
+			};
+			assert_eq!((datagram.sequence, &datagram.payload[..]), (6, &b"next"[..]));
+			assert!(matches!(plain.poll_recv_datagram(&waiter), Poll::Ready(Ok(None))));
+		}
 	}
 
 	/// Exercises the full producer -> publisher-encode -> subscriber-decode -> producer seam

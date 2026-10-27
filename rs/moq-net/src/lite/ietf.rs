@@ -1426,6 +1426,82 @@ mod hop_tests {
 		drop(sessions);
 	}
 
+	/// Only a negotiated hop can preserve several datagram Object IDs. A late or lost
+	/// object 0 never lets another object's payload pose as the whole group.
+	#[moq_clock::test]
+	async fn datagram_objects_cross_only_an_identifying_hop() {
+		for offer in [[false, false], [false, true], [true, false], [true, true]] {
+			for objects in [&[0, 1, 2][..], &[1, 2, 0], &[1, 2]] {
+				let negotiated = offer == [true, true];
+				let upstream = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
+				let broadcast = upstream.publish("room", crate::origin::Route::default()).unwrap();
+				let info = track::Info {
+					properties: draft22(Vec::new()),
+					..track::Info::timed().with_timescale(Timescale::MILLI)
+				};
+				let mut track = broadcast.create_track("video", info).unwrap();
+				let (downstream, sessions) = test_hop(&upstream, "room", offer).await;
+				let (_copy, mut subscriber) = subscribe(&downstream).await;
+				// Receiving a group proves the subscription and its alias are bound before
+				// the datagrams, independently of how the session tasks are scheduled.
+				track.write_frame(ts(0), b"before".as_slice()).unwrap();
+				let mut before = recv(&mut subscriber).await;
+				assert_eq!(&next(&mut before).await.unwrap().payload.contiguous(0)[..], b"before");
+				for &object in objects {
+					track
+						.insert_wire_datagram(crate::model::datagram::Stored {
+							datagram: crate::Datagram {
+								sequence: 1,
+								timestamp: Some(ts(1)),
+								payload: bytes::Bytes::from(vec![object as u8]),
+							},
+							wire: Some(Arc::new(crate::model::datagram::Wire {
+								object_id: Some(object),
+								priority: Some(200),
+								end_of_group: object == 2,
+								status: None,
+								properties: Default::default(),
+							})),
+							deflated: None,
+						})
+						.unwrap();
+				}
+				track.insert_datagram(2, ts(2), b"next".as_slice()).unwrap();
+				let mut seen = Vec::new();
+				loop {
+					let datagram = kio::wait(|waiter| subscriber.poll_recv_wire_datagram(waiter))
+						.await
+						.unwrap()
+						.unwrap();
+					if datagram.sequence == 2 {
+						assert_eq!(&datagram.payload[..], b"next");
+						assert!(datagram.wire.is_none());
+						break;
+					}
+					assert_eq!(datagram.sequence, 1);
+					assert_eq!(datagram.payload.len(), 1);
+					let object = datagram.payload[0] as u64;
+					if negotiated {
+						let wire = datagram.wire.as_ref().unwrap();
+						assert_eq!(wire.object_id, Some(object));
+						assert_eq!(wire.priority, Some(200));
+						assert_eq!(wire.end_of_group, object == 2);
+					} else {
+						assert!(datagram.wire.is_none());
+					}
+					seen.push(object);
+				}
+				let expected: Vec<_> = objects.iter().copied().filter(|id| negotiated || *id == 0).collect();
+				assert_eq!(seen, expected, "offer={offer:?} arrivals={objects:?}");
+				track.write_frame(ts(3), b"after".as_slice()).unwrap();
+				let mut after = recv(&mut subscriber).await;
+				assert_eq!(after.sequence, 3);
+				assert_eq!(&next(&mut after).await.unwrap().payload.contiguous(0)[..], b"after");
+				drop(sessions);
+			}
+		}
+	}
+
 	/// Provenance keeps IETF times unchecked after a hop, while a peer declining the
 	/// extension gets no timeline. SUBSCRIBE, FETCH, and datagrams must agree with TRACK_INFO,
 	/// while a listing stays untimed.
