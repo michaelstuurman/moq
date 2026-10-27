@@ -1,4 +1,4 @@
-# Main is no slower than release
+# [M] Main is no slower than release
 
 ## Goal
 
@@ -225,10 +225,6 @@ Decided 2026-10-25 (maintainer), in
   `BENCH_ARTIFACTS=<scratch> just bench origin/release` (it also re-checks
   the sparse rows). Fix it if the relay
   CPU still rises with consistent sign; otherwise this epic is done.
-
-## Required
-
-- [Sparse reads judge misses incrementally](/quest/m1/release-perf/sparse-misses.md) - `track_sparse_read` stays flat across gaps, as before range requests
 
 ## Related
 
