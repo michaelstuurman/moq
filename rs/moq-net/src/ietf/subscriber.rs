@@ -7532,8 +7532,8 @@ mod tests {
 		);
 	}
 
-	/// An OBJECT_DATAGRAM at object 0 is a datagram group at its Group ID; anything the model
-	/// cannot carry as one is dropped, and a malformed one is the peer's violation.
+	/// Relays keep datagram Object IDs, while plain readers see only normal object 0.
+	/// An unbound alias is dropped, and a malformed datagram is the peer's violation.
 	#[moq_clock::test]
 	async fn an_object_datagram_is_a_datagram_group() {
 		use crate::coding::Encode as _;
@@ -7541,11 +7541,12 @@ mod tests {
 
 		let subscriber = subscriber_with_tracks(&[(RequestId(11), "cam", "audio")]);
 		subscriber.register_alias(RequestId(11), 7).unwrap();
-		let mut consumer = {
+		let (mut consumer, mut relay) = {
 			let mut state = subscriber.state.lock();
 			let track = state.subscribes.get_mut(&RequestId(11)).unwrap();
 			track.timescale = Some(Timescale::MILLI);
-			track.producer.as_ref().unwrap().subscribe(None)
+			let producer = track.producer.as_ref().unwrap();
+			(producer.subscribe(None), producer.subscribe(None))
 		};
 
 		let timestamp = crate::Timestamp::new(96_000, Timescale::MILLI).unwrap();
@@ -7573,7 +7574,7 @@ mod tests {
 		};
 		let payload = |bytes: &'static [u8]| ietf::DatagramBody::Payload(bytes::Bytes::from_static(bytes));
 
-		// Nonzero objects are delivered; an unbound alias and non-payload statuses stay invisible to plain readers.
+		// Nonzero objects survive for relays; plain readers skip them, unbound aliases, and statuses.
 		subscriber
 			.recv_datagram(datagram(7, 4, Some(1), payload(b"no")))
 			.unwrap();
@@ -7585,8 +7586,11 @@ mod tests {
 		subscriber
 			.recv_datagram(datagram(7, 9, Some(0), payload(b"yes")))
 			.unwrap();
-		let first = consumer.recv_datagram().now_or_never().unwrap().unwrap().unwrap();
+		let Poll::Ready(Ok(Some(first))) = relay.poll_recv_stored_datagram(&kio::Waiter::noop()) else {
+			panic!("the relay did not receive the object");
+		};
 		assert_eq!(first.sequence, 4);
+		assert_eq!(first.wire.as_ref().unwrap().object_id, Some(1));
 		assert_eq!(&first.payload[..], b"no");
 		let received = consumer.recv_datagram().now_or_never().unwrap().unwrap().unwrap();
 		assert_eq!(received.sequence, 9, "the Group ID is the sequence");
@@ -7594,7 +7598,7 @@ mod tests {
 		assert_eq!(&received.payload[..], b"yes");
 		assert!(
 			consumer.recv_datagram().now_or_never().is_none(),
-			"only the payload datagrams got through"
+			"only the normal object 0 payload got through"
 		);
 
 		// A status datagram cannot end the group.
@@ -14912,14 +14916,15 @@ mod stitch_tests {
 		}
 	}
 
-	/// A datagram's object number does not change its public payload view.
+	/// Relays retain a datagram's Object ID; a plain reader skips it until object 0 arrives.
 	#[moq_clock::test]
 	async fn passthrough_accepts_datagrams_past_object_zero() {
 		for version in [Version::Draft15, Version::Draft22] {
 			let mut h = Harness::with_timescale(Fill::Done, vec![], None);
 			h.subscriber.version = version;
 			let mut consumer = h.track.subscribe(None);
-			let bytes = ietf::ObjectDatagram {
+			let mut plain = h.track.subscribe(None);
+			let mut datagram = ietf::ObjectDatagram {
 				track_alias: ALIAS,
 				group_id: SEQUENCE,
 				object_id: Some(6),
@@ -14927,13 +14932,25 @@ mod stitch_tests {
 				end_of_group: false,
 				properties: None,
 				body: ietf::DatagramBody::Payload(bytes::Bytes::from_static(b"object-six")),
-			}
-			.encode_bytes(version)
-			.unwrap();
-			h.subscriber.recv_datagram(bytes).unwrap();
-			let received = consumer.poll_recv_datagram(&kio::Waiter::noop());
+			};
+			h.subscriber
+				.recv_datagram(datagram.encode_bytes(version).unwrap())
+				.unwrap();
+			let received = consumer.poll_recv_stored_datagram(&kio::Waiter::noop());
 			assert!(
-				matches!(&received, Poll::Ready(Ok(Some(data))) if data.payload == b"object-six"[..]),
+				matches!(&received, Poll::Ready(Ok(Some(data)))
+					if data.payload == b"object-six"[..] && data.wire.as_ref().unwrap().object_id == Some(6)),
+				"{version}: {received:?}"
+			);
+			assert!(plain.poll_recv_datagram(&kio::Waiter::noop()).is_pending());
+			datagram.object_id = Some(0);
+			datagram.body = ietf::DatagramBody::Payload(bytes::Bytes::from_static(b"object-zero"));
+			h.subscriber
+				.recv_datagram(datagram.encode_bytes(version).unwrap())
+				.unwrap();
+			let received = plain.poll_recv_datagram(&kio::Waiter::noop());
+			assert!(
+				matches!(&received, Poll::Ready(Ok(Some(data))) if data.payload == b"object-zero"[..]),
 				"{version}: {received:?}"
 			);
 		}

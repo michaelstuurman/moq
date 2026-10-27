@@ -2424,7 +2424,10 @@ mod test {
 						deflated: None,
 					})
 					.unwrap();
-					assert!(sub.poll_recv_datagram(&kio::Waiter::noop()).is_ready());
+					let Poll::Ready(Ok(Some(datagram))) = sub.poll_recv_stored_datagram(&kio::Waiter::noop()) else {
+						panic!("the typed reader did not receive the object");
+					};
+					assert_eq!(datagram.wire.as_ref().unwrap().object_id, Some(4));
 					None
 				}
 			};
