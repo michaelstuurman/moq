@@ -1817,8 +1817,7 @@ impl TrackState {
 	/// How long a missing live group is waited for, from the max delay the track's
 	/// subscribers ask for.
 	fn arrival_grace(&self) -> Duration {
-		let max_delay = snapshot_subscription(&self.subscriptions, self.max_age_bound())
-			.map_or(Duration::ZERO, |subscription| subscription.budget());
+		let max_delay = clamp_max_delay(self.subscriptions.lock().max_delay(), self.max_age_bound());
 		ledger::grace(max_delay)
 	}
 
