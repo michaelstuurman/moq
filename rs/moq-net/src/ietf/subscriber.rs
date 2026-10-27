@@ -7580,11 +7580,10 @@ mod tests {
 			.unwrap();
 		subscriber.recv_datagram(datagram(8, 4, None, payload(b"no"))).unwrap();
 		subscriber
-			.recv_datagram(datagram(7, 4, None, ietf::DatagramBody::Status(END_OF_TRACK)))
-			.unwrap();
-
-		subscriber
 			.recv_datagram(datagram(7, 9, Some(0), payload(b"yes")))
+			.unwrap();
+		subscriber
+			.recv_datagram(datagram(7, 10, None, ietf::DatagramBody::Status(END_OF_TRACK)))
 			.unwrap();
 		let Poll::Ready(Ok(Some(first))) = relay.poll_recv_stored_datagram(&kio::Waiter::noop()) else {
 			panic!("the relay did not receive the object");
