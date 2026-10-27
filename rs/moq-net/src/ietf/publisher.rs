@@ -2231,7 +2231,9 @@ impl Publisher {
 			renewal.verify(grant.verify_renewal(&self.auth, token.0));
 			return Ok(fill);
 		}
-		self.write_request_ok(&mut stream.writer, largest).await.map_err(failed)?;
+		self.write_request_ok(&mut stream.writer, largest)
+			.await
+			.map_err(failed)?;
 		Ok(fill)
 	}
 
@@ -4938,9 +4940,7 @@ impl TrackServe {
 					}
 					// Exhausting an updated filter does not end the track. Keep the
 					// request updatable once its current range runs out.
-					if self.range.end.is_some()
-						&& self.track.poll_finished(waiter).is_pending()
-					{
+					if self.range.end.is_some() && self.track.poll_finished(waiter).is_pending() {
 						let _ = self.children.poll(waiter);
 						return Poll::Pending;
 					}

@@ -2878,7 +2878,11 @@ impl Subscriber {
 		// track from TRACK_STATUS rather than a SUBSCRIBE: a finished track refuses one, and
 		// one made only to learn the track races the fetches it was for.
 		let mut target = match request.subscription() {
-			subscription if subscription.as_ref().is_none_or(|subscription| subscription.ranges.is_empty()) => {
+			subscription
+				if subscription
+					.as_ref()
+					.is_none_or(|subscription| subscription.ranges.is_empty()) =>
+			{
 				let Some(idle) = self
 					.track_status(&broadcast_path, &track_name, request, &mut gate)
 					.await

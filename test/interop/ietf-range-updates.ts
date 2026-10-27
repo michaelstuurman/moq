@@ -1,8 +1,8 @@
 /** Serve Rust-encoded range updates with the JS publisher and return its actual wire bytes. */
 import assert from "node:assert/strict";
 import { Publisher } from "../../js/net/src/ietf/publisher.ts";
-import { NativeSession } from "../../js/net/src/ietf/session.ts";
 import { RequestOk } from "../../js/net/src/ietf/request.ts";
+import { NativeSession } from "../../js/net/src/ietf/session.ts";
 import { Subscribe } from "../../js/net/src/ietf/subscribe.ts";
 import type { IetfVersion } from "../../js/net/src/ietf/version.ts";
 import { createMockTransportPair } from "../../js/net/src/mock.ts";
