@@ -90,7 +90,7 @@ impl<'a> Encoder<'a> {
 	}
 
 	/// Write a big-endian `u16`.
-	#[cfg(test)]
+	#[cfg(all(test, feature = "async"))]
 	pub fn u16(&mut self, v: u16) {
 		self.buf.extend_from_slice(&v.to_be_bytes());
 	}

@@ -783,7 +783,3 @@ async function connectWebSocket(
 		}
 	}
 }
-
-function isLite(version: number): version is Lite.Version {
-	return Object.values(Lite.Version).includes(version as Lite.Version);
-}
