@@ -749,7 +749,6 @@ test("integration: lite draft-05 missing datagram writer does not close streams"
 });
 
 for (const [name, protocol, version] of [
-	["draft-17", Ietf.ALPN.DRAFT_18, undefined],
 	["draft-18", Ietf.ALPN.DRAFT_18, undefined],
 	["draft-22", Ietf.ALPN.DRAFT_22, undefined],
 ] as const) {
@@ -1340,10 +1339,6 @@ test("integration: cancelling an ietf track listing preserves an existing subscr
 		client.close();
 		server.close();
 	}
-});
-
-test("integration: ietf draft-17", async () => {
-	await runPublishSubscribeFlow(Ietf.ALPN.DRAFT_18);
 });
 
 test("integration: ietf draft-18", async () => {
@@ -2694,7 +2689,7 @@ async function runSessionDeath(
 for (const [name, protocol, version] of [
 	["lite draft-03", Lite.ALPN_03, undefined],
 	["lite draft-05", Lite.ALPN_05, undefined],
-	["ietf draft-17", Ietf.ALPN.DRAFT_18, undefined],
+	["ietf draft-18", Ietf.ALPN.DRAFT_18, undefined],
 ] as const) {
 	test(`integration: ${name} ends a track with its session's error`, async () => {
 		const [closed, groupEnd] = await runSessionDeath(protocol, version);

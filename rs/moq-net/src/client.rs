@@ -342,6 +342,7 @@ impl Client {
 				stats: self.stats.clone(),
 				goaway: start.goaway,
 				auth: start.auth,
+				credential: start.credential,
 				estimate: Some(start.estimate),
 				bandwidth: self.bandwidth(),
 				peer_implementation: start.peer_implementation,
@@ -381,7 +382,7 @@ impl Client {
 				// offer it keeps the option out of our SETUP and presents no credential.
 				let auth = self.link(self.extensions.auth, true)?;
 				let peer_implementation = setup::PeerImplementation::default();
-				let (protocol, goaway) = ietf::start(ietf::Config {
+				let (protocol, goaway, credential) = ietf::start(ietf::Config {
 					runtime: runtime.clone(),
 					stats: self.stats.clone(),
 					limits: self.limits,
@@ -415,6 +416,7 @@ impl Client {
 						stats: self.stats.clone(),
 						goaway,
 						auth,
+						credential,
 						estimate: None,
 						bandwidth: self.bandwidth(),
 						peer_implementation,
@@ -507,6 +509,7 @@ impl Client {
 				stats: self.stats.clone(),
 				goaway: start.goaway,
 				auth: start.auth,
+				credential: start.credential,
 				estimate: Some(start.estimate),
 				bandwidth: self.bandwidth(),
 				peer_implementation: start.peer_implementation,

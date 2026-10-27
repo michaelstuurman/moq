@@ -210,6 +210,7 @@ impl Server {
 				stats: self.stats.clone(),
 				goaway: start.goaway,
 				auth: start.auth,
+				credential: start.credential,
 				estimate: Some(start.estimate),
 				bandwidth: crate::bandwidth::Allocator::default(),
 				peer_implementation: start.peer_implementation,
@@ -512,7 +513,7 @@ impl PausedIetf {
 
 		// The client's SETUP was read at the pause; hand the stream back
 		// for GOAWAY. A server never advertises a path, hence `None`.
-		let (protocol, goaway) = ietf::start(ietf::Config {
+		let (protocol, goaway, credential) = ietf::start(ietf::Config {
 			runtime: runtime.clone(),
 			stats: server.stats.clone(),
 			limits: server.limits,
@@ -547,6 +548,7 @@ impl PausedIetf {
 				stats: server.stats.clone(),
 				goaway,
 				auth,
+				credential,
 				estimate: None,
 				bandwidth: crate::bandwidth::Allocator::default(),
 				peer_implementation,
@@ -618,6 +620,7 @@ impl PausedNegotiated {
 				stats: server.stats.clone(),
 				goaway: start.goaway,
 				auth: start.auth,
+				credential: start.credential,
 				estimate: Some(start.estimate),
 				bandwidth: crate::bandwidth::Allocator::default(),
 				peer_implementation: start.peer_implementation,
