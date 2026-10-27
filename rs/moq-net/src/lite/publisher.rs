@@ -3691,22 +3691,12 @@ impl Subscription {
 	/// transport's datagram limit or the send fails (congestion / no capacity right now).
 	/// Returns whether it was handed to the transport.
 	fn serve_datagram(&mut self, datagram: crate::model::datagram::Stored) -> bool {
-		// Only the `ietf` extension carries distinct Object IDs and non-payload statuses.
+		// Only the `ietf` extension can say a datagram is a status rather than a payload.
 		let status = datagram
 			.wire
 			.as_ref()
 			.is_some_and(|wire| wire.status.is_some_and(|status| status != 0));
-		if !self.ietf
-			&& let Some(wire) = &datagram.wire
-			&& (status || wire.object_id.is_some_and(|id| id > 0))
-		{
-			tracing::debug!(
-				subscribe = self.id,
-				sequence = datagram.sequence,
-				object_id = wire.object_id,
-				status = wire.status,
-				"dropping datagram whose object state needs the ietf extension"
-			);
+		if status && !self.ietf {
 			return false;
 		}
 		let Ok(timestamp) = self
@@ -4211,6 +4201,21 @@ impl TrackRun {
 
 	/// Send a datagram, recording its sequence once it went out.
 	fn serve_datagram(&mut self, datagram: crate::model::datagram::Stored) {
+		// Untyped lite can name only object 0. Drop other payload objects before
+		// metering them; status objects keep their existing separate drop path.
+		if !self.ctx.ietf
+			&& let Some(wire) = &datagram.wire
+			&& wire.status.is_none_or(|status| status == 0)
+			&& wire.object_id.is_some_and(|id| id > 0)
+		{
+			tracing::debug!(
+				subscribe = self.ctx.id,
+				sequence = datagram.sequence,
+				object_id = wire.object_id,
+				"dropping nonzero datagram object on a lite hop without ietf"
+			);
+			return;
+		}
 		if let Some(wire) = &datagram.wire
 			&& crate::ietf::flate::egress_object(
 				&wire.properties,
@@ -5869,6 +5874,105 @@ mod serve_group_test {
 				usize::from(served),
 				"group {sequence} object {object_id:?}"
 			);
+		}
+	}
+
+	/// An object this hop cannot identify is never egress payload. An admitted object's
+	/// existing best-effort accounting still counts a transport-size drop as an attempt.
+	#[moq_clock::test]
+	async fn unidentified_datagram_objects_are_not_metered() {
+		use crate::model::ProduceTest;
+
+		for ietf in [false, true] {
+			for objects in [&[1, 2][..], &[0, 1, 2]] {
+				for max in [1, 1200] {
+					let origin = crate::origin::Config::new(crate::Hop::new(2).unwrap()).produce();
+					let broadcast = origin.publish("room", crate::origin::Route::default()).unwrap();
+					let info = track::Info {
+						properties: Some(Arc::new(crate::model::object::TrackProperties {
+							version: crate::ietf::Version::Draft22,
+							values: Vec::new(),
+						})),
+						..track::Info::timed()
+					};
+					let _track = broadcast.create_track("test", info).unwrap();
+					let registry = crate::stats::Registry::new(Default::default());
+					let tagged = origin
+						.consume()
+						.with_stats(registry.tier(Default::default()).session("egress"));
+					let served = tagged.request_broadcast("room", None).await.unwrap();
+					let copy = served.track("test").unwrap();
+					let subscriber = copy.subscribe(None).await.unwrap();
+					let session = SinkSession::new(Log::default()).with_datagrams(max);
+					let log = session.log.clone();
+					let (mut run, _, _) = lite_run(Version::Lite07, session, subscriber);
+					run.ctx.ietf = ietf;
+					for &object in objects {
+						run.serve_datagram(crate::model::datagram::Stored {
+							datagram: crate::Datagram {
+								sequence: 5,
+								timestamp: Some(Timestamp::ZERO),
+								payload: bytes::Bytes::from_static(b"payload"),
+							},
+							wire: Some(Arc::new(crate::model::datagram::Wire {
+								object_id: Some(object),
+								priority: None,
+								end_of_group: false,
+								status: None,
+								properties: Default::default(),
+							})),
+							deflated: None,
+						});
+					}
+					let sent = registry
+						.snapshot()
+						.traffic()
+						.into_iter()
+						.find(|(_, role, _)| *role == crate::stats::Role::Publisher)
+						.map(|(_, _, traffic)| traffic)
+						.unwrap_or_default();
+					let admitted = objects.iter().filter(|&&id| ietf || id == 0).count() as u64;
+					assert_eq!(
+						(sent.datagrams, sent.groups, sent.frames, sent.bytes),
+						(admitted, admitted, admitted, 7 * admitted),
+						"ietf={ietf} ids={objects:?} max={max}"
+					);
+					assert_eq!(
+						log.datagrams.lock().unwrap().len() as u64,
+						if max == 1 { 0 } else { admitted }
+					);
+					// Status attempts have no payload and keep their separate accounting;
+					// only a typed hop can transmit them.
+					run.serve_datagram(crate::model::datagram::Stored {
+						datagram: crate::Datagram {
+							sequence: 6,
+							timestamp: None,
+							payload: bytes::Bytes::new(),
+						},
+						wire: Some(Arc::new(crate::model::datagram::Wire {
+							object_id: Some(2),
+							priority: None,
+							end_of_group: false,
+							status: Some(crate::ietf::object::END_OF_GROUP),
+							properties: Default::default(),
+						})),
+						deflated: None,
+					});
+					let after_status = registry
+						.snapshot()
+						.traffic()
+						.into_iter()
+						.find(|(_, role, _)| *role == crate::stats::Role::Publisher)
+						.map(|(_, _, traffic)| traffic)
+						.unwrap();
+					assert_eq!(after_status.datagrams, admitted + 1);
+					assert_eq!(after_status.bytes, 7 * admitted);
+					assert_eq!(
+						log.datagrams.lock().unwrap().len() as u64,
+						if max == 1 { 0 } else { admitted + u64::from(ietf) }
+					);
+				}
+			}
 		}
 	}
 
