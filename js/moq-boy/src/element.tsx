@@ -97,7 +97,7 @@ export default class MoqBoy extends HTMLElement {
 	}
 
 	/** Called by the browser when an observed attribute changes. */
-	attributeChangedCallback(name: Observed, _oldValue: string | null, newValue: string | null) {
+	attributeChangedCallback(name: (typeof OBSERVED)[number], _oldValue: string | null, newValue: string | null) {
 		if (name === "url") {
 			this.connection.url.set(newValue ? new URL(newValue) : undefined);
 			return;

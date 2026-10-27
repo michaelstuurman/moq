@@ -159,7 +159,10 @@ fn assert_strict(path: &Path) {
 	let count = path.parts().count();
 	for n in 0..=count {
 		let head = path.head(n).expect("a path has a head per segment");
-		assert!(Path::new(head.as_str()).is_ok(), "{path:?} has an invalid head {head:?}");
+		assert!(
+			Path::new(head.as_str()).is_ok(),
+			"{path:?} has an invalid head {head:?}"
+		);
 	}
 	assert!(path.head(count + 1).is_none(), "{path:?} has a head past its segments");
 }
