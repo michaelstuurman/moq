@@ -4,12 +4,32 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
-### moq-transport drafts 14 through 17 are removed
+### moq-transport drafts 14 through 17 are removed ([#6753](https://github.com/moq-dev/moq/pull/6753))
 
 `ietf::Version::Draft14` through `Draft17` are gone, and a peer offering only those versions, by ALPN or in the moql SETUP, fails the handshake.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
 The moql SETUP (no ALPN, or `moql`) now negotiates only moq-lite versions.
 `session::Limits::requests` is removed: stream credit bounds every peer request, so drop the field and keep `announces`.
+
+### Names say one thing ([#6751](https://github.com/moq-dev/moq/pull/6751))
+
+Rename these, which kept their behavior:
+
+| Before | After |
+|---|---|
+| `Session::bandwidth()` | `Session::allocator()` |
+| `Client::with_bandwidth` | `Client::with_allocator` |
+| `auth::Auth` | `auth::Credential` |
+| `track::Consumer::query()`, `track::Querying` | `track::Consumer::info()`, `track::Resolving` |
+| `bandwidth::Reservation::consumer()` | `bandwidth::Reservation::consume()` |
+| `bandwidth::Reservation::peek()` | `bandwidth::Reservation::rate()` |
+| `stats::Control` | `stats::Message` |
+| `stats::Bytes` | `stats::Totals` |
+| `transport::Stats`, `transport::poll::Session::stats()` | `transport::Metrics`, `transport::poll::Session::metrics()` |
+
+`group::Demand` reads like `track::Demand`: replace `is_used()` with `wanted()`, and `used()`, `unused()`, `poll_used`, and `poll_unused` with a loop over `wanted_changed()` (or `poll_wanted_changed`), which returns the new value each time it changes and errors once the group closes.
+`transport::Metrics` drops `bytes_sent` and `bytes_received`: a transport reports them through the `transport::Wire` it returns from `wire()`, which `session::Stats` now reads.
+`transport::StatsUnavailable` is gone: `metrics()` defaults to reporting nothing, so delete an implementation that returned it.
 
 ### One lifecycle vocabulary ([#6750](https://github.com/moq-dev/moq/pull/6750))
 
@@ -20,7 +40,7 @@ A session closing locally aborts its copies with `Error::Stream(StreamError::Ses
 
 ### An idle reservation reads the share it would get
 
-`bandwidth::Reservation::peek` and its `consumer()` report the slice the track would get back while nothing subscribes to it, instead of `None`; it still claims nothing from the other tracks.
+`bandwidth::Reservation::rate()` and its `consume()` report the slice the track would get back while nothing subscribes to it, instead of `None`; it still claims nothing from the other tracks.
 `None` now means only that the connection has no estimate or the reservation is gone.
 A sender that relied on `None` to hold its rate while unwatched should check its track's demand instead.
 

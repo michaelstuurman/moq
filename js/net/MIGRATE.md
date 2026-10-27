@@ -4,11 +4,18 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
-### moq-transport drafts 14 through 17 are removed
+### moq-transport drafts 14 through 17 are removed ([#6753](https://github.com/moq-dev/moq/pull/6753))
 
 The `"moq-transport-14"` through `"moq-transport-17"` version names now throw a `TypeError`, and a peer offering only those versions fails the handshake.
 The moql SETUP (no ALPN, or `moql`) negotiates only moq-lite versions.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
+
+### Names say one thing ([#6751](https://github.com/moq-dev/moq/pull/6751))
+
+`Auth.Auth` is `Auth.Credential`, and `Reservation.grant` is `Reservation.rate`.
+A connection's `bandwidth` allocator is `allocator`, mirroring Rust's `Session::allocator()`.
+`Track.Producer.writeGroup(group)` is `createGroup(sequence)`, which creates the group and returns it like `appendGroup()`: replace `const group = new Group.Producer(n); track.writeGroup(group);` with `const group = track.createGroup(n);`.
+A group can no longer be written before it joins a track, or join more than one track.
 
 ### One lifecycle vocabulary ([#6750](https://github.com/moq-dev/moq/pull/6750))
 

@@ -135,7 +135,7 @@ pub(crate) struct Setup {
 
 impl Encode<Version> for Setup {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
-		w.control = Some(crate::stats::Control::Session);
+		w.control = Some(crate::stats::Message::Session);
 		if v.is_lite() {
 			return Err(EncodeError::Version);
 		}
@@ -148,7 +148,7 @@ impl Encode<Version> for Setup {
 
 impl Decode<Version> for Setup {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
-		r.control = Some(crate::stats::Control::Session);
+		r.control = Some(crate::stats::Message::Session);
 		if v.is_lite() {
 			return Err(DecodeError::Version);
 		}
@@ -183,7 +183,7 @@ pub(crate) struct Client {
 
 impl Decode<Version> for Client {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
-		r.control = Some(crate::stats::Control::Session);
+		r.control = Some(crate::stats::Message::Session);
 		if !framed(v) {
 			return Err(DecodeError::Version);
 		}
@@ -205,7 +205,7 @@ impl Decode<Version> for Client {
 
 impl Encode<Version> for Client {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
-		w.control = Some(crate::stats::Control::Session);
+		w.control = Some(crate::stats::Message::Session);
 		if !framed(v) {
 			return Err(EncodeError::Version);
 		}
@@ -241,7 +241,7 @@ pub(crate) struct Server {
 
 impl Encode<Version> for Server {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
-		w.control = Some(crate::stats::Control::Session);
+		w.control = Some(crate::stats::Message::Session);
 		if !framed(v) {
 			return Err(EncodeError::Version);
 		}
@@ -255,7 +255,7 @@ impl Encode<Version> for Server {
 
 impl Decode<Version> for Server {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
-		r.control = Some(crate::stats::Control::Session);
+		r.control = Some(crate::stats::Message::Session);
 		if !framed(v) {
 			return Err(DecodeError::Version);
 		}

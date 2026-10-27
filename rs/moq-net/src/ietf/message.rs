@@ -2,17 +2,17 @@ use crate::coding::{Decode, DecodeError, Decoder, Encode, EncodeError, Encoder};
 
 use super::Version;
 
-pub(super) fn control(id: u64) -> crate::stats::Control {
+pub(super) fn control(id: u64) -> crate::stats::Message {
 	use super::*;
-	use crate::stats::Control;
+	use crate::stats::Message as Class;
 	match id {
-		PublishNamespace::ID | SubscribeNamespace::ID | Namespace::ID | NamespaceDone::ID => Control::Announce,
-		TrackStatus::ID | SubscribeTracks::ID | PublishSkipped::ID => Control::TrackInfo,
-		Subscribe::ID | SubscribeOk::ID | Publish::ID | PublishOk::ID | PublishDone::ID => Control::Subscribe,
-		Fetch::ID | FetchOk::ID => Control::Fetch,
-		auth::Auth::ID | auth::AuthOk::ID | auth::AuthError::ID => Control::Auth,
-		GoAway::ID => Control::Goaway,
-		_ => Control::Other,
+		PublishNamespace::ID | SubscribeNamespace::ID | Namespace::ID | NamespaceDone::ID => Class::Announce,
+		TrackStatus::ID | SubscribeTracks::ID | PublishSkipped::ID => Class::TrackInfo,
+		Subscribe::ID | SubscribeOk::ID | Publish::ID | PublishOk::ID | PublishDone::ID => Class::Subscribe,
+		Fetch::ID | FetchOk::ID => Class::Fetch,
+		auth::Auth::ID | auth::AuthOk::ID | auth::AuthError::ID => Class::Auth,
+		GoAway::ID => Class::Goaway,
+		_ => Class::Other,
 	}
 }
 
@@ -98,13 +98,13 @@ impl<T: Message> Decode<Version> for T {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::stats::Control;
+	use crate::stats::Message as Class;
 
 	#[test]
 	fn shared_replies_identify_no_request_class() {
-		assert_eq!(control(super::super::NamespaceDone::ID), Control::Announce);
+		assert_eq!(control(super::super::NamespaceDone::ID), Class::Announce);
 		for id in [super::super::RequestOk::ID, super::super::SubscribeUpdate::ID] {
-			assert_eq!(control(id), Control::Other);
+			assert_eq!(control(id), Class::Other);
 		}
 	}
 }
