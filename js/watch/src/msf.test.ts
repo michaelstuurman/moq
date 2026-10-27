@@ -83,18 +83,21 @@ test("rounds a fractional MSF delay up, and drops zero", () => {
 	expect(hang.audio?.renditions.early?.delay).toBeUndefined();
 });
 
-test("rounds a fractional MSF jitter up, and rejects a negative one", () => {
+test("rounds a fractional MSF jitter up, keeps zero, and rejects a negative one", () => {
 	// moq-dev publishers write jitter as fractional milliseconds: one 30 fps frame is 33.333333.
 	const catalog: Msf.Catalog = {
 		tracks: [
 			{ name: "video", packaging: "loc", role: "video", codec: "vp09.00.10.08", jitter: 33.333333 },
 			{ name: "audio", packaging: "loc", role: "audio", codec: "opus", jitter: 20.5 },
+			{ name: "zero", packaging: "loc", role: "video", codec: "vp09.00.10.08", jitter: 0 },
 		],
 	};
 
 	const hang = toHang(catalog);
 	expect(hang.video?.renditions.video?.jitter).toBe(u53(34));
 	expect(hang.audio?.renditions.audio?.jitter).toBe(u53(21));
+	// Unlike delay, zero is kept: without a jitter the player falls back to the frame interval.
+	expect(hang.video?.renditions.zero?.jitter).toBe(u53(0));
 
 	for (const jitter of [-1, -0.5]) {
 		const negative: Msf.Catalog = {
