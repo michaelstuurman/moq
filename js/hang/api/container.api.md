@@ -111,6 +111,7 @@ declare namespace Legacy {
         Producer
     }
 }
+export { Legacy }
 
 export { Loc }
 
@@ -277,6 +278,5 @@ const VideoConfigSchema: z.ZodMiniObject<{
         duration: z.core.$ZodBranded<z.ZodMiniNumber<number>, "u53", "out">;
     }, z.core.$strip>>>;
 }, z.core.$strip>;
-
 
 ```
