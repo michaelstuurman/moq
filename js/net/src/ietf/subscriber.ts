@@ -46,10 +46,20 @@ import { DuplicateTrackAlias, RetiredTrackAlias, TrackAliases } from "./aliases.
 import * as Cluster from "./cluster.ts";
 import { ObjectDatagram } from "./datagram.ts";
 import { requestReason } from "./error.ts";
+import { Fetch, FetchHeader, FetchOk } from "./fetch.ts";
+import { isDraft22 } from "./filter.ts";
+import { Join } from "./join.ts";
 import * as Message from "./message.ts";
 import * as Namespace from "./namespace.ts";
-import { decodeObjectTime, EndOfTrackProperties, Frame, type Group as GroupMessage, ObjectIdGap } from "./object.ts";
-import { Parameters } from "./parameters.ts";
+import {
+	decodeFetchObject,
+	decodeObjectTime,
+	EndOfTrackProperties,
+	Frame,
+	type Group as GroupMessage,
+	ObjectIdGap,
+} from "./object.ts";
+import { type MessageLocation, Parameters } from "./parameters.ts";
 import { DEFAULT_WIRE, fromWire, toWire } from "./priority.ts";
 import { type Publish, PublishDone, PublishDoneStatus, publishDoneClean } from "./publish.ts";
 import { type AdvertParams, type PublishNamespace, PublishNamespaceUpdate } from "./publish_namespace.ts";
@@ -65,6 +75,14 @@ import { MalformedAuthToken } from "./token.ts";
 // Cost::DRAIN: cost is the whole mechanism, not a separate state.
 const DRAIN_COST: Cost = 2n ** 62n - 1n;
 
+/** A joining FETCH answer the head cannot be stitched from, which costs only that head. */
+class JoinUnsupported extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "JoinUnsupported";
+	}
+}
+
 // A live subscription, as the track alias its data streams name resolves to.
 type Subscription = {
 	// The write side incoming group streams are routed into.
@@ -74,6 +92,16 @@ type Subscription = {
 	tail: Tail;
 	// The track's exclusive end, once an END_OF_TRACK declares it.
 	end?: number;
+	// The draft-18 join of SUBSCRIBE_OK's Largest group, whose head a joining FETCH brings.
+	join?: Join;
+	// The first group a "next" join delivers: the one after SUBSCRIBE_OK's Largest.
+	from?: number;
+	// The track's TIMESCALE, which the joining FETCH's objects are stamped in too.
+	timescale?: Timescale;
+	// SUBSCRIBE_OK's Largest, which the join's head runs up to.
+	largest?: MessageLocation;
+	// The head's FETCH request IDs, which their fetch streams name until the subscription ends.
+	fetchIds: bigint[];
 };
 
 // Out-parameter for #openSubscribe: lets the caller observe partial progress
@@ -147,6 +175,10 @@ export class Subscriber {
 	// SUBSCRIBE_OK. A track missing from this map declared no timeline, so its frames
 	// arrive untimed.
 	#timescales = new Map<bigint, Timescale>();
+
+	// Joining FETCH request IDs, mapped to the subscription whose head each brings. A fetch
+	// stream names the FETCH, not the subscription, and needs no track alias.
+	#fetches = new Map<bigint, Subscription>();
 
 	// Dedup consumed broadcasts per path: repeat consume() calls share one subscription.
 	#consumes = new BroadcastCache();
@@ -859,7 +891,14 @@ export class Subscriber {
 
 		const producer = subscription.track;
 		let disposeGrant: Dispose | undefined;
+		// Ends the joining FETCH with the subscription.
+		const joining = new AbortController();
 		try {
+			if (subscription.join) {
+				const target = { subscribeId: requestId, broadcast, name: request.name, epoch };
+				void this.#runJoiningFetch(subscription, target, priority, joining.signal);
+			}
+
 			// Which terminal fired decides how the track closes, so tag them rather than
 			// racing bare promises.
 			const publisherEnded = Symbol("publisher");
@@ -933,6 +972,10 @@ export class Subscriber {
 				`subscribe error: id=${requestId} broadcast=${broadcast} track=${request.name} error=${reason(e)}`,
 			);
 		} finally {
+			joining.abort();
+			// A clean end already settled the head; anything else leaves it for a later join.
+			subscription.join?.cancel(new Error("subscription ended"));
+			for (const id of subscription.fetchIds) this.#fetches.delete(id);
 			disposeGrant?.();
 			// Only the owner tears down the alias metadata: a later subscription may have
 			// reclaimed the alias and installed its own timescale.
@@ -984,9 +1027,12 @@ export class Subscriber {
 		}
 		const count = done.streamCount;
 
-		const { tail, track } = subscription;
+		const { tail, track, join } = subscription;
 		const complete = () => count > 0n && BigInt(tail.streams) >= count;
 		await tail.settle(complete, hooks.trackReleased(track));
+		// Every stream is accounted for, so no tail is coming: a head nothing claimed is its
+		// whole group. The joining FETCH is not in the Stream Count; its head held the settle.
+		if (hooks.trackReleased(track).peek() === undefined) join?.end();
 		// SUBSCRIPTION_ENDED ends just this subscription, so the copy fails rather than declare an
 		// end the track may run past: a later reader subscribes afresh, and its groups continue.
 		if (done.statusCode !== PublishDoneStatus.TRACK_ENDED) {
@@ -1072,6 +1118,136 @@ export class Subscriber {
 		}
 	}
 
+	/**
+	 * Fetch the head of a draft-18 join's group, and keep the request open until the head is
+	 * in or the subscription ends.
+	 *
+	 * It asks for the group SUBSCRIBE_OK names as Largest, from object 0 up to Largest, with a
+	 * Relative Joining FETCH (offset 0); the objects arrive on a fetch stream that
+	 * {@link handleFetch} writes into the {@link Join}. A relay that cannot resolve the join
+	 * (some refuse it for a lone subscriber) gets one standalone FETCH for the same range, fed
+	 * into the same head. If that fails too, only the head is lost, as in the Rust
+	 * subscriber. A malformed answer closes the session, as on any request.
+	 */
+	async #runJoiningFetch(
+		subscription: Subscription,
+		target: { subscribeId: bigint; broadcast: Path.Valid; name: string; epoch?: Epoch.Valid },
+		priority: number,
+		signal: AbortSignal,
+	) {
+		const { join, largest } = subscription;
+		if (!join || !largest) return;
+		const joining = new Fetch({
+			requestId: 0n,
+			type: { kind: "relativeJoining", subscription: target.subscribeId, offset: 0n },
+			subscriberPriority: priority,
+			groupOrder: "ascending",
+		});
+		try {
+			await this.#fetchHead(subscription, joining, signal);
+			return;
+		} catch (err) {
+			const e = error(err);
+			// Only a request that brought nothing is worth repeating; a head already started
+			// failed with it, and a violation already closed the session.
+			if (signal.aborted || e instanceof ProtocolViolation || !join.pending) {
+				if (!signal.aborted)
+					console.debug(`joining FETCH failed, joining at the next whole group: ${reason(e)}`);
+				join.refuse(e);
+				return;
+			}
+			console.debug(`joining FETCH failed, fetching the group standalone: ${reason(e)}`);
+		}
+
+		// The same range spelled out: draft 18's End is the last object plus one.
+		const standalone = new Fetch({
+			requestId: 0n,
+			type: {
+				kind: "standalone",
+				trackNamespace: target.broadcast,
+				trackName: target.name,
+				start: { group: largest.groupId, object: 0n },
+				end: { group: largest.groupId, object: largest.objectId + 1n },
+			},
+			epoch: target.epoch,
+			subscriberPriority: priority,
+			groupOrder: "ascending",
+		});
+		try {
+			await this.#fetchHead(subscription, standalone, signal);
+		} catch (err) {
+			const e = error(err);
+			if (!signal.aborted)
+				console.debug(`standalone FETCH failed, joining at the next whole group: ${reason(e)}`);
+			join.refuse(e);
+		}
+	}
+
+	/**
+	 * Send one FETCH for a join's head and wait, under the request deadline, for its answer,
+	 * then for the head to settle. Throws on a refusal, a timeout, or a failed request,
+	 * leaving the join to the caller; a malformed answer also closes the session.
+	 */
+	async #fetchHead(subscription: Subscription, msg: Fetch, signal: AbortSignal): Promise<void> {
+		const join = subscription.join;
+		if (!join) return;
+		const version = this.#session.version;
+		const kind = msg.type.kind === "standalone" ? "standalone" : "joining";
+		let request: RequestStream | undefined;
+		try {
+			const fetchId = await this.#session.nextRequestId(signal);
+			if (fetchId === undefined) throw await this.#closedSession();
+			msg.requestId = fetchId;
+			// Registered before the FETCH goes out: its stream can overtake FETCH_OK. It stays
+			// until the subscription ends, so a head that lands after a whole group won the
+			// sequence is read away rather than refused.
+			this.#fetches.set(fetchId, subscription);
+			subscription.fetchIds.push(fetchId);
+
+			const deadline = new Deadline();
+			request = new RequestStream(
+				await untilAborted(deadline.open(this.#session.openBi(requestOptions)), signal),
+				this.#session,
+				this.#quic,
+			);
+			await Message.write(request.writer, Fetch.id, msg, version);
+			const last = subscription.largest?.objectId;
+			console.debug(`${kind} fetch: id=${fetchId} group=${join.sequence} largest=${last}`);
+
+			const response = await deadline.wait(untilAborted(request.next(), signal));
+			if (response === undefined) throw new Error(`${kind} FETCH ended before its response`);
+			if (response.type === RequestError.id) {
+				const err = await RequestError.decode(response.reader, version);
+				const why = requestReason(err.errorCode, err.reasonPhrase, "fetch", version);
+				throw new Error(`${kind} FETCH refused: ${why}`);
+			}
+			if (response.type !== FetchOk.id) {
+				throw new ProtocolViolation(`unexpected answer to FETCH: 0x${response.type.toString(16)}`);
+			}
+			try {
+				await FetchOk.decode(response.reader, version);
+			} catch (err) {
+				throw new ProtocolViolation(`malformed FETCH_OK: ${reason(error(err))}`);
+			}
+
+			// The answer is in; the head arrives on the fetch stream, or never.
+			await untilAborted(join.settled, signal);
+			request.close();
+		} catch (err) {
+			const e = error(err);
+			if (e instanceof ProtocolViolation) {
+				request?.abort(e);
+				this.#fail(e.code, e.message);
+			} else if (signal.aborted) {
+				request?.cancel();
+				request?.close();
+			} else {
+				request?.abort(e);
+			}
+			throw e;
+		}
+	}
+
 	// Opens the subscribe stream, sends SUBSCRIBE, and reads the response.
 	// `state` is populated as soon as the stream opens and again when the
 	// trackAlias is registered, so the caller can clean both up on timeout
@@ -1112,13 +1288,13 @@ export class Subscriber {
 			maxAge: this.#maxAge ? (request.subscription.maxDelay ?? 0) : undefined,
 			// Fixed for the subscription's life: no REQUEST_UPDATE parameter carries it.
 			groupOrder: request.subscription.order,
-			// No fill is requested: the fill's fetch stream and the live subscription split
-			// the group across two streams, and this subscriber does not reassemble them into
-			// one group yet. A lenient publisher (like ours) replays the whole in-range group
-			// on the subscription instead; a strict one only delivers from the next published
-			// object, and that mid-group stream is dropped, degrading the join to the next
-			// group boundary.
-			filter: joinFilter(version),
+			// A "next" join asks for the next group. For the current one, draft 18 joins at
+			// Largest Object and sends a joining FETCH for the group's head once SUBSCRIBE_OK
+			// names it (see {@link Join}). Draft 22 requests no fill yet: a lenient publisher
+			// (like ours) replays the whole in-range group on the subscription; a strict one
+			// delivers from the next published object, and that mid-group stream is dropped,
+			// degrading the join to the next group boundary. Fixed for the subscription's life.
+			filter: joinFilter(version, request.subscription.join),
 			epoch,
 		});
 		await Message.write(state.stream.writer, Subscribe.id, msg, version);
@@ -1166,7 +1342,22 @@ export class Subscriber {
 			ietf: version,
 		});
 		const producer = staged.producer;
-		const subscription: Subscription = { track: producer, tail: new Tail() };
+		const subscription: Subscription = {
+			track: producer,
+			tail: new Tail(),
+			timescale: ok.properties.timescale,
+			largest: ok.largest,
+			fetchIds: [],
+		};
+		// A Largest Object join before draft-22 starts after Largest, so the joining FETCH
+		// brings its group's head. With no Largest the track is empty and every group whole.
+		// A "next" join starts after Largest's group, and skips it even if the publisher sends it.
+		const next = request.subscription.join === "next";
+		if (ok.largest && next) {
+			subscription.from = Number(ok.largest.groupId) + 1;
+		} else if (!isDraft22(version) && ok.largest) {
+			subscription.join = new Join(Number(ok.largest.groupId), subscription.tail);
+		}
 		state.subscription = subscription;
 		if (ok.largest) {
 			// Object IDs can start past zero or skip, while readers see frame ordinals, so only
@@ -1179,7 +1370,7 @@ export class Subscriber {
 		// still arrive after a higher one's.
 		const groups = request.subscription.groups;
 		hooks.startTrack(producer, {
-			start: ok.largest ? Number(ok.largest.groupId) : 0,
+			start: subscription.from ?? (ok.largest ? Number(ok.largest.groupId) : 0),
 			requested: groups?.start === undefined ? undefined : groupBounds(groups).start,
 		});
 		staged.commit();
@@ -1393,6 +1584,17 @@ export class Subscriber {
 		// Every data stream counts toward PUBLISH_DONE's Stream Count, even one dropped below.
 		const read = tail.open(group.groupId);
 
+		// A publisher that ignores Next Group Start serves the group in progress; a "next" join
+		// starts after it.
+		if (subscription.from !== undefined && group.groupId < subscription.from) {
+			console.debug(
+				`dropping a group before a next-group join: alias=${group.trackAlias} group=${group.groupId}`,
+			);
+			stream.stop(new Error("the subscription starts at the next group"));
+			read();
+			return;
+		}
+
 		// Created on the first object rather than the header: an END_OF_TRACK at object 0
 		// means the group does not exist at all.
 		let producer: netGroup.Producer | undefined;
@@ -1415,7 +1617,11 @@ export class Subscriber {
 			if (!group.flags.hasPriority) group.publisherPriority = toWire((await track.info()).priority);
 
 			const timescale = this.#timescales.get(group.trackAlias);
-			const decode = (c: Cursor) => Frame.decode(c, group.flags, timescale);
+			// A stream for the group a draft-18 join is fetching the head of may start partway
+			// through it, at the Object ID the head ends before (see Join).
+			const join = subscription.join?.sequence === group.groupId ? subscription.join : undefined;
+			let first = join?.outstanding === true;
+			const decode = (c: Cursor) => Frame.decode(c, group.flags, timescale, first);
 			let nextObject = 0;
 			for (;;) {
 				// Every object already buffered is written without an await, so the reader wakes
@@ -1428,6 +1634,35 @@ export class Subscriber {
 				if (!producer && (frame === null || frame instanceof Error)) {
 					stream.stop(frame ?? new StreamError(StreamCode.Cancel));
 					return;
+				}
+				if (first && join) {
+					first = false;
+					const suspend = () => tail.suspend();
+					// No producer yet, so a closing group or track already returned above.
+					const object = frame instanceof Error ? undefined : (frame ?? undefined);
+					// The first object's ID is absolute: where in the group this stream starts.
+					const start = object?.payload !== undefined || object?.endOfTrack ? object.idDelta : undefined;
+					if (start === 0 && object?.payload !== undefined) {
+						// The whole group: it stands alone unless the head already took the sequence.
+						if (!join.whole()) {
+							stream.stop(new Error("the group's head was served twice"));
+							return;
+						}
+					} else if (start === undefined || start > 0) {
+						// A tail with no objects ends the group wherever the head did.
+						const head = await join.claim(start, suspend);
+						if (head) {
+							producer = head.producer;
+							nextObject = head.next;
+							if (object) object.idDelta = 0;
+						} else if (start !== undefined && !object?.endOfTrack) {
+							console.debug(
+								`dropping a group with no head: alias=${group.trackAlias} group=${group.groupId} start=${start}`,
+							);
+							stream.stop(new Error("no joining FETCH head to stitch a mid-group stream onto"));
+							return;
+						}
+					}
 				}
 				if (!frame || frame instanceof Error) {
 					// FIRST_OBJECT clear on a stream that ends with no object: it starts partway
@@ -1516,6 +1751,103 @@ export class Subscriber {
 			stream.stop(e);
 		} finally {
 			read();
+		}
+	}
+
+	/**
+	 * Handles a fetch stream, with its type already read: the head of a draft-18 join.
+	 *
+	 * The FETCH it answers asked for one group from object 0, so the first object must spell
+	 * `{G, 0}` and every later one follow it in that group. The head is created as soon as its
+	 * first object arrives and written as the objects do, so readers see it at once; the live
+	 * tail takes the group over through the {@link Join}. Anything the head cannot stitch,
+	 * another group or a gap among them, drops it, which costs only that group's head.
+	 *
+	 * @internal
+	 */
+	async handleFetch(stream: Reader) {
+		const version = this.#session.version;
+		const { requestId } = await FetchHeader.decode(stream, version);
+		const subscription = this.#fetches.get(requestId);
+		// Nothing of ours asked: the publisher is answering a FETCH we never sent.
+		if (!subscription?.join) throw new Error(`unexpected fetch stream: request=${requestId}`);
+		const { join, track, timescale } = subscription;
+
+		let producer: netGroup.Producer | undefined;
+		// A whole group took the sequence first, or the join gave up: read the rest away.
+		let discarding = false;
+		let next = 0;
+		try {
+			const decode = (c: Cursor) => decodeFetchObject(c, timescale);
+			for (let first = true; ; first = false) {
+				const object =
+					stream.tryDecode(decode) ??
+					(await race([stream.decodeMaybe(decode), producer?.closed ?? hooks.trackReleased(track)]));
+				if (object === null || object instanceof Error) {
+					join.fail(object ?? new Error("the track closed under the joining FETCH"));
+					stream.stop(object ?? new StreamError(StreamCode.Cancel));
+					return;
+				}
+				if (object === undefined) break;
+				if (discarding) continue;
+
+				if (object.kind === "endOfRange") {
+					throw new JoinUnsupported("a joining FETCH with an End of Range cannot be stitched");
+				}
+				const inherits =
+					object.group === undefined ||
+					object.object === undefined ||
+					object.priority === undefined ||
+					object.subgroup === "prior" ||
+					object.subgroup === "next";
+				if (first && inherits) throw new ProtocolViolation("the first fetch object refers to a prior object");
+				if (object.subgroup === "datagram") throw new JoinUnsupported("a datagram group is not fetchable");
+				if (object.subgroup === "next" || (object.subgroup === "explicit" && object.subgroupId !== 0)) {
+					throw new JoinUnsupported("subgroups are not supported");
+				}
+
+				// The first object names its group and Object ID outright; a later Group ID names
+				// another group, which a joining FETCH of one group does not have.
+				if (first) {
+					if (object.group !== join.sequence) {
+						throw new JoinUnsupported(
+							`the joining FETCH answered group ${object.group}, not ${join.sequence}`,
+						);
+					}
+					if (object.object !== 0) throw new JoinUnsupported("the joining FETCH does not start at object 0");
+				} else if (object.group !== undefined) {
+					throw new JoinUnsupported("a joining FETCH spanning several groups cannot be stitched");
+				} else if (object.object !== undefined && object.object !== 0) {
+					throw new JoinUnsupported("a gap in the joining FETCH cannot be stitched");
+				}
+
+				if (timescale !== undefined && object.timestamp === undefined) {
+					throw new StreamError(StreamCode.MalformedTrack, {
+						message: `object without a Timestamp on a track with TIMESCALE: group=${join.sequence}`,
+					});
+				}
+
+				if (first) {
+					producer = join.open(() => track.createGroup(join.sequence));
+					if (!producer) {
+						discarding = true;
+						continue;
+					}
+				}
+				producer?.writeFrame({ payload: object.payload, timestamp: object.timestamp });
+				join.wrote();
+				next += 1;
+			}
+			console.debug(`join head: group=${join.sequence} objects=${next}`);
+			join.finish();
+		} catch (err: unknown) {
+			const e = await sessionCause(this.#quic, err);
+			if (e instanceof JoinUnsupported) console.warn(`${e.message}, joining at the next whole group`);
+			join.fail(e);
+			if (e instanceof ProtocolViolation) this.#fail(e.code, e.message);
+			// As for a subgroup object: the track is malformed, not just its head.
+			if (e instanceof StreamError && e.code === StreamCode.MalformedTrack) track.abort(e);
+			stream.stop(e);
 		}
 	}
 

@@ -8,9 +8,9 @@ import { Version } from "./version.ts";
 const OLD = Version.DRAFT_18;
 const NEW = Version.DRAFT_22;
 
-test("legacy live joins do not exclude the prefix without a joining FETCH", () => {
+test("a draft-18 live join is Largest Object, its head left to the joining FETCH", () => {
 	for (const version of [Version.DRAFT_18]) {
-		expect([...Filter.encode(joinFilter(version), version)]).toEqual([3, 0, 0]);
+		expect([...Filter.encode(joinFilter(version), version)]).toEqual([0x02]);
 	}
 	expect([...Filter.encode(joinFilter(NEW), NEW)]).toEqual([0x01, 0x01]);
 });

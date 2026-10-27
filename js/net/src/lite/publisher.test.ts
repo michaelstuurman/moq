@@ -1601,6 +1601,7 @@ test("lite draft-06: scheduling updates apply while SUBSCRIBE_START is blocked",
 		expect(sub.track.subscription.peek()).toEqual({
 			priority: 9,
 			maxDelay: TEST_MAX_DELAY_MS,
+			join: "current",
 			order: "descending",
 			groups: { start: undefined, end: { excluded: 6 } },
 		});

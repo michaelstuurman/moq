@@ -579,6 +579,7 @@ export namespace Track {
 		refresh?: number;
 		timescale?: Time.Timescale | null;
 	}
+	export type Join = "current" | "next";
 	export type Order = "ascending" | "descending";
 	export class Ordered {
 		close(abort?: Error): void;
@@ -651,6 +652,7 @@ export namespace Track {
 	}
 	export interface Subscription {
 		groups?: Track.Groups;
+		join?: Track.Join;
 		maxDelay?: Milli;
 		order?: Track.Order;
 		priority?: number;

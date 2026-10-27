@@ -251,7 +251,27 @@ export interface Subscription {
 	 * fresh. Each subscriber's own publisher still serves it in its own order.
 	 */
 	order?: Order;
+	/**
+	 * Where a subscription to a track already under way starts. Defaults to `"current"`.
+	 *
+	 * Carried by moq-transport, fixed at subscribe time; moq-lite serves the current group
+	 * either way. Aggregated across every live subscriber: any `"current"` subscriber makes
+	 * the aggregate `"current"`.
+	 */
+	join?: Join;
 }
+
+/**
+ * Where a subscription to a track already under way starts.
+ *
+ * - `"current"`: the group in progress, from its first object, so a reader starts at once.
+ *   On moq-transport draft 18 the objects already sent come through a joining FETCH. A track
+ *   written rarely, such as a catalog or a JSON snapshot, needs this: without the head it
+ *   may never arrive.
+ * - `"next"`: the first group that starts after subscribing. Media starts at the live edge
+ *   instead of up to a group behind it, after waiting up to one group for the first.
+ */
+export type Join = "current" | "next";
 
 /**
  * Which of a subscription's pending groups the publisher sends first: `"descending"` (newest
@@ -273,6 +293,7 @@ function subscriptionDefaults(subscription: Subscription = {}): Subscription {
 		priority: priorityValue(subscription.priority ?? DEFAULT_PRIORITY),
 		maxDelay: wireMillis("maxDelay", subscription.maxDelay ?? Milli.zero),
 		order: orderOf(subscription.order),
+		join: joinOf(subscription.join),
 		groups: {
 			start: subscription.groups?.start === undefined ? undefined : { included: bounds.start },
 			end: bounds.end === undefined ? undefined : { excluded: bounds.end },
@@ -285,6 +306,13 @@ function orderOf(order: Order | undefined): Order {
 	if (order === undefined) return "descending";
 	if (order !== "ascending" && order !== "descending") throw new TypeError(`unknown order: ${String(order)}`);
 	return order;
+}
+
+// Refused like an unknown order, rather than silently joining at the current group.
+function joinOf(join: Join | undefined): Join {
+	if (join === undefined) return "current";
+	if (join !== "current" && join !== "next") throw new TypeError(`unknown join: ${String(join)}`);
+	return join;
 }
 
 // Aggregate the preferences of every live subscriber, matching Rust's Subscription::poll_combined.
@@ -303,6 +331,9 @@ function combineSubscriptions(states: Iterable<TrackState>): Subscription | unde
 		// One live subscriber held behind another's backlog is worse than a backlog sent late.
 		combined.order =
 			combined.order === "ascending" && subscription.order === "ascending" ? "ascending" : "descending";
+		// A subscriber that wants the group in progress can't do without it; one that waits for
+		// the next group only receives a group earlier.
+		combined.join = combined.join === "next" && subscription.join === "next" ? "next" : "current";
 
 		// A floor only restricts, so a subscriber without one clears the aggregate:
 		// its budget may reach below any floor the others set.

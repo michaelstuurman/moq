@@ -1,7 +1,7 @@
 import type * as Epoch from "../epoch.ts";
 import type * as Path from "../path.ts";
 import type { Reader, Writer } from "../stream.ts";
-import type { Order } from "../track.ts";
+import type { Join, Order } from "../track.ts";
 import * as Filter from "./filter.ts";
 import * as Message from "./message.ts";
 import * as Namespace from "./namespace.ts";
@@ -48,12 +48,15 @@ function decodeGroupOrder(value: number): Order {
 /**
  * The filter this implementation joins a live track with.
  *
- * moq-lite joins at the start of the current group, which is a decodable point, and
- * draft-22's relative form is the first that can name it without knowing Largest Object.
- * Earlier drafts request unfiltered delivery because this client does not send joining FETCH.
+ * A `"next"` join asks for the next group on every draft (draft 18's Next Group Start). For
+ * the `"current"` group, draft 18 joins at Largest Object, as the Rust subscriber does, and a
+ * joining FETCH brings the group's head; spelling the filter keeps a peer from reading an
+ * absent one its own way. Draft-22's relative form is the first that names the group start
+ * without a FETCH.
  */
-export function joinFilter(version: IetfVersion): Filter.Filter {
-	return Filter.isDraft22(version) ? { kind: "relative", groups: 1n } : { kind: "unfiltered" };
+export function joinFilter(version: IetfVersion, join: Join = "current"): Filter.Filter {
+	if (join === "next") return { kind: "relative", groups: 0n };
+	return Filter.isDraft22(version) ? { kind: "relative", groups: 1n } : { kind: "nextObject" };
 }
 
 export class Subscribe {

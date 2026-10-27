@@ -5,6 +5,16 @@ import { Error as NetError } from "@moq/net";
 import type { Effect, Getter } from "@moq/signals";
 
 /**
+ * Where media joins a track already under way: at the next group, so playback starts at the
+ * live edge rather than up to a group behind it. The catalog and other tracks that describe
+ * rather than play keep the default, the current group, which may be the only one for a long
+ * time.
+ *
+ * @internal
+ */
+export const MEDIA_JOIN: Moq.Track.Join = "next";
+
+/**
  * Open a media subscription with its max delay on the initial request and every update.
  *
  * @internal
@@ -19,12 +29,12 @@ export function subscribeMedia(
 	},
 ): Moq.Track.Subscriber | undefined {
 	if (effect.get(props.broadcast.closed) !== undefined) return;
-	const subscription = () => ({ priority: props.priority, maxDelay: props.maxDelay.peek() });
-	const subscriber = props.broadcast.track(props.track).subscribe(subscription());
+	const subscription = (maxDelay: Milli) => ({ priority: props.priority, maxDelay, join: MEDIA_JOIN });
+	const subscriber = props.broadcast.track(props.track).subscribe(subscription(props.maxDelay.peek()));
 	effect.cleanup(() => subscriber.close());
 
 	effect.run((inner) => {
-		subscriber.update({ priority: props.priority, maxDelay: inner.get(props.maxDelay) });
+		subscriber.update(subscription(inner.get(props.maxDelay)));
 	});
 
 	return subscriber;

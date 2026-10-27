@@ -368,6 +368,7 @@ test("a request exposes the aggregate subscription options", async () => {
 	expect(request?.subscription).toEqual({
 		priority: 7,
 		maxDelay: Milli(250),
+		join: "current",
 		order: "descending",
 		groups: { start: { included: 0 }, end: { excluded: 30 } },
 	});

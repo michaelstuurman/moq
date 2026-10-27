@@ -527,8 +527,11 @@ export class Connection implements Established {
 			return;
 		}
 
-		// We never FETCH, so a fetch response answers nothing of ours.
-		if (type === BigInt(FetchHeader.type)) throw new Error("unexpected fetch stream");
+		// The head of a draft-18 join, answering our joining FETCH.
+		if (type === BigInt(FetchHeader.type)) {
+			await this.#subscriber.handleFetch(stream);
+			return;
+		}
 
 		// Anything else is unknown, and a second SETUP is a violation too.
 		throw new ProtocolViolation(`unknown uni stream type: 0x${type.toString(16)}`);
