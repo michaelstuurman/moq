@@ -13,7 +13,7 @@ import {
 	error,
 	ProtocolViolation,
 	reason,
-	type SessionCode,
+	SessionCode,
 	StreamCode,
 	Stream as StreamError,
 	sessionCause,
@@ -159,9 +159,10 @@ export class Subscriber {
 	// to end from retracting what the other still holds. A publisher replacing its instance
 	// (MoQ Epoch) withdraws one advertisement and makes another, on separate streams that
 	// can arrive in either order, so the newest stands until it goes and an update to an
-	// older one changes nothing. Each path holds one of the session's announce slots,
-	// however many advertisements reference it.
-	#announced: SlotMap<Path.Valid, Announced>;
+	// older one changes nothing. Each live wire advertisement holds an announce slot,
+	// even while its route loops back through us and is absent from this derived map.
+	#announced = new Map<Path.Valid, Announced>();
+	#announceSlots: Slots;
 
 	// Names each advertisement the peer makes, so a later update or withdrawal finds its own.
 	#nextAdvert = 0;
@@ -231,7 +232,7 @@ export class Subscriber {
 	}) {
 		this.#session = session;
 		this.#quic = quic;
-		this.#announced = new SlotMap(new Slots(limits.announces, { quic, reason: "too many announcements" }));
+		this.#announceSlots = new Slots(limits.announces, { quic, reason: "too many announcements" });
 		this.#cluster = cluster;
 		this.#epoch = epoch;
 		this.#hidden = hidden;
@@ -461,7 +462,7 @@ export class Subscriber {
 		// so a repeat is recognized as an update to it rather than a second one, which would leak.
 		// An advertisement stays live on the wire until its NAMESPACE_DONE, even while its
 		// route is detached (`id` unset) for looping back through us.
-		const live = new Map<Path.Valid, { id?: number; epoch?: Epoch.Valid }>();
+		const live = new SlotMap<Path.Valid, { id?: number; epoch?: Epoch.Valid }>(this.#announceSlots);
 
 		// Set once `release` has given back everything this stream held. The read loop is not
 		// awaited when the local consumer closes first, and the stream keeps delivering what
@@ -594,6 +595,10 @@ export class Subscriber {
 							if (held !== undefined && (held.epoch === undefined) !== (params.epoch === undefined)) {
 								throw new ProtocolViolation(`NAMESPACE repeated gaining or losing an epoch: ${path}`);
 							}
+
+							// The wire still holds a reflected advertisement until DONE, so charge
+							// it before deciding whether its route can be used. Repeats keep the slot.
+							if (held === undefined) live.set(path, { epoch: params.epoch });
 
 							// A repeat updates the advertisement in place, so one that now
 							// loops back through us has taken a route we can't subscribe
@@ -1155,8 +1160,9 @@ export class Subscriber {
 		state.subscription = subscription;
 		if (ok.largest) {
 			// Object IDs can start past zero or skip, while readers see frame ordinals, so only
-			// the group carries over: its first frame is the edge a reader can count on.
-			hooks.reportedLargest(producer, { group: Number(ok.largest.groupId), frame: 0 });
+			// the group carries over: its first frame is the edge a reader can count on. It names
+			// no object, so a Next Object join served onward still starts at the group's first.
+			hooks.reportedGroup(producer, Number(ok.largest.groupId));
 		}
 		// The live join starts at the publisher's edge, whatever floor the demand asked for.
 		// With no Largest it skips nothing, so every group is owed: a lower one's stream may
@@ -1178,7 +1184,7 @@ export class Subscriber {
 			// Only one alias naming two different tracks is the session's problem. A publisher
 			// sharing an alias between subscriptions to one track is allowed to do that, and
 			// disconnecting over it would drop every other broadcast on the session.
-			if (err instanceof DuplicateTrackAlias) this.#session.close();
+			if (err instanceof DuplicateTrackAlias) this.#fail(SessionCode.ProtocolViolation, err.message);
 			throw err;
 		}
 		state.registeredAlias = ok.trackAlias;
@@ -1226,6 +1232,7 @@ export class Subscriber {
 		// twice, and each advertisement is tracked apart from news. This request owns exactly
 		// one of those references, named by its id while attached, and gives it back when the
 		// stream ends.
+		this.#announceSlots.acquire();
 		let attached: number | undefined;
 		// Fixed for the advertisement's life: no REQUEST_UPDATE carries one.
 		const epoch = msg.params.epoch;
@@ -1312,6 +1319,8 @@ export class Subscriber {
 				await Message.write(request.writer, RequestOk.id, new RequestOk(), version);
 			}
 		} finally {
+			this.#announceSlots.release();
+
 			// Give back exactly what was taken: a request that never got its OK out never
 			// referenced the path, and retracting there would drop someone else's count.
 			if (attached !== undefined) {
