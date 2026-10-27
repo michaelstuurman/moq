@@ -6,7 +6,7 @@ import { Stream } from "../stream.ts";
 import type { Established } from "./established.ts";
 import * as Extensions from "./extensions.ts";
 import { DISCOVERY_REMOVED, forwardAnnounced } from "./forward.ts";
-import { exchangeSetup } from "./handshake.ts";
+import { exchangeSetup, handsOff } from "./handshake.ts";
 
 /** Options for {@link accept}. */
 export interface AcceptProps {
@@ -15,7 +15,7 @@ export interface AcceptProps {
 	/** The request URL associated with the transport. */
 	url: URL;
 
-	/** The moq-lite 01/02 version to select in a `moql` SETUP, instead of the client's first. */
+	/** The moq-lite version to select in a `moql` SETUP, instead of the client's first. */
 	version?: number;
 
 	/**
@@ -133,14 +133,14 @@ async function acceptAlpn(
 	});
 }
 
-/** `moql`, or no subprotocol: negotiate moq-lite 01/02 in SETUP. */
+/** `moql`, or no subprotocol: negotiate moq-lite in SETUP. */
 async function acceptNegotiated(
 	transport: WebTransport,
 	url: URL,
 	wiring: SessionProps,
 	version?: number,
 ): Promise<Established> {
-	// Lite 01 and 02 frame the SETUP identically, so either reads it.
+	// The SETUP keeps lite-02's framing whichever version it offers.
 	const stream = await Stream.accept(transport, Lite.Version.DRAFT_02);
 	if (!stream) throw new Error("no incoming bidi stream for SETUP");
 
@@ -153,5 +153,9 @@ async function acceptNegotiated(
 	}
 
 	await new Lite.ServerSetup(selected).encode(stream.writer);
+	if (handsOff(selected)) {
+		stream.close();
+		return new Lite.Connection({ url, quic: transport, version: selected, ...wiring });
+	}
 	return new Lite.Connection({ url, quic: transport, version: selected, session: stream, ...wiring });
 }

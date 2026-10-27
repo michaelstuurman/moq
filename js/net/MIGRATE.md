@@ -7,7 +7,7 @@ How to update your code for each breaking change, newest first.
 ### moq-transport drafts 14 through 17 are removed
 
 The `"moq-transport-14"` through `"moq-transport-17"` version names now throw a `TypeError`, and a peer offering only those versions fails the handshake.
-The moql SETUP (no ALPN, or `moql`) negotiates only lite-01 and lite-02.
+The moql SETUP (no ALPN, or `moql`) negotiates only moq-lite versions.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
 
 ### Publication handles own announcement control

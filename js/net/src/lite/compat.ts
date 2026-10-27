@@ -5,12 +5,12 @@ import { Version } from "./version.ts";
 /** The most versions a CLIENT_SETUP may offer. */
 const MAX_VERSIONS = 128;
 
-/** An empty parameter list: moq-lite 01/02 define none. */
+/** An empty parameter list: moq-lite defines none here. */
 const NO_PARAMETERS = new Uint8Array([0]);
 
-/** Whether `version` negotiates over the `moql` SETUP exchange. */
-export function isNegotiated(version: number): version is typeof Version.DRAFT_01 | typeof Version.DRAFT_02 {
-	return version === Version.DRAFT_01 || version === Version.DRAFT_02;
+/** Whether `version` is a moq-lite version, each of which negotiates over the `moql` SETUP exchange. */
+export function isNegotiated(version: number): version is Version {
+	return (Object.values(Version) as number[]).includes(version);
 }
 
 /** Write `id`, then the body `f` writes behind draft-14's u16 size, in one write. */
@@ -31,9 +31,9 @@ async function unframe(r: Reader, id: number): Promise<Reader> {
 }
 
 /**
- * The client half of the `moql` SETUP exchange, offering moq-lite 01/02.
+ * The client half of the `moql` SETUP exchange, offering moq-lite versions.
  *
- * The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed: a u16
+ * The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite borrowed: a u16
  * size, the offered versions, then parameters.
  */
 export class ClientSetup {
@@ -58,14 +58,14 @@ export class ClientSetup {
 		if (count > MAX_VERSIONS) throw new Error(`too many versions: ${count}`);
 		const versions: number[] = [];
 		for (let i = 0; i < count; i++) versions.push(await body.u53());
-		// Parameters are unparsed: moq-lite 01/02 define none.
+		// Parameters are unparsed: moq-lite defines none here.
 		await body.readAll();
 		return new ClientSetup(versions);
 	}
 }
 
 /**
- * The server half of the `moql` SETUP exchange, selecting moq-lite 01 or 02.
+ * The server half of the `moql` SETUP exchange, selecting a moq-lite version.
  *
  * The framing is moq-transport draft-14's SERVER_SETUP: a u16 size, the selected version,
  * then parameters.
@@ -88,7 +88,7 @@ export class ServerSetup {
 	static async decode(r: Reader): Promise<ServerSetup> {
 		const body = await unframe(r, StreamId.ServerCompat);
 		const version = await body.u53();
-		// Parameters are unparsed: moq-lite 01/02 define none.
+		// Parameters are unparsed: moq-lite defines none here.
 		await body.readAll();
 		return new ServerSetup(version);
 	}

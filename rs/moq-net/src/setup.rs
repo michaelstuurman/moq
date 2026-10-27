@@ -162,28 +162,29 @@ impl Decode<Version> for Setup {
 	}
 }
 
-/// Whether `v` negotiates over the `moql` bidi SETUP exchange (moq-lite 01/02).
-fn negotiated(v: Version) -> bool {
+/// Whether `v` encodes the `moql` bidi SETUP exchange: moq-lite 01/02, whose draft-14 framing
+/// and QUIC varints it keeps whichever moq-lite version it negotiates.
+fn framed(v: Version) -> bool {
 	matches!(v, Version::Lite(lite::Version::Lite01 | lite::Version::Lite02))
 }
 
-/// The client half of the `moql` bidi SETUP exchange, offering moq-lite 01/02.
+/// The client half of the `moql` bidi SETUP exchange, offering moq-lite versions.
 ///
-/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite 01/02 borrowed: a
+/// The framing is moq-transport draft-14's CLIENT_SETUP, which moq-lite borrowed: a
 /// u16 size, the offered versions, then parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct Client {
 	/// The list of supported versions in preferred order.
 	pub versions: coding::Versions,
 
-	/// Parameters, unparsed: moq-lite 01/02 define none, so neither side reads them.
+	/// Parameters, unparsed: moq-lite defines none here, so neither side reads them.
 	pub parameters: Bytes,
 }
 
 impl Decode<Version> for Client {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
 		r.control = Some(crate::stats::Control::Session);
-		if !negotiated(v) {
+		if !framed(v) {
 			return Err(DecodeError::Version);
 		}
 		let kind = r.u8()?;
@@ -205,7 +206,7 @@ impl Decode<Version> for Client {
 impl Encode<Version> for Client {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
 		w.control = Some(crate::stats::Control::Session);
-		if !negotiated(v) {
+		if !framed(v) {
 			return Err(EncodeError::Version);
 		}
 		w.u8(CLIENT_SETUP);
@@ -225,7 +226,7 @@ fn fill_body(w: &mut Encoder<'_>, prefix: coding::Prefix) -> Result<(), EncodeEr
 	w.fill(prefix)
 }
 
-/// The server half of the `moql` bidi SETUP exchange, selecting moq-lite 01 or 02.
+/// The server half of the `moql` bidi SETUP exchange, selecting a moq-lite version.
 ///
 /// The framing is moq-transport draft-14's SERVER_SETUP: a u16 size, the selected version,
 /// then parameters.
@@ -234,14 +235,14 @@ pub(crate) struct Server {
 	/// The selected version.
 	pub version: coding::Version,
 
-	/// Parameters, unparsed: moq-lite 01/02 define none, so neither side reads them.
+	/// Parameters, unparsed: moq-lite defines none here, so neither side reads them.
 	pub parameters: Bytes,
 }
 
 impl Encode<Version> for Server {
 	fn encode(&self, w: &mut Encoder<'_>, v: Version) -> Result<(), EncodeError> {
 		w.control = Some(crate::stats::Control::Session);
-		if !negotiated(v) {
+		if !framed(v) {
 			return Err(EncodeError::Version);
 		}
 		w.u8(SERVER_SETUP);
@@ -255,7 +256,7 @@ impl Encode<Version> for Server {
 impl Decode<Version> for Server {
 	fn decode(r: &mut Decoder<'_>, v: Version) -> Result<Self, DecodeError> {
 		r.control = Some(crate::stats::Control::Session);
-		if !negotiated(v) {
+		if !framed(v) {
 			return Err(DecodeError::Version);
 		}
 		let kind = r.u8()?;

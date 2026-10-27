@@ -3,12 +3,19 @@ use std::str::FromStr;
 
 use crate::{coding, ietf, lite};
 
-/// The versions of MoQ that are negotiated via SETUP.
+/// The versions of MoQ that a session without a version ALPN (`moql`, or WebTransport
+/// with no subprotocol) can negotiate in the bidi SETUP.
 ///
-/// Ordered by preference, with the client's preference taking priority.
-/// Only moq-lite 01/02 share an ALPN; every other version has its own.
+/// Ordered by preference, with the client's preference taking priority. Lite03 and newer
+/// hand off (see [`Version::hands_off`]).
+/// moq-transport negotiates only by ALPN.
 #[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
-pub(crate) const NEGOTIATED: [Version; 2] = [
+pub(crate) const NEGOTIATED: [Version; 7] = [
+	Version::Lite(lite::Version::Lite07),
+	Version::Lite(lite::Version::Lite06),
+	Version::Lite(lite::Version::Lite05),
+	Version::Lite(lite::Version::Lite04),
+	Version::Lite(lite::Version::Lite03),
 	Version::Lite(lite::Version::Lite02),
 	Version::Lite(lite::Version::Lite01),
 ];
@@ -138,6 +145,13 @@ impl Version {
 			Self::Ietf(ietf::Version::Draft18) => ALPN_18,
 			Self::Ietf(ietf::Version::Draft22) => ALPN_22,
 		}
+	}
+
+	/// Whether SETUP selecting this version ends the SETUP stream, the session continuing
+	/// as this version's ALPN would rather than on that stream.
+	#[cfg_attr(not(feature = "async"), allow(dead_code, reason = "async-only"))]
+	pub(crate) fn hands_off(self) -> bool {
+		matches!(self, Self::Lite(v) if !matches!(v, lite::Version::Lite01 | lite::Version::Lite02))
 	}
 
 	/// Whether this is a lite protocol version.

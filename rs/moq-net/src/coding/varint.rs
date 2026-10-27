@@ -35,8 +35,8 @@ impl From<lite::Version> for Form {
 			| lite::Version::Lite04
 			| lite::Version::Lite05
 			| lite::Version::Lite06 => Self::Quic,
-			// Lite-07 is only reached through its ALPN, so the form is known before the
-			// first byte of any stream.
+			// Lite-07 is reached through its ALPN or a SETUP hand-off, so the form is known
+			// before the first byte of any lite-07 stream.
 			_ => Self::LeadingOnes,
 		}
 	}

@@ -2,6 +2,7 @@ import { closeReason, ProtocolViolation, SessionCode, StreamError } from "../err
 import { type Hop, randomHop } from "../hop.ts";
 import * as Ietf from "../ietf/index.ts";
 import * as Message from "../ietf/message.ts";
+import * as Lite from "../lite/index.ts";
 import { Reader, Stream, UnexpectedEnd, Writer } from "../stream.ts";
 import * as Extensions from "./extensions.ts";
 
@@ -169,4 +170,9 @@ async function receiveSetup(
 		epoch: Ietf.Epoch.fromSetup(setup.parameters),
 		implementation: Ietf.implementationFromSetup(setup.parameters),
 	};
+}
+
+/** Whether SETUP selecting `version` ends the SETUP stream, the session continuing as its ALPN would. */
+export function handsOff(version: Lite.Version): boolean {
+	return version !== Lite.Version.DRAFT_01 && version !== Lite.Version.DRAFT_02;
 }

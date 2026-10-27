@@ -16,7 +16,7 @@ import { isWebTransportSupported } from "./browser.ts";
 import type { Established } from "./established.ts";
 import * as Extensions from "./extensions.ts";
 import { DISCOVERY_REMOVED, forwardAnnounced } from "./forward.ts";
-import { exchangeSetup } from "./handshake.ts";
+import { exchangeSetup, handsOff } from "./handshake.ts";
 import { type Credential, credential, fallback, hold } from "./tokens.ts";
 
 // Default head start for WebTransport before attempting the WebSocket fallback.
@@ -87,14 +87,15 @@ export interface WebTransportProps extends Omit<WebTransportOptions, "serverCert
 	serverCertificate?: string | BufferSource;
 }
 
-// Each version name, most preferred first, with the ALPN that negotiates it. Names sharing
-// `moql` then negotiate in SETUP, where `setup` is the version code offered.
+// Each version name, most preferred first, with the ALPN that negotiates it. `setup` is the
+// version code offered in SETUP, used when the transport negotiated `moql` or no ALPN at all;
+// moq-transport has no version list in SETUP.
 const VERSIONS: Record<string, { alpn: string; setup?: Lite.Version }> = {
-	"moq-lite-07-wip": { alpn: Lite.ALPN_07_WIP },
-	"moq-lite-06": { alpn: Lite.ALPN_06 },
-	"moq-lite-05": { alpn: Lite.ALPN_05 },
-	"moq-lite-04": { alpn: Lite.ALPN_04 },
-	"moq-lite-03": { alpn: Lite.ALPN_03 },
+	"moq-lite-07-wip": { alpn: Lite.ALPN_07_WIP, setup: Lite.Version.DRAFT_07 },
+	"moq-lite-06": { alpn: Lite.ALPN_06, setup: Lite.Version.DRAFT_06 },
+	"moq-lite-05": { alpn: Lite.ALPN_05, setup: Lite.Version.DRAFT_05 },
+	"moq-lite-04": { alpn: Lite.ALPN_04, setup: Lite.Version.DRAFT_04 },
+	"moq-lite-03": { alpn: Lite.ALPN_03, setup: Lite.Version.DRAFT_03 },
 	"moq-lite-02": { alpn: Lite.ALPN, setup: Lite.Version.DRAFT_02 },
 	"moq-lite-01": { alpn: Lite.ALPN, setup: Lite.Version.DRAFT_01 },
 	"moq-transport-22": { alpn: Ietf.ALPN.DRAFT_22 },
@@ -112,7 +113,7 @@ const QMUX: Record<string, QmuxVersion | QmuxVersion[] | null> = {
 	[Ietf.ALPN.DRAFT_18]: "qmux-01",
 };
 
-/** What one version list offers: the ALPNs in preference order, and the SETUP versions behind `moql`. */
+/** What one version list offers: the ALPNs in preference order, and the versions offered in SETUP. */
 interface Offer {
 	alpns: string[];
 	setup: Lite.Version[];
@@ -170,9 +171,9 @@ export interface ConnectProps {
 	/**
 	 * Protocol versions to offer on every transport, most preferred first, spelled like
 	 * `moq-lite-06`. Defaults to every supported version except the work-in-progress
-	 * `moq-lite-07-wip`; list every fallback you still want. A peer that negotiates no
-	 * subprotocol (such as WebTransport in Firefox before 155) is refused unless the list
-	 * includes `moq-lite-02` or `moq-lite-01`, which negotiate in SETUP.
+	 * `moq-lite-07-wip`; list every fallback you still want. With a peer that negotiates no
+	 * subprotocol (such as WebTransport in Firefox before 155), the version is negotiated in
+	 * SETUP instead, which moq-transport cannot do.
 	 */
 	versions?: readonly string[];
 
@@ -480,6 +481,7 @@ async function connectTransport(
 // Negotiate the MoQ protocol over an established transport. The caller races this against
 // the session closing so a close code is not lost behind a failed or stalled SETUP stream.
 // `setup` lists the versions a `moql` or ALPN-less session offers in SETUP.
+// A moq-lite version newer than 02 selected there continues as its ALPN would.
 async function negotiate(
 	url: URL,
 	session: WebTransport,
@@ -513,14 +515,20 @@ async function negotiate(
 		throw new Error(`unsupported WebTransport protocol: ${protocol}`);
 	}
 
-	// `moql`, or no subprotocol: negotiate moq-lite 01/02 in SETUP, framed as either encodes it.
-	const offered = setup[0];
-	if (offered === undefined) throw new Error("no version negotiates in SETUP");
-	const stream = await Stream.open(session, { version: offered });
+	// `moql`, or no subprotocol: negotiate moq-lite in SETUP, which keeps lite-02's framing
+	// whichever version it offers.
+	if (setup.length === 0) throw new Error("no version negotiates in SETUP");
+	const stream = await Stream.open(session, { version: Lite.Version.DRAFT_02 });
 	await new Lite.ClientSetup(setup).encode(stream.writer);
 	const server = await Lite.ServerSetup.decode(stream.reader);
 	const version = setup.find((v) => v === server.version);
 	if (version === undefined) throw new Error(`unsupported server version: 0x${server.version.toString(16)}`);
+	if (handsOff(version)) {
+		// The server ends the stream after its SETUP; nothing else may follow.
+		if (!(await stream.reader.done())) throw new Error("unexpected data after SERVER_SETUP");
+		stream.close();
+		return new Lite.Connection({ url, quic: session, version, ...wiring });
+	}
 	return new Lite.Connection({ url, quic: session, version, session: stream, ...wiring });
 }
 
@@ -774,4 +782,8 @@ async function connectWebSocket(
 			disarm.abort();
 		}
 	}
+}
+
+function isLite(version: number): version is Lite.Version {
+	return Object.values(Lite.Version).includes(version as Lite.Version);
 }

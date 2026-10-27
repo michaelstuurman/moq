@@ -44,7 +44,7 @@ These land with the next breaking release.
   so upgrade publishers and players in either order.
 - **moq-transport drafts 14 through 17 are dropped.** Rust and JavaScript
   speak moq-transport drafts 18 through 22 only, and the `moql` SETUP
-  negotiates moq-lite 01 and 02 only. A peer that offers nothing newer fails
+  negotiates moq-lite only. A peer that offers nothing newer fails
   to connect instead of falling back, so move such peers to draft 18 or a
   moq-lite version before upgrading what they connect to.
 - **WebSocket needs a QMux subprotocol** (#6231). Relays answer a WebSocket

@@ -217,63 +217,32 @@ impl Server {
 		))
 	}
 
-	async fn handshake_lite(&self, runtime: Deadlines, mut session: Transport) -> Result<Handshake, Error> {
-		let (path, role, origin, peer_implementation, handshake) = match session.protocol() {
-			Some(alpn @ (ALPN_LITE_05 | ALPN_LITE_06 | ALPN_LITE_07_WIP)) => {
-				let version = match alpn {
-					ALPN_LITE_07_WIP => lite::Version::Lite07,
-					ALPN_LITE_06 => lite::Version::Lite06,
-					_ => lite::Version::Lite05,
-				};
-				self.versions.select(Version::Lite(version)).ok_or(Error::Version)?;
-				// Gate on the client's SETUP: read it before serving so the
-				// caller can scope by the advertised path. Seeded back into
-				// `start` on `ok()` so PROBE gating resolves without
-				// re-reading the (consumed) Setup Stream.
-				let client_setup = lite::accept_setup(&mut session, version).await?;
-				(
-					client_setup.setup.path.clone(),
-					client_setup.setup.role,
-					client_setup.setup.hop,
-					client_setup.setup.implementation.clone(),
-					PausedHandshake::LiteSetup {
-						session,
-						version,
-						client_setup,
-					},
-				)
-			}
-			Some(ALPN_LITE_04) => {
-				self.versions
-					.select(Version::Lite(lite::Version::Lite04))
-					.ok_or(Error::Version)?;
-				(
-					None,
-					None,
-					None,
-					None,
-					PausedHandshake::LiteBare {
-						session,
-						version: lite::Version::Lite04,
-					},
-				)
-			}
-			Some(ALPN_LITE_03) => {
-				self.versions
-					.select(Version::Lite(lite::Version::Lite03))
-					.ok_or(Error::Version)?;
-				(
-					None,
-					None,
-					None,
-					None,
-					PausedHandshake::LiteBare {
-						session,
-						version: lite::Version::Lite03,
-					},
-				)
-			}
-			_ => return Err(Error::Version),
+	async fn handshake_lite(
+		&self,
+		runtime: Deadlines,
+		mut session: Transport,
+		version: lite::Version,
+	) -> Result<Handshake, Error> {
+		self.versions.select(Version::Lite(version)).ok_or(Error::Version)?;
+		let (path, role, origin, peer_implementation, handshake) = if version.has_setup_stream() {
+			// Gate on the client's SETUP: read it before serving so the
+			// caller can scope by the advertised path. Seeded back into
+			// `start` on `ok()` so PROBE gating resolves without
+			// re-reading the (consumed) Setup Stream.
+			let client_setup = lite::accept_setup(&mut session, version).await?;
+			(
+				client_setup.setup.path.clone(),
+				client_setup.setup.role,
+				client_setup.setup.hop,
+				client_setup.setup.implementation.clone(),
+				PausedHandshake::LiteSetup {
+					session,
+					version,
+					client_setup,
+				},
+			)
+		} else {
+			(None, None, None, None, PausedHandshake::LiteBare { session, version })
 		};
 
 		let auth = crate::auth::Link::new(match &handshake {
@@ -358,19 +327,25 @@ impl Server {
 				self.versions.select(Version::Ietf(draft)).ok_or(Error::Version)?;
 				return self.accept_ietf(runtime, session, draft).await;
 			}
-			Some(ALPN_LITE_07_WIP | ALPN_LITE_06 | ALPN_LITE_05 | ALPN_LITE_04 | ALPN_LITE_03) => {
-				return self.handshake_lite(runtime, session).await;
+			Some(alpn @ (ALPN_LITE_07_WIP | ALPN_LITE_06 | ALPN_LITE_05 | ALPN_LITE_04 | ALPN_LITE_03)) => {
+				let version = match alpn {
+					ALPN_LITE_07_WIP => lite::Version::Lite07,
+					ALPN_LITE_06 => lite::Version::Lite06,
+					ALPN_LITE_05 => lite::Version::Lite05,
+					ALPN_LITE_04 => lite::Version::Lite04,
+					_ => lite::Version::Lite03,
+				};
+				return self.handshake_lite(runtime, session, version).await;
 			}
-			// No ALPN, or `moql`: negotiate moq-lite 01/02 in a bidi SETUP.
+			// No ALPN, or `moql`: negotiate moq-lite in a bidi SETUP.
 			Some(ALPN_LITE) | None => self.versions.filter(&NEGOTIATED.into()).ok_or(Error::Version)?,
 			Some(p) => return Err(Error::UnknownAlpn(p.to_string())),
 		};
 
 		// Read the client's SETUP to choose the version; `ok()` sends the server SETUP and starts.
 		// Stats attach in `ok()`: a caller may still replace them on the handshake.
-		// Lite 01 and 02 frame the SETUP identically, so either decodes it.
-		let encoding = *supported.iter().next().ok_or(Error::Version)?;
-		let mut stream = Stream::accept(&mut session, encoding).await?;
+		// The SETUP keeps lite-01's framing whichever version it offers.
+		let mut stream = Stream::accept(&mut session, Version::Lite(lite::Version::Lite01)).await?;
 		let (client, client_setup_size) = stream.reader.decode_sized::<setup::Client>().await?;
 
 		let version = client
@@ -382,6 +357,20 @@ impl Server {
 		let Version::Lite(version) = version else {
 			return Err(Error::Version);
 		};
+
+		// Answer, close the stream, and continue as that version's ALPN would. Waiting for the
+		// acknowledgement keeps the reply from being discarded by the reset a dropped stream sends.
+		if Version::Lite(version).hands_off() {
+			let Stream { mut writer, .. } = stream;
+			writer
+				.encode(&setup::Server {
+					version: Version::Lite(version).into(),
+					parameters: lite::Parameters::default().encode_bytes(version)?,
+				})
+				.await?;
+			writer.close().await?;
+			return self.handshake_lite(runtime, session, version).await;
+		}
 
 		Ok(Handshake {
 			path: None,

@@ -8,7 +8,7 @@ How to update your code for each breaking change, newest first.
 
 `ietf::Version::Draft14` through `Draft17` are gone, and a peer offering only those versions, by ALPN or in the moql SETUP, fails the handshake.
 Peers must speak moq-transport draft 18 or later, or moq-lite.
-The moql SETUP (no ALPN, or `moql`) now negotiates only lite-01 and lite-02.
+The moql SETUP (no ALPN, or `moql`) now negotiates only moq-lite versions.
 `session::Limits::requests` is removed: stream credit bounds every peer request, so drop the field and keep `announces`.
 
 ### Exports without a consumer are gone

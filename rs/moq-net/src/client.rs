@@ -442,14 +442,15 @@ impl Client {
 					.ok_or(Error::Version)?;
 				return self.start_lite(runtime, session, lite::Version::Lite03, peer_hop);
 			}
-			// No ALPN, or `moql`: negotiate moq-lite 01/02 in a bidi SETUP.
+			// No ALPN, or `moql`: negotiate moq-lite in a bidi SETUP.
 			Some(ALPN_LITE) | None => self.versions.filter(&NEGOTIATED.into()).ok_or(Error::Version)?,
 			Some(p) => return Err(Error::UnknownAlpn(p.to_string())),
 		};
 
-		// Lite 01 and 02 frame the SETUP identically, so either encodes it.
-		let encoding = *supported.iter().next().ok_or(Error::Version)?;
-		let mut stream = Stream::open(&mut session, encoding).await?.with_stats(&self.stats);
+		// The SETUP keeps lite-01's framing whichever version it offers.
+		let mut stream = Stream::open(&mut session, Version::Lite(lite::Version::Lite01))
+			.await?
+			.with_stats(&self.stats);
 
 		let client = setup::Client {
 			versions: supported.clone().into(),
@@ -469,6 +470,14 @@ impl Client {
 			return Err(Error::Version);
 		};
 
+		// The server ends the stream after its SETUP. Reading to the end first keeps the drop
+		// from stopping a reply the server is still waiting to have acknowledged.
+		if version.hands_off() {
+			std::future::poll_fn(|cx| stream.reader.poll_closed(cx)).await?;
+			drop(stream);
+			return self.start_lite(runtime, session, v, peer_hop);
+		}
+
 		let stream = stream.with_version(v);
 		let start = lite::start(lite::Config {
 			runtime: runtime.clone(),
@@ -481,7 +490,7 @@ impl Client {
 			subscribe: subscribe.clone(),
 			peer_hop: Some(peer_hop),
 			version: v,
-			// The bidi SETUP exchange predates lite-05, so there is no Setup Stream.
+			// Lite 01/02 continue on the bidi SETUP stream and have no Setup Stream.
 			our_setup: lite::Setup::default(),
 			peer_setup: None,
 			// Lite 01/02 carry no AUTH.
@@ -823,7 +832,7 @@ mod tests {
 		let (_session, driver) = client.connect(moq_clock::now(), fake.clone()).await.unwrap();
 		moq_clock::sim::spawn(crate::time::run(driver));
 
-		// Verify the client offered moq-lite 01/02 over the `moql` SETUP (ALPN_LITE fallback path).
+		// Verify the client offered every configured moq-lite version over the `moql` SETUP.
 		let mut setup_bytes = Bytes::from(fake.control_writes());
 		let setup = crate::coding::decode_buf(
 			&mut setup_bytes,
@@ -835,6 +844,7 @@ mod tests {
 		assert_eq!(
 			advertised,
 			vec![
+				Version::Lite(lite::Version::Lite03),
 				Version::Lite(lite::Version::Lite02),
 				Version::Lite(lite::Version::Lite01),
 			]

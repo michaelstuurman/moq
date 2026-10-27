@@ -1084,7 +1084,7 @@ pub fn seeds() -> Vec<Seed> {
 		}
 	}
 
-	// The `moql` SETUP pair, which only lite-01/02 negotiate, also has its own type prefix.
+	// The `moql` SETUP pair, framed as lite-01/02, also has its own type prefix.
 	for (index, version) in LITE_VERSIONS.iter().enumerate() {
 		let outer = crate::Version::Lite(*version);
 		let client = crate::setup::Client {
@@ -1407,7 +1407,7 @@ impl RequestValidity {
 	/// Capture the lifetime of one pending request.
 	pub fn start(&self) -> kio::Consumer<()> {
 		match self.0.start() {
-			crate::model::broadcast::RequestValidity::Period(route, _) => route,
+			crate::model::broadcast::RequestValidity::Period(route, ..) => route,
 			_ => unreachable!("a source watch always captures a route lease"),
 		}
 	}

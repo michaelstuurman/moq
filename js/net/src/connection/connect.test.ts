@@ -393,17 +393,43 @@ test("an IETF version name negotiates its ALPN", async () => {
 	}
 });
 
-test("SETUP offers only the named versions to a peer without an ALPN", async () => {
+// Firefox before 155 reports no subprotocol at all, so `protocol` is undefined rather than "".
+for (const protocol of ["", undefined]) {
+	test(`SETUP negotiates the named versions with a peer whose protocol is ${JSON.stringify(protocol)}`, async () => {
+		for (const [versions, want] of [
+			[["moq-lite-07-wip", "moq-lite-06"], "moq-lite-07-wip"],
+			[["moq-lite-06", "moq-lite-02"], "moq-lite-06"],
+			[["moq-lite-01", "moq-lite-06"], "moq-lite-01"],
+			[["moq-lite-04"], "moq-lite-04"],
+		] as const) {
+			const pair = createMockTransportPair("");
+			Object.defineProperty(pair.client, "protocol", { value: protocol });
+			const restore = stubWebTransport(pair.client);
+			try {
+				const [client, server] = await Promise.all([
+					connect(url, { versions, websocket: { enabled: false } }),
+					accept({ url, transport: pair.server }),
+				]);
+				expect(client.version).toBe(want);
+				expect(server.version).toBe(want);
+				client.abort();
+				server.abort();
+			} finally {
+				restore();
+			}
+		}
+	});
+}
+
+test("SETUP refuses a version the client did not name", async () => {
 	const pair = createMockTransportPair("");
 	const restore = stubWebTransport(pair.client);
 	try {
-		const [client, server] = await Promise.all([
-			connect(url, { versions: ["moq-lite-06", "moq-lite-01"], websocket: { enabled: false } }),
-			accept({ url, transport: pair.server }),
-		]);
-		expect(client.version).toBe("moq-lite-01");
-		client.abort();
-		server.abort();
+		const server = accept({ url, transport: pair.server, version: Lite.DRAFT_05 }).catch(() => undefined);
+		await expect(
+			connect(url, { versions: ["moq-lite-07-wip", "moq-lite-06"], websocket: { enabled: false } }),
+		).rejects.toThrow("unsupported server version: 0xff0dad05");
+		(await server)?.abort();
 	} finally {
 		restore();
 	}
@@ -413,7 +439,7 @@ test("a peer without an ALPN is refused when no named version negotiates in SETU
 	const pair = createMockTransportPair("");
 	const restore = stubWebTransport(pair.client);
 	try {
-		await expect(connect(url, { versions: ["moq-lite-06"], websocket: { enabled: false } })).rejects.toThrow(
+		await expect(connect(url, { versions: ["moq-transport-22"], websocket: { enabled: false } })).rejects.toThrow(
 			"server negotiated no protocol",
 		);
 	} finally {
