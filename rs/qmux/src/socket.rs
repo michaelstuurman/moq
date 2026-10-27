@@ -37,7 +37,7 @@ pub type SharedSocketStats = Arc<dyn SocketStats>;
 /// than the path's. Such a sample may only raise the estimate. A sample that is not
 /// app-limited is a real measurement and replaces older maxima once they leave the
 /// window. With no new usable sample the last estimate stands: an app-limited flow
-/// is no evidence that the path got slower.
+/// is no evidence that the path got slower. A zero rate is no sample at all.
 #[derive(Debug, Default)]
 #[cfg(any(target_os = "linux", test))]
 pub(crate) struct RateFilter {
@@ -50,10 +50,10 @@ impl RateFilter {
 	/// About ten round trips on a WAN path, as in BBR.
 	pub(crate) const WINDOW: Duration = Duration::from_secs(10);
 
-	/// Fold in one sample and return the current estimate.
-	pub(crate) fn update(&mut self, now: moq_clock::Instant, rate: u64, app_limited: bool) -> u64 {
+	/// Fold in one sample and return the current estimate, if there is one yet.
+	pub(crate) fn update(&mut self, now: moq_clock::Instant, rate: u64, app_limited: bool) -> Option<u64> {
 		let expired = |at: &moq_clock::Instant| now.saturating_duration_since(*at) > Self::WINDOW;
-		let usable = !app_limited || self.samples.front().is_none_or(|(_, max)| rate >= *max);
+		let usable = rate > 0 && (!app_limited || self.samples.front().is_none_or(|(_, max)| rate >= *max));
 		// A rejected sample changes nothing, not even expiry: it is no evidence the
 		// path got slower, so only a usable sample may retire an old maximum.
 		if usable {
@@ -65,7 +65,7 @@ impl RateFilter {
 			}
 			self.samples.push_back((now, rate));
 		}
-		self.samples.front().map_or(rate, |(_, max)| *max)
+		self.samples.front().map(|(_, max)| *max)
 	}
 }
 
@@ -298,7 +298,7 @@ mod unix {
 			{
 				let (info, len) = sys::tcp_info(self.borrow())?;
 				let offset = std::mem::offset_of!(sys::TcpInfo, delivery_rate);
-				if !sys::has_field(len, offset, size_of::<u64>()) || info.delivery_rate == 0 {
+				if !sys::has_field(len, offset, size_of::<u64>()) {
 					return None;
 				}
 				// Bit 0 of this byte is `tcpi_delivery_rate_app_limited`; the others hold
@@ -307,7 +307,7 @@ mod unix {
 				// The kernel reports bytes per second; the trait wants bits.
 				let rate = info.delivery_rate.saturating_mul(8);
 				let mut filter = self.rate.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-				Some(filter.update(moq_clock::now(), rate, app_limited))
+				filter.update(moq_clock::now(), rate, app_limited)
 			}
 
 			#[cfg(not(target_os = "linux"))]
@@ -354,29 +354,29 @@ mod rate_filter_tests {
 	fn app_limited_samples_do_not_lower_the_estimate() {
 		let t = moq_clock::now();
 		let mut f = RateFilter::default();
-		assert_eq!(f.update(t, 80_000_000, true), 80_000_000);
+		assert_eq!(f.update(t, 80_000_000, true), Some(80_000_000));
 		// A live stream mostly trickles: these samples measure the sender, not the path.
-		assert_eq!(f.update(at(t, 100), 1_000_000, true), 80_000_000);
+		assert_eq!(f.update(at(t, 100), 1_000_000, true), Some(80_000_000));
 		// Even after the window, an app-limited flow keeps the last estimate.
-		assert_eq!(f.update(at(t, 20_000), 1_000_000, true), 80_000_000);
+		assert_eq!(f.update(at(t, 20_000), 1_000_000, true), Some(80_000_000));
 	}
 
 	#[test]
 	fn app_limited_samples_can_raise_the_estimate() {
 		let t = moq_clock::now();
 		let mut f = RateFilter::default();
-		assert_eq!(f.update(t, 1_000_000, true), 1_000_000);
-		assert_eq!(f.update(at(t, 100), 50_000_000, true), 50_000_000);
+		assert_eq!(f.update(t, 1_000_000, true), Some(1_000_000));
+		assert_eq!(f.update(at(t, 100), 50_000_000, true), Some(50_000_000));
 	}
 
 	#[test]
 	fn measured_samples_lower_it_after_the_window() {
 		let t = moq_clock::now();
 		let mut f = RateFilter::default();
-		assert_eq!(f.update(t, 80_000_000, false), 80_000_000);
+		assert_eq!(f.update(t, 80_000_000, false), Some(80_000_000));
 		// A real, lower measurement waits for the older maximum to expire.
-		assert_eq!(f.update(at(t, 1_000), 5_000_000, false), 80_000_000);
-		assert_eq!(f.update(at(t, 10_500), 5_000_000, false), 5_000_000);
+		assert_eq!(f.update(at(t, 1_000), 5_000_000, false), Some(80_000_000));
+		assert_eq!(f.update(at(t, 10_500), 5_000_000, false), Some(5_000_000));
 	}
 
 	#[test]
@@ -386,10 +386,10 @@ mod rate_filter_tests {
 		f.update(t, 80_000_000, false);
 		f.update(at(t, 1_000), 5_000_000, false);
 		// Both measurements have expired, but an app-limited sample cannot retire them.
-		assert_eq!(f.update(at(t, 20_000), 1_000_000, true), 80_000_000);
-		assert_eq!(f.update(at(t, 30_000), 1_000_000, true), 80_000_000);
+		assert_eq!(f.update(at(t, 20_000), 1_000_000, true), Some(80_000_000));
+		assert_eq!(f.update(at(t, 30_000), 1_000_000, true), Some(80_000_000));
 		// The next real measurement does.
-		assert_eq!(f.update(at(t, 31_000), 4_000_000, false), 4_000_000);
+		assert_eq!(f.update(at(t, 31_000), 4_000_000, false), Some(4_000_000));
 	}
 
 	#[test]
@@ -399,8 +399,18 @@ mod rate_filter_tests {
 		f.update(t, 30_000_000, false);
 		f.update(at(t, 4_000), 20_000_000, false);
 		f.update(at(t, 8_000), 10_000_000, false);
-		assert_eq!(f.update(at(t, 10_500), 9_000_000, false), 20_000_000);
-		assert_eq!(f.update(at(t, 14_500), 9_000_000, false), 10_000_000);
-		assert_eq!(f.update(at(t, 18_500), 9_000_000, false), 9_000_000);
+		assert_eq!(f.update(at(t, 10_500), 9_000_000, false), Some(20_000_000));
+		assert_eq!(f.update(at(t, 14_500), 9_000_000, false), Some(10_000_000));
+		assert_eq!(f.update(at(t, 18_500), 9_000_000, false), Some(9_000_000));
+	}
+
+	#[test]
+	fn zero_rate_keeps_the_estimate() {
+		let t = moq_clock::now();
+		let mut f = RateFilter::default();
+		// The kernel reports zero until it has a sample.
+		assert_eq!(f.update(t, 0, false), None);
+		assert_eq!(f.update(at(t, 100), 80_000_000, false), Some(80_000_000));
+		assert_eq!(f.update(at(t, 20_000), 0, false), Some(80_000_000));
 	}
 }
