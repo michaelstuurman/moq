@@ -83,6 +83,22 @@ test("rounds a fractional MSF delay up, and drops zero", () => {
 	expect(hang.audio?.renditions.early?.delay).toBeUndefined();
 });
 
+test("rounds a fractional MSF jitter up, and drops zero", () => {
+	// moq-dev publishers write jitter as fractional milliseconds: one 30 fps frame is 33.333333.
+	const catalog: Msf.Catalog = {
+		tracks: [
+			{ name: "video", packaging: "loc", role: "video", codec: "vp09.00.10.08", jitter: 33.333333 },
+			{ name: "audio", packaging: "loc", role: "audio", codec: "opus", jitter: 20.5 },
+			{ name: "steady", packaging: "loc", role: "audio", codec: "opus", jitter: 0 },
+		],
+	};
+
+	const hang = toHang(catalog);
+	expect(hang.video?.renditions.video?.jitter).toBe(u53(34));
+	expect(hang.audio?.renditions.audio?.jitter).toBe(u53(21));
+	expect(hang.audio?.renditions.steady?.jitter).toBeUndefined();
+});
+
 test("keeps loc packaging as the loc container", () => {
 	const catalog: Msf.Catalog = {
 		tracks: [
