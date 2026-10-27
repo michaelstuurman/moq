@@ -154,7 +154,6 @@ surface and zero-copy texture import, land before the cut.
 - [WebGPU on Safari](/quest/m1/webgpu-safari.md) - the WebGPU renderer is verified on Safari 26 for macOS and iOS
 - [CI housekeeping](/quest/m1/ci-housekeeping.md) - remove the actionlint queue ignore once a release after 1.7.12 reaches the dev shell
 - [Main is no slower than release](/quest/m1/release-perf/README.md) - every benchmark where main is slower than release is fixed or accepted with a reason, checked by a final paired run before the cut
-- [API Extractor checks](/quest/m1/api-extractor-checks.md) - API Extractor fails a PR on a forgotten export, an unresolved declaration, or an undocumented export, replacing the hand-rolled `.d.ts` checkers
 - [Generated JS API reference](/quest/m1/js-api-reference.md) - the doc site renders an API reference for every `@moq/*` package from API Extractor's doc model
 - [Interop coverage](/quest/m1/interop-coverage/README.md) - the riskiest moq-transport features moq-net exposes get cross-implementation tests over drafts 18 and 22
 - [Calibrate the paired nightly benchmarks](/quest/m1/bench-ci.md) - A/A and deliberately slowed Nightly runs set the paired comparison's threshold, so its regression alerts can be trusted
