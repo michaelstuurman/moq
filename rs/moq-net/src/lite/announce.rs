@@ -211,7 +211,7 @@ impl Decode<Version> for Cost {
 
 impl Encode<Version> for AnnounceBroadcast {
 	fn encode(&self, w: &mut Encoder<'_>, version: Version) -> Result<(), EncodeError> {
-		w.control = Some(crate::stats::Control::Announce);
+		w.control = Some(crate::stats::Message::Announce);
 		if version.has_announce_id() {
 			// Lite06+: outer type discriminator, then a size-prefixed body (like the
 			// subscribe stream). The body varies by type.
@@ -300,39 +300,42 @@ impl Encode<Version> for AnnounceBroadcast {
 
 impl Decode<Version> for AnnounceBroadcast {
 	fn decode(buf: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
-		buf.control = Some(crate::stats::Control::Announce);
+		buf.control = Some(crate::stats::Message::Announce);
 		if version.has_announce_id() {
 			// Lite06+: outer type, then a size-prefixed body decoded within its bounds.
 			let typ = buf.varint()?;
 			let size = decode_size(buf, MAX_MESSAGE_SIZE)?;
 			let mut body = buf.sub(size)?;
-			let msg = match typ {
-				ANNOUNCE_START => Self::Active {
-					suffix: PathRef::decode(&mut body, version)?,
-					epoch: super::epoch::decode_epoch(&mut body, version)?,
-					hops: HopsRef::decode(&mut body, version)?,
-					cost: Cost::decode(&mut body, version)?,
-				},
-				SYNCED if version.has_synced() => Self::Synced,
-				ANNOUNCE_END => Self::EndedId { id: body.varint()? },
-				ANNOUNCE_UPDATE => Self::Update {
-					id: body.varint()?,
-					hops: HopsRef::decode(&mut body, version)?,
-					cost: Cost::decode(&mut body, version)?,
-				},
-				ANNOUNCE_RESTART if version.has_announce_restart() => Self::Restart {
-					id: body.varint()?,
-					epoch: super::epoch::decode_epoch(&mut body, version)?,
-					hops: HopsRef::decode(&mut body, version)?,
-					cost: Cost::decode(&mut body, version)?,
-				},
-				// Unknown types are skipped by length so an earlier Lite06 build
-				// negotiating the same ALPN does not kill the announce stream.
-				_ => {
-					body.rest();
-					Self::Skipped
-				}
-			};
+			let msg = (|| {
+				Ok(match typ {
+					ANNOUNCE_START => Self::Active {
+						suffix: PathRef::decode(&mut body, version)?,
+						epoch: super::epoch::decode_epoch(&mut body, version)?,
+						hops: HopsRef::decode(&mut body, version)?,
+						cost: Cost::decode(&mut body, version)?,
+					},
+					SYNCED if version.has_synced() => Self::Synced,
+					ANNOUNCE_END => Self::EndedId { id: body.varint()? },
+					ANNOUNCE_UPDATE => Self::Update {
+						id: body.varint()?,
+						hops: HopsRef::decode(&mut body, version)?,
+						cost: Cost::decode(&mut body, version)?,
+					},
+					ANNOUNCE_RESTART if version.has_announce_restart() => Self::Restart {
+						id: body.varint()?,
+						epoch: super::epoch::decode_epoch(&mut body, version)?,
+						hops: HopsRef::decode(&mut body, version)?,
+						cost: Cost::decode(&mut body, version)?,
+					},
+					// Unknown types are skipped by length so an earlier Lite06 build
+					// negotiating the same ALPN does not kill the announce stream.
+					_ => {
+						body.rest();
+						Self::Skipped
+					}
+				})
+			})()
+			.map_err(DecodeError::complete)?;
 			if !body.is_empty() {
 				return Err(DecodeError::Long);
 			}
@@ -342,7 +345,7 @@ impl Decode<Version> for AnnounceBroadcast {
 		// Older versions: a single size-prefixed ANNOUNCE_BROADCAST with an inner status.
 		let size = decode_size(buf, MAX_MESSAGE_SIZE)?;
 		let mut body = buf.sub(size)?;
-		let msg = Self::decode_legacy(&mut body, version)?;
+		let msg = Self::decode_legacy(&mut body, version).map_err(DecodeError::complete)?;
 		if !body.is_empty() {
 			return Err(DecodeError::Long);
 		}
@@ -424,7 +427,7 @@ pub struct AnnounceRequest {
 }
 
 impl Message for AnnounceRequest {
-	const CONTROL: Option<crate::stats::Control> = Some(crate::stats::Control::Announce);
+	const CONTROL: Option<crate::stats::Message> = Some(crate::stats::Message::Announce);
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
 		let prefix = Path::decode(r, version)?;
 		let exclude_hop = match version.has_exclude_hop() {
@@ -469,7 +472,7 @@ enum AnnounceStatus {
 
 impl Decode<Version> for AnnounceStatus {
 	fn decode(r: &mut Decoder<'_>, _: Version) -> Result<Self, DecodeError> {
-		r.control = Some(crate::stats::Control::Announce);
+		r.control = Some(crate::stats::Message::Announce);
 		let status = r.u8()?;
 		status.try_into().map_err(|_| DecodeError::InvalidValue)
 	}
@@ -477,7 +480,7 @@ impl Decode<Version> for AnnounceStatus {
 
 impl Encode<Version> for AnnounceStatus {
 	fn encode(&self, w: &mut Encoder<'_>, _: Version) -> Result<(), EncodeError> {
-		w.control = Some(crate::stats::Control::Announce);
+		w.control = Some(crate::stats::Message::Announce);
 		w.u8(*self as u8);
 		Ok(())
 	}
@@ -526,7 +529,7 @@ impl AnnounceInit {
 }
 
 impl Message for AnnounceInit {
-	const CONTROL: Option<crate::stats::Control> = Some(crate::stats::Control::Announce);
+	const CONTROL: Option<crate::stats::Message> = Some(crate::stats::Message::Announce);
 	// Published lite01/02 carry the whole initial set in one message.
 	const MAX_SIZE: usize = 64 * 1024 * 1024;
 
@@ -565,7 +568,7 @@ pub struct AnnounceOk {
 }
 
 impl Message for AnnounceOk {
-	const CONTROL: Option<crate::stats::Control> = Some(crate::stats::Control::Announce);
+	const CONTROL: Option<crate::stats::Message> = Some(crate::stats::Message::Announce);
 	fn decode_msg(r: &mut Decoder<'_>, version: Version) -> Result<Self, DecodeError> {
 		if !version.has_announce_ok() {
 			return Err(DecodeError::Version);

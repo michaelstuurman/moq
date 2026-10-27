@@ -230,7 +230,7 @@ mod tests {
 			}
 		};
 		let old = origin.publish("source", route()).unwrap();
-		let _old_dynamic = old.dynamic();
+		let _old_dynamic = old.requests();
 		let mut derivatives = moq_mux::follow::Instances::new(&publish.consume(), "derived", None).unwrap();
 		let following = Following {
 			origin: origin.consume(),
@@ -248,7 +248,7 @@ mod tests {
 			.await
 			.unwrap();
 		let new = origin.publish("source", route()).unwrap();
-		let _new_dynamic = new.dynamic();
+		let _new_dynamic = new.requests();
 		let second = next(&mut derivatives).await;
 		assert!(!first.is_clone(&second));
 		assert_ne!(first.info().epoch, second.info().epoch);
@@ -296,7 +296,7 @@ mod tests {
 		assert!(!task.is_finished(), "a clean end stopped following");
 
 		let new = origin.publish("source", route()).unwrap();
-		let _new_dynamic = new.dynamic();
+		let _new_dynamic = new.requests();
 		let second = next(&mut derivatives).await;
 		assert!(!first.is_clone(&second));
 		task.abort();

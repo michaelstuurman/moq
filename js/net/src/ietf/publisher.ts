@@ -1,6 +1,6 @@
 import { Instant, Milli, Nano, now, sleep } from "@moq/clock";
 import { type Dispose, type Getter, Once, race, Signal } from "@moq/signals";
-import type { Auth, Grant } from "../auth.ts";
+import type { Credential, Grant } from "../auth.ts";
 import { Gate } from "../auth_gate.ts";
 import type { AuthSession } from "../auth_session.ts";
 import { enforceGrant } from "../auth_session.ts";
@@ -128,7 +128,7 @@ interface Reprice {
 	from?: Cluster.Advert;
 	to?: Cluster.Advert;
 	/** The token the request should carry instead, when it changed. */
-	token?: Auth;
+	token?: Credential;
 }
 
 /** Whether two hop paths list the same hops in the same order. */
@@ -170,7 +170,7 @@ type NamespaceRequest = {
 	path: Path.Valid;
 	requestId: bigint;
 	stream: RequestStream;
-	auth?: Auth;
+	auth?: Credential;
 	reply?: Promise<Framed | undefined>;
 	updating?: boolean;
 };
@@ -192,7 +192,7 @@ interface Namespaces {
 
 /** The bytes a request carries for a token this session issued. */
 interface Carrier {
-	carried(token: Auth | undefined): Uint8Array | undefined;
+	carried(token: Credential | undefined): Uint8Array | undefined;
 	/** Bumps whenever one of the session's tokens ends, so a request carrying it drops it. */
 	readonly ended: Getter<number>;
 }
@@ -216,10 +216,10 @@ interface Target {
 	withdraw(key: Path.Valid): Promise<void>;
 
 	/** The token the peer holds a namespace under, or undefined when its advertisement carries none. */
-	held(key: Path.Valid): Auth | undefined;
+	held(key: Path.Valid): Credential | undefined;
 
 	/** The token an advertisement naming `auth` carries: only a request can carry one. */
-	carry(auth: Auth | undefined): Auth | undefined;
+	carry(auth: Credential | undefined): Credential | undefined;
 }
 
 /** What {@link Publisher.runGroup} needs to serve one group. */
@@ -1101,7 +1101,7 @@ export class Publisher {
 
 			// Draft 14 on has no end location in PUBLISH_DONE: an END_OF_TRACK object is what
 			// tells the subscriber where the track ended.
-			const final = track.end();
+			const final = hooks.subscriberEnd(track);
 			if (ended && !publishError && final !== undefined && !streams.terminalSent) {
 				await this.#runEndOfTrack({
 					requestId: msg.requestId,
@@ -1193,7 +1193,7 @@ export class Publisher {
 			if (excludes(bounds.peek(), group.sequence, slice)) {
 				if (!finished) live.retired = true;
 				rangeError = new Error("group excluded by range update");
-				group.close(rangeError);
+				hooks.releaseGroupReader(group, rangeError);
 				excluded.resolve();
 			}
 		};
@@ -1223,7 +1223,7 @@ export class Publisher {
 				opened.resolve();
 			}
 			if (!stream) {
-				group.close(failure ?? new Error("no stream slot"));
+				hooks.releaseGroupReader(group, failure ?? new Error("no stream slot"));
 				return;
 			}
 			streams.opened += 1;
@@ -1309,7 +1309,7 @@ export class Publisher {
 
 				// The track ends right after this group's last object, so the marker rides this
 				// stream rather than a separate one.
-				const end = track.end();
+				const end = hooks.subscriberEnd(track);
 				const marked = end?.group === group.sequence && end.frame === next;
 				if (marked) {
 					await new Frame({ endOfTrack: true }).encode(
@@ -1347,7 +1347,7 @@ export class Publisher {
 			}
 		} catch (err: unknown) {
 			// A failed open has no stream to reset, but still ends only this group.
-			group.close(error(err));
+			hooks.releaseGroupReader(group, error(err));
 		} finally {
 			changed();
 			group.close();
@@ -2040,7 +2040,7 @@ export class Publisher {
 	}
 
 	/** `auth` when a request of this session can carry it. */
-	#carry(auth: Auth | undefined): Auth | undefined {
+	#carry(auth: Credential | undefined): Credential | undefined {
 		return this.#auth?.carried(auth) === undefined ? undefined : auth;
 	}
 

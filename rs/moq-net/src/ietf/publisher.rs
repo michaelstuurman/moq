@@ -195,7 +195,7 @@ async fn prepare_fetch(
 		let reason = err.to_string();
 		(err, reason)
 	};
-	track.query().await.map_err(failed)?;
+	track.info().await.map_err(failed)?;
 	// The cache's newest object is Largest Object while a live feed writes the track, or once
 	// the track ended at its newest group. A fetch-only copy retains its publisher's report
 	// independently. A joining FETCH ends where its subscription starts instead.
@@ -393,7 +393,7 @@ async fn read_fetch(
 	priority: i8,
 	compression: bool,
 ) -> Result<FetchedGroup, Error> {
-	let info = track.query().await?;
+	let info = track.info().await?;
 	let cached = track.peek_group(sequence);
 	let wire = cached.as_ref().and_then(|group| group.wire());
 	if wire.as_ref().is_some_and(|wire| !wire.fetchable) {
@@ -1477,7 +1477,7 @@ impl Publisher {
 					};
 					// We just received a subscribe for this exact namespace, so the peer must have
 					// already seen the announcement. `request_broadcast` resolves it immediately, or
-					// falls back to the route covering it (an `origin::Dynamic`), if any. Pinned to
+					// falls back to the route covering it (an `origin::Requests`), if any. Pinned to
 					// the instance it names, if any: another is refused, never served.
 					let requesting = origin.request_broadcast(&msg.track_namespace, msg.epoch.clone());
 					let broadcast = match self
@@ -3583,7 +3583,7 @@ impl Publisher {
 
 		// The requester abandoning the request is owed nothing.
 		let info = {
-			let query = track.query();
+			let query = track.info();
 			let mut finished = false;
 			let mut messages = super::request_stream::Messages::new(self.session.clone(), self.control.client());
 			kio::wait(|waiter| {
@@ -3882,7 +3882,7 @@ impl Publisher {
 		path: &crate::Path,
 		suffix: crate::Path,
 		params: ietf::AdvertParams,
-		auth: Option<crate::auth::Auth>,
+		auth: Option<crate::auth::Credential>,
 	) -> Result<Refused, Error> {
 		// Bounded, because an advertisement holds its stream for as long as the namespace
 		// lives: a peer whose concurrent-stream limit we have filled refuses this open, and
@@ -4002,7 +4002,7 @@ impl Publisher {
 		ns: &Namespaces,
 		suffix: &crate::Path,
 		path: &crate::Path,
-	) -> Option<(Advert, Option<crate::auth::Auth>)> {
+	) -> Option<(Advert, Option<crate::auth::Credential>)> {
 		let watch = ns.watched.get(suffix)?;
 		let advert = match ns.permitted(path) {
 			true => self.select(&watch.route, &ns.peer, ns.epochs),
@@ -4021,7 +4021,7 @@ impl Publisher {
 	}
 
 	/// The `AUTHORIZATION TOKEN` a request names `auth` with, by value.
-	fn request_token(&self, auth: &crate::auth::Auth) -> Option<super::token::RequestToken> {
+	fn request_token(&self, auth: &crate::auth::Credential) -> Option<super::token::RequestToken> {
 		let token = self.auth.token(auth)?;
 		Some(super::token::RequestToken(crate::setup::Token {
 			kind: crate::setup::Token::OUT_OF_BAND,
@@ -6311,7 +6311,7 @@ struct NamespaceRequest {
 	messages: super::request_stream::Messages,
 	/// The auth the peer holds the request under: the one it opened with, or the one
 	/// its last update carried. Held, so the credential stays presented while it does.
-	auth: Option<crate::auth::Auth>,
+	auth: Option<crate::auth::Credential>,
 	/// Waiting in [`Namespaces::updates`] for a request ID.
 	queued: bool,
 	/// When to give up on the update in flight, which has no answer yet.
@@ -9629,7 +9629,7 @@ mod serve_tests {
 			let mut h = serve(version);
 			let claim = h
 				._origin
-				.dynamic_route("live", crate::origin::Route::default())
+				.requests_route("live", crate::origin::Route::default())
 				.unwrap();
 			let auth = crate::auth::Link::new(false);
 			auth.handle().authorize(&nothing());
@@ -9652,7 +9652,7 @@ mod serve_tests {
 			let mut h = serve(version);
 			let claim = h
 				._origin
-				.dynamic_route("live", crate::origin::Route::default())
+				.requests_route("live", crate::origin::Route::default())
 				.unwrap();
 			let auth = crate::auth::Link::new(false);
 			h.publisher = h.publisher.clone().with_auth(auth.clone());
@@ -9987,7 +9987,7 @@ mod serve_tests {
 		let version = Version::Draft22;
 		for path in [".", "./child", ".session", ".session/extension"] {
 			let h = serve(version);
-			let claim = h._origin.dynamic_route("", crate::origin::Route::default()).unwrap();
+			let claim = h._origin.requests_route("", crate::origin::Route::default()).unwrap();
 			settle().await;
 			let stream = Stream::open(&mut crate::driver::Transport::new(h.session.clone()), version)
 				.await
@@ -11913,7 +11913,7 @@ mod serve_tests {
 		let _track = broadcast.create_track("video", info).unwrap();
 		let (downstream, _sessions) = crate::lite::ietf::test_hop(&upstream, "room", [true, true]).await;
 		let broadcast = downstream.consume().request_broadcast("room", None).await.unwrap();
-		broadcast.track("video").unwrap().query().await.unwrap()
+		broadcast.track("video").unwrap().info().await.unwrap()
 	}
 
 	/// Draft 22 assigns 0x06 to SUBGROUP_DELIVERY_TIMEOUT, so a track property 0x06 crosses
@@ -12208,7 +12208,7 @@ mod serve_tests {
 		for version in FETCH_DRAFTS {
 			let h = serve(version);
 			let request = h._broadcast.reserve_track("cam").unwrap();
-			let dynamic = request.dynamic();
+			let dynamic = request.requests();
 			let fetching = request.consume().fetch_group(1, None);
 			let mut fetched = dynamic.requested_fill_group().await.unwrap().accept(None).unwrap();
 			fetched.write_frame(None, b"1-0".to_vec()).unwrap();
@@ -12238,7 +12238,7 @@ mod serve_tests {
 		let version = Version::Draft22;
 		let h = serve(version);
 		let request = h._broadcast.reserve_track("cam").unwrap();
-		let dynamic = request.dynamic();
+		let dynamic = request.requests();
 		let fetching = request.consume().fetch_group(4, None);
 		let mut fetched = dynamic.requested_fill_group().await.unwrap().accept(None).unwrap();
 		for object in 0..2 {
@@ -13092,7 +13092,7 @@ mod serve_tests {
 		let origin = crate::origin::Config::new(crate::Hop::new(1).unwrap()).produce();
 		let (claim, published) = match parked {
 			Parked::Resolving => (
-				Some(origin.dynamic_route("room", crate::origin::Route::default()).unwrap()),
+				Some(origin.requests_route("room", crate::origin::Route::default()).unwrap()),
 				None,
 			),
 			Parked::Acking | Parked::Ending => {
@@ -13282,7 +13282,7 @@ mod serve_tests {
 		let mut idle = None;
 		match setup {
 			Setup::Resolving => {
-				let route = origin.dynamic_route("room", crate::origin::Route::default()).unwrap();
+				let route = origin.requests_route("room", crate::origin::Route::default()).unwrap();
 				let request = {
 					let requested = std::pin::pin!(route.requested_broadcast());
 					match futures::future::select(requested, serving.as_mut()).await {
@@ -13294,7 +13294,7 @@ mod serve_tests {
 			}
 			Setup::Subscribing => {
 				let broadcast = origin.publish("room", crate::origin::Route::default()).unwrap();
-				let mut dynamic = broadcast.dynamic();
+				let mut dynamic = broadcast.requests();
 				let request = {
 					let requested = std::pin::pin!(dynamic.requested_track());
 					match futures::future::select(requested, serving.as_mut()).await {
@@ -13813,8 +13813,8 @@ mod serve_tests {
 
 	/// An auth handle whose session grant covers only `other`, so a SUBSCRIBE for `room`
 	/// falls to its request token. The presented credential is kept alive by the returned
-	/// [`crate::auth::Auth`].
-	fn auth_covering_other() -> (crate::auth::Link, crate::auth::Requests, crate::auth::Auth) {
+	/// [`crate::auth::Credential`].
+	fn auth_covering_other() -> (crate::auth::Link, crate::auth::Requests, crate::auth::Credential) {
 		let auth = crate::auth::Link::new(true);
 		let requests = auth.handle().requests();
 		let cred = auth.present(bytes::Bytes::from_static(b"cred"), true).unwrap();

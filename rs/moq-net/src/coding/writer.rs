@@ -376,7 +376,7 @@ mod tests {
 
 	impl<V> Encode<V> for Poison {
 		fn encode(&self, w: &mut Encoder<'_>, _: V) -> Result<(), EncodeError> {
-			w.control = Some(crate::stats::Control::Probe);
+			w.control = Some(crate::stats::Message::Probe);
 			w.slice(b"junk");
 			Err(EncodeError::BoundsExceeded)
 		}
@@ -413,7 +413,7 @@ mod tests {
 	fn control_body_counts_successful_encodes_once_before_transport_delivery() {
 		use crate::{
 			lite,
-			stats::{Bytes, Control, Registry, Tier},
+			stats::{Message, Registry, Tier, Totals},
 		};
 		let stats = Registry::new(Default::default());
 		let session = stats
@@ -436,8 +436,8 @@ mod tests {
 			stats.snapshot().control(),
 			vec![(
 				Tier::new(crate::Path::from_static("internal")),
-				Control::Probe,
-				Bytes { tx: size, rx: 0 }
+				Message::Probe,
+				Totals { tx: size, rx: 0 }
 			)]
 		);
 		writer
@@ -452,7 +452,7 @@ mod tests {
 				.snapshot()
 				.control()
 				.into_iter()
-				.find(|(_, class, _)| *class == Control::TrackInfo)
+				.find(|(_, class, _)| *class == Message::TrackInfo)
 				.unwrap()
 				.2
 				.tx
