@@ -7227,7 +7227,10 @@ impl TestSelection {
 	pub(crate) fn new() -> Self {
 		let origin = Hop::new(1).unwrap().produce();
 		let route = origin
-			.dynamic_route("room", Route::default().with_via(Hop::new(Self::PEER).unwrap()))
+			.dynamic_route(
+				Path::new("room").unwrap(),
+				Route::default().with_via(Hop::new(Self::PEER).unwrap()),
+			)
 			.unwrap();
 		Self {
 			origin,
@@ -7238,7 +7241,10 @@ impl TestSelection {
 
 	/// What a request for `room/a` through the selected route must still hold.
 	pub(crate) fn validity(&self) -> crate::model::broadcast::RequestValidity {
-		crate::model::broadcast::RequestValidity::for_source(self.route.as_ref().unwrap(), &Path::new("room/a"))
+		crate::model::broadcast::RequestValidity::for_source(
+			self.route.as_ref().unwrap(),
+			&Path::new("room/a").unwrap(),
+		)
 	}
 
 	/// The peer withdraws the route.
@@ -7249,7 +7255,7 @@ impl TestSelection {
 	/// Another instance of the peer takes the path.
 	pub(crate) fn replace(&mut self) {
 		let route = Route::default().with_via(Hop::new(Self::PEER).unwrap());
-		self.replacement = Some(self.origin.dynamic_route("room/a", route).unwrap());
+		self.replacement = Some(self.origin.dynamic_route(Path::new("room/a").unwrap(), route).unwrap());
 	}
 }
 
@@ -13956,21 +13962,24 @@ mod tests {
 	#[moq_clock::test]
 	async fn source_selection_answering_ends_only_on_a_replacement() {
 		let producer = origin(1).produce();
-		let path = Path::new("room/a");
+		let path = Path::new("room/a").unwrap();
 		let first = producer
-			.dynamic_route("room", Route::default().with_via(origin(2)))
+			.dynamic_route(Path::new("room").unwrap(), Route::default().with_via(origin(2)))
 			.unwrap();
 		let selected = first.request_validity(&path).unwrap();
 		let answering = selected.answering();
 		// A route that loses to the selected one replaces nothing.
 		let worse = producer
-			.dynamic_route("room", Route::default().with_via(origin(2)).with_cost(Cost::from(7)))
+			.dynamic_route(
+				Path::new("room").unwrap(),
+				Route::default().with_via(origin(2)).with_cost(Cost::from(7)),
+			)
 			.unwrap();
 		assert!(!answering.is_closed());
 		drop(worse);
 
 		let replacement = producer
-			.dynamic_route("room/a", Route::default().with_via(origin(2)))
+			.dynamic_route(Path::new("room/a").unwrap(), Route::default().with_via(origin(2)))
 			.unwrap();
 		assert!(answering.is_closed());
 		// Winning again opens a new lease, which a withdrawal leaves open.
@@ -13983,7 +13992,7 @@ mod tests {
 
 		// Announced again, the path has a new instance: a replacement.
 		let _again = producer
-			.dynamic_route("room", Route::default().with_via(origin(2)))
+			.dynamic_route(Path::new("room").unwrap(), Route::default().with_via(origin(2)))
 			.unwrap();
 		assert!(answering.is_closed());
 	}

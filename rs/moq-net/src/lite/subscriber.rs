@@ -3515,7 +3515,7 @@ mod tests {
 			validity: selection.validity(),
 			route: None,
 			subscriber,
-			path: Path::new("room").to_owned(),
+			path: Path::new("room").unwrap().to_owned(),
 			epoch: None,
 			name: "video".to_string(),
 		};

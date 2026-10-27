@@ -552,7 +552,9 @@ async fn unanswered_takeover(version: &str) {
 	let publisher = produce_origin(1);
 	let viewer = produce_origin(2);
 	let _session = link(version, &publisher, &viewer).await;
-	let old = publisher.publish("live", origin::Route::default()).unwrap();
+	let old = publisher
+		.publish(Path::new("live").unwrap(), origin::Route::default())
+		.unwrap();
 	// Quiet, so the publisher has nothing to answer the SUBSCRIBE with yet.
 	let old_track = old.create_track("video", timed()).unwrap();
 	let mut announced = viewer.consume().announced();
@@ -564,7 +566,9 @@ async fn unanswered_takeover(version: &str) {
 		"{version}: the SUBSCRIBE reached the old instance"
 	);
 
-	let replacement = publisher.publish("live", origin::Route::default()).unwrap();
+	let replacement = publisher
+		.publish(Path::new("live").unwrap(), origin::Route::default())
+		.unwrap();
 	let replacement_track = replacement.create_track("video", timed()).unwrap();
 	write(&replacement_track, "new:0");
 	expect_restart(version, &mut announced, "live").await;
