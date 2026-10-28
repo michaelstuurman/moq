@@ -101,6 +101,10 @@ pub struct Config {
 
 	/// An optional identifier for the shape of each value, typically a JSON Schema URL.
 	pub schema: Option<String>,
+
+	/// The track's maximum bitrate in bits per second, for a publisher that knows it. Supplied, it
+	/// is published as given and never estimated from the writes.
+	pub bitrate: Option<u64>,
 }
 
 impl Config {
@@ -113,6 +117,12 @@ impl Config {
 	/// Set [`schema`](Self::schema) (a builder, since the struct is `#[non_exhaustive]`).
 	pub fn with_schema(mut self, schema: impl Into<String>) -> Self {
 		self.schema = Some(schema.into());
+		self
+	}
+
+	/// Set [`bitrate`](Self::bitrate) (a builder, since the struct is `#[non_exhaustive]`).
+	pub fn with_bitrate(mut self, bitrate: impl Into<Option<u64>>) -> Self {
+		self.bitrate = bitrate.into();
 		self
 	}
 }
@@ -152,6 +162,7 @@ impl<E: CatalogExt> IntoRendition<E, JsonConfig> for Config {
 		let mut entry = JsonConfig::new(Mode::Snapshot);
 		entry.compression = self.compression.then_some(Compression::Deflate);
 		entry.schema = self.schema;
+		entry.bitrate = self.bitrate;
 		entry
 	}
 }

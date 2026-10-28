@@ -496,7 +496,15 @@ impl Publish {
 		children.insert(&mut self.media, media, Child::Media)
 	}
 
-	pub fn audio(&mut self, broadcast: Id, init: import::AudioInit) -> Result<Id, Error> {
+	/// `hls` is the track's regular group duration, when known (see [`Reserved::with_hls_hint`]).
+	///
+	/// [`Reserved::with_hls_hint`]: moq_mux::catalog::Reserved::with_hls_hint
+	pub fn audio(
+		&mut self,
+		broadcast: Id,
+		init: import::AudioInit,
+		hls: Option<std::time::Duration>,
+	) -> Result<Id, Error> {
 		let Broadcast {
 			producer: broadcast,
 			catalog,
@@ -507,12 +515,18 @@ impl Publish {
 		let name = broadcast.unique_name(&format!(".{}", init.format));
 		let request = broadcast.reserve_track(name)?;
 
-		let track = import::Track::audio(request, catalog.reserve(), init)?;
+		let track = import::Track::audio(request, catalog.reserve().with_hls_hint(hls), init)?;
 		let children = children.clone();
 		self.insert_media(track, children)
 	}
 
-	pub fn video(&mut self, broadcast: Id, init: import::VideoInit) -> Result<Id, Error> {
+	/// `hls` as in [`Self::audio`].
+	pub fn video(
+		&mut self,
+		broadcast: Id,
+		init: import::VideoInit,
+		hls: Option<std::time::Duration>,
+	) -> Result<Id, Error> {
 		let Broadcast {
 			producer: broadcast,
 			catalog,
@@ -523,7 +537,7 @@ impl Publish {
 		let name = broadcast.unique_name(&format!(".{}", init.format));
 		let request = broadcast.reserve_track(name)?;
 
-		let track = import::Track::video(request, catalog.reserve(), init)?;
+		let track = import::Track::video(request, catalog.reserve().with_hls_hint(hls), init)?;
 		let children = children.clone();
 		self.insert_media(track, children)
 	}
@@ -975,26 +989,36 @@ impl Publish {
 	}
 
 	/// Accept a track request as an audio track, returning a media handle like [`Self::audio`].
-	pub fn track_request_audio(&mut self, request: Id, init: import::AudioInit) -> Result<Id, Error> {
+	pub fn track_request_audio(
+		&mut self,
+		request: Id,
+		init: import::AudioInit,
+		hls: Option<std::time::Duration>,
+	) -> Result<Id, Error> {
 		let TrackRequest {
 			broadcast,
 			children,
 			request,
 		} = self.track_request.remove(request).ok_or(Error::NotFound)?;
 		let catalog = self.catalog(broadcast)?;
-		let track = import::Track::audio(request, catalog.reserve(), init)?;
+		let track = import::Track::audio(request, catalog.reserve().with_hls_hint(hls), init)?;
 		self.insert_media(track, children)
 	}
 
 	/// Accept a track request as a video track, returning a media handle like [`Self::video`].
-	pub fn track_request_video(&mut self, request: Id, init: import::VideoInit) -> Result<Id, Error> {
+	pub fn track_request_video(
+		&mut self,
+		request: Id,
+		init: import::VideoInit,
+		hls: Option<std::time::Duration>,
+	) -> Result<Id, Error> {
 		let TrackRequest {
 			broadcast,
 			children,
 			request,
 		} = self.track_request.remove(request).ok_or(Error::NotFound)?;
 		let catalog = self.catalog(broadcast)?;
-		let track = import::Track::video(request, catalog.reserve(), init)?;
+		let track = import::Track::video(request, catalog.reserve().with_hls_hint(hls), init)?;
 		self.insert_media(track, children)
 	}
 
@@ -1415,7 +1439,7 @@ mod children_tests {
 		head.extend_from_slice(&[1, 2, 0, 0, 0x80, 0xbb, 0, 0, 0, 0, 0]);
 		let media = state
 			.publish
-			.audio(broadcast, import::AudioInit::new(import::AudioFormat::Opus, head))
+			.audio(broadcast, import::AudioInit::new(import::AudioFormat::Opus, head), None)
 			.unwrap();
 		let name = state.publish.media_demand(media).unwrap().name().to_string();
 		let readers = [

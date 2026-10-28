@@ -40,11 +40,14 @@ fn track_info<E: CatalogExt>(
 	}
 }
 
-/// The codec parser fills everything from the init bytes, so the label and container are all the
-/// caller adds.
+/// The codec parser fills the decoder fields from the init bytes; the caller adds the label, the
+/// container, and the bitrate when it knows it, which then counts as supplied.
 fn with_init(init: &AudioInit, mut config: hang::catalog::AudioConfig) -> hang::catalog::AudioConfig {
 	config.label = init.label.clone();
 	config.container = init.container.clone();
+	if config.bitrate.is_none() {
+		config.bitrate = init.bitrate;
+	}
 	config
 }
 

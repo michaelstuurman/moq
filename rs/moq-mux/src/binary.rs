@@ -96,6 +96,10 @@ pub struct Config {
 
 	/// An optional media type for each payload (e.g. `image/jpeg`).
 	pub mime: Option<String>,
+
+	/// The track's maximum bitrate in bits per second, for a publisher that knows it. Supplied, it
+	/// is published as given and never estimated from the writes.
+	pub bitrate: Option<u64>,
 }
 
 impl Config {
@@ -110,6 +114,12 @@ impl Config {
 		self.mime = Some(mime.into());
 		self
 	}
+
+	/// Set [`bitrate`](Self::bitrate) (a builder, since the struct is `#[non_exhaustive]`).
+	pub fn with_bitrate(mut self, bitrate: impl Into<Option<u64>>) -> Self {
+		self.bitrate = bitrate.into();
+		self
+	}
 }
 
 impl<E: CatalogExt> IntoRendition<E, BinaryConfig> for Config {
@@ -120,6 +130,7 @@ impl<E: CatalogExt> IntoRendition<E, BinaryConfig> for Config {
 		let mut entry = BinaryConfig::new(Mode::Snapshot);
 		entry.compression = self.compression.then_some(Compression::Deflate);
 		entry.mime = self.mime;
+		entry.bitrate = self.bitrate;
 		entry
 	}
 }
