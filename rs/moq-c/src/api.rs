@@ -184,8 +184,8 @@ pub struct moq_audio_init {
 /// Optional catalog fields for [moq_audio_init::hint].
 ///
 /// Zero the struct and set only the `has_*` flags you want. A supplied field is
-/// published as given and never estimated, so it never republishes the catalog.
-/// An absent one is measured from the frames, as without a hint.
+/// published as given and is never re-estimated. An absent one is measured from
+/// the frames, as without a hint. A flag set with a 0 value is an invalid config.
 ///
 /// New optional fields are appended so existing initializers keep their meaning.
 #[repr(C)]
@@ -196,10 +196,11 @@ pub struct moq_audio_hint {
 	/// Whether `bitrate` is present.
 	pub has_bitrate: bool,
 
-	/// The track's regular group duration in microseconds when
-	/// `has_group_duration` is true: a video GOP, or the span between the
-	/// audio cuts you make. It fixes the HLS segment duration in the first
-	/// catalog instead of declaring it from the first group. 0 is absent.
+	/// The longest span between two group starts on this track, in
+	/// microseconds, when `has_group_duration` is true: a video GOP, or the span
+	/// between the audio cuts you make. An upper bound, so a broadcast may take
+	/// the largest across its tracks. Must be at least 1 and at most
+	/// 2^53 - 1 milliseconds.
 	pub group_duration_us: u64,
 	/// Whether `group_duration_us` is present.
 	pub has_group_duration: bool,
@@ -207,21 +208,44 @@ pub struct moq_audio_hint {
 
 impl moq_audio_hint {
 	/// Copy the supplied fields onto the importer's init.
-	fn apply(&self, init: &mut moq_mux::import::AudioInit) {
-		if self.has_bitrate {
-			init.bitrate = Some(self.bitrate);
-		}
+	fn apply(&self, init: &mut moq_mux::import::AudioInit) -> Result<(), Error> {
+		init.bitrate = supplied_bitrate(self.has_bitrate, self.bitrate)?;
+		Ok(())
 	}
 
 	/// The supplied group duration, for the track's HLS records.
-	fn group_duration(&self) -> Option<std::time::Duration> {
+	fn group_duration(&self) -> Result<Option<std::time::Duration>, Error> {
 		group_duration(self.has_group_duration, self.group_duration_us)
 	}
 }
 
-/// A supplied group duration, or `None` when absent or zero.
-fn group_duration(present: bool, us: u64) -> Option<std::time::Duration> {
-	(present && us > 0).then(|| std::time::Duration::from_micros(us))
+/// The longest group duration a hint may give: 2^53 - 1 milliseconds, the largest
+/// integer a JavaScript reader of the catalog holds exactly.
+const MAX_GROUP_DURATION_US: u64 = ((1 << 53) - 1) * 1000;
+
+/// A supplied group duration, `None` when absent, or an error for 0 or past
+/// [MAX_GROUP_DURATION_US].
+fn group_duration(present: bool, us: u64) -> Result<Option<std::time::Duration>, Error> {
+	if !present {
+		return Ok(None);
+	}
+	if us == 0 || us > MAX_GROUP_DURATION_US {
+		return Err(Error::InvalidConfig(format!(
+			"group_duration_us must be 1..={MAX_GROUP_DURATION_US}, got {us}"
+		)));
+	}
+	Ok(Some(std::time::Duration::from_micros(us)))
+}
+
+/// A supplied bitrate, `None` when absent, or an error for 0.
+fn supplied_bitrate(present: bool, bitrate: u64) -> Result<Option<u64>, Error> {
+	match (present, bitrate) {
+		(false, _) => Ok(None),
+		(true, 0) => Err(Error::InvalidConfig(
+			"bitrate must not be 0 when has_bitrate is set".into(),
+		)),
+		(true, bitrate) => Ok(Some(bitrate)),
+	}
 }
 
 /// Configuration for [moq_publish_video].
@@ -278,10 +302,11 @@ pub struct moq_video_hint {
 	/// Whether `optimize_for_latency` is present.
 	pub has_optimize_for_latency: bool,
 
-	/// The track's regular group duration in microseconds when
-	/// `has_group_duration` is true: a video GOP, or the span between the
-	/// audio cuts you make. It fixes the HLS segment duration in the first
-	/// catalog instead of declaring it from the first group. 0 is absent.
+	/// The longest span between two group starts on this track, in
+	/// microseconds, when `has_group_duration` is true: a video GOP, or the span
+	/// between the audio cuts you make. An upper bound, so a broadcast may take
+	/// the largest across its tracks. Must be at least 1 and at most
+	/// 2^53 - 1 milliseconds.
 	pub group_duration_us: u64,
 	/// Whether `group_duration_us` is present.
 	pub has_group_duration: bool,
@@ -308,7 +333,7 @@ impl moq_video_hint {
 	}
 
 	/// The supplied group duration, for the track's HLS records.
-	fn group_duration(&self) -> Option<std::time::Duration> {
+	fn group_duration(&self) -> Result<Option<std::time::Duration>, Error> {
 		group_duration(self.has_group_duration, self.group_duration_us)
 	}
 }
@@ -485,8 +510,8 @@ pub struct moq_json_snapshot_config {
 	pub compression: bool,
 
 	/// The track's maximum bitrate in bits per second when `has_bitrate` is true.
-	/// Supplied, it is published as given and never estimated, so writes never
-	/// republish the catalog for it. Ignored by the consumer.
+	/// Supplied, it is published as given and is never re-estimated; it must not
+	/// be 0. Ignored by the consumer.
 	pub bitrate: u64,
 	/// Whether `bitrate` is present.
 	pub has_bitrate: bool,
@@ -499,8 +524,8 @@ pub struct moq_json_stream_config {
 	pub compression: bool,
 
 	/// The track's maximum bitrate in bits per second when `has_bitrate` is true.
-	/// Supplied, it is published as given and never estimated, so writes never
-	/// republish the catalog for it. Ignored by the consumer.
+	/// Supplied, it is published as given and is never re-estimated; it must not
+	/// be 0. Ignored by the consumer.
 	pub bitrate: u64,
 	/// Whether `bitrate` is present.
 	pub has_bitrate: bool,
@@ -521,8 +546,8 @@ pub struct moq_binary_config {
 	pub mime_len: usize,
 
 	/// The track's maximum bitrate in bits per second when `has_bitrate` is true.
-	/// Supplied, it is published as given and never estimated, so writes never
-	/// republish the catalog for it. Ignored by the consumer.
+	/// Supplied, it is published as given and is never re-estimated; it must not
+	/// be 0. Ignored by the consumer.
 	pub bitrate: u64,
 	/// Whether `bitrate` is present.
 	pub has_bitrate: bool,
@@ -2373,8 +2398,8 @@ unsafe fn parse_audio_init(
 
 	let mut audio = moq_mux::import::AudioInit::new(audio_format_from_u32(config.format)?, init.to_vec());
 	audio.label = label.map(str::to_string);
-	config.hint.apply(&mut audio);
-	Ok((audio, config.hint.group_duration()))
+	config.hint.apply(&mut audio)?;
+	Ok((audio, config.hint.group_duration()?))
 }
 
 /// Publish one video codec as a new media track.
@@ -2409,7 +2434,7 @@ unsafe fn parse_video_init(
 	let mut video = moq_mux::import::VideoInit::new(video_format_from_u32(config.format)?, init.to_vec());
 	video.label = label.map(str::to_string);
 	video.hint = config.hint.resolve();
-	Ok((video, config.hint.group_duration()))
+	Ok((video, config.hint.group_duration()?))
 }
 
 /// Publish a container, which demuxes and publishes its own tracks.
@@ -3387,7 +3412,7 @@ pub unsafe extern "C" fn moq_publish_json_snapshot(
 		let config = unsafe { config.as_ref() }.ok_or(Error::InvalidPointer)?;
 		let entry = moq_mux::json::Config::default()
 			.with_compression(config.compression)
-			.with_bitrate(config.has_bitrate.then_some(config.bitrate));
+			.with_bitrate(supplied_bitrate(config.has_bitrate, config.bitrate)?);
 		let options = moq_mux::json::Options::default().with_deltas(config.deltas);
 		State::lock().publish.json_snapshot(broadcast, name, entry, options)
 	})
@@ -3445,7 +3470,7 @@ pub unsafe extern "C" fn moq_publish_json_stream(
 		let config = unsafe { config.as_ref() }.ok_or(Error::InvalidPointer)?;
 		let producer = moq_mux::json::Config::default()
 			.with_compression(config.compression)
-			.with_bitrate(config.has_bitrate.then_some(config.bitrate));
+			.with_bitrate(supplied_bitrate(config.has_bitrate, config.bitrate)?);
 		State::lock().publish.json_stream(broadcast, name, producer)
 	})
 }
@@ -3485,7 +3510,7 @@ unsafe fn binary_config(config: *const moq_binary_config) -> Result<moq_mux::bin
 	let config = unsafe { config.as_ref() }.ok_or(Error::InvalidPointer)?;
 	let mut binary = moq_mux::binary::Config::default()
 		.with_compression(config.compression)
-		.with_bitrate(config.has_bitrate.then_some(config.bitrate));
+		.with_bitrate(supplied_bitrate(config.has_bitrate, config.bitrate)?);
 	if let Some(mime) = unsafe { ffi::parse_str_optional(config.mime, config.mime_len)? } {
 		binary = binary.with_mime(mime);
 	}

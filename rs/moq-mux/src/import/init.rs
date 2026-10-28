@@ -22,8 +22,8 @@ pub struct AudioInit {
 	/// [`Legacy`](hang::catalog::Container::Legacy) unless selected. A video rendition carries the
 	/// same knob on its [`VideoInit::hint`].
 	pub container: hang::catalog::Container,
-	/// The maximum bitrate in bits per second, for an encoder that knows it. Fills only a gap the
-	/// init bytes leave; supplied, it is never estimated.
+	/// The maximum bitrate in bits per second, for an encoder that knows it. Supplied, it replaces
+	/// any value the init bytes give and is never estimated.
 	pub bitrate: Option<u64>,
 }
 

@@ -496,7 +496,7 @@ impl Publish {
 		children.insert(&mut self.media, media, Child::Media)
 	}
 
-	/// `hls` is the track's regular group duration, when known (see [`Reserved::with_hls_hint`]).
+	/// `hls` is the longest span between the track's group starts, when known (see [`Reserved::with_hls_hint`]).
 	///
 	/// [`Reserved::with_hls_hint`]: moq_mux::catalog::Reserved::with_hls_hint
 	pub fn audio(
