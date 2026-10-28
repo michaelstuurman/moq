@@ -421,7 +421,6 @@ test("subscriber options and updates are forwarded to the producer's aggregate",
 	expect(producer.subscription.peek()).toEqual({
 		priority: 0,
 		maxDelay: Milli(0),
-		join: "current",
 		order: "descending",
 		groups: { start: { included: 0 } },
 	});
@@ -437,7 +436,6 @@ test("subscriber options and updates are forwarded to the producer's aggregate",
 	expect(await next).toEqual({
 		priority: 7,
 		maxDelay: Milli(250),
-		join: "current",
 		order: "ascending",
 		groups: { start: { included: 2 }, end: { excluded: 9 } },
 	});
@@ -523,19 +521,6 @@ test("infoDefaults re-validates timescale and the safe maxAge bound", () => {
 	expect(() => infoDefaults({ maxAge: Milli(Number.MAX_SAFE_INTEGER + 1) })).toThrow(RangeError);
 });
 
-test("a join point defaults to the current group, and any current subscriber keeps it", async () => {
-	const producer = new TrackProducer("test");
-	const next = producer.subscribe({ join: "next" });
-	expect(producer.subscription.peek()?.join).toBe("next");
-	const current = producer.subscribe();
-	expect(producer.subscription.peek()?.join).toBe("current");
-	const narrowed = producer.subscription.changed();
-	current.close();
-	expect((await narrowed)?.join).toBe("next");
-	next.close();
-	expect(() => producer.subscribe({ join: "later" as "next" })).toThrow(TypeError);
-});
-
 test("multiple subscriber options aggregate like Rust", async () => {
 	const producer = new TrackProducer("test");
 	const bounded = producer.subscribe({
@@ -551,7 +536,6 @@ test("multiple subscriber options aggregate like Rust", async () => {
 	expect(producer.subscription.peek()).toEqual({
 		priority: 7,
 		maxDelay: Milli(250),
-		join: "current",
 		order: "descending",
 		groups: { start: { included: 5 } },
 	});
@@ -561,7 +545,6 @@ test("multiple subscriber options aggregate like Rust", async () => {
 	expect(await narrowed).toEqual({
 		priority: 2,
 		maxDelay: Milli(100),
-		join: "current",
 		order: "ascending",
 		groups: { start: { included: 10 }, end: { excluded: 20 } },
 	});

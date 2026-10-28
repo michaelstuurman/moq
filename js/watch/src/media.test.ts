@@ -7,7 +7,7 @@ import { nextMedia, subscribeMedia } from "./media";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("media max delay and next-group join are present on the initial subscription and later updates", async () => {
+test("media max delay is present on the initial subscription and later updates", async () => {
 	let initial: Moq.Track.Subscription | undefined;
 	const updates: Moq.Track.Subscription[] = [];
 	const subscriber = {
@@ -32,11 +32,11 @@ test("media max delay and next-group join are present on the initial subscriptio
 		priority: 7,
 		maxDelay,
 	});
-	expect(initial).toEqual({ priority: 7, maxDelay: Milli(250), join: "next" });
+	expect(initial).toEqual({ priority: 7, maxDelay: Milli(250) });
 
 	maxDelay.set(Milli(500));
 	await flush();
-	expect(updates.at(-1)).toEqual({ priority: 7, maxDelay: Milli(500), join: "next" });
+	expect(updates.at(-1)).toEqual({ priority: 7, maxDelay: Milli(500) });
 
 	effect.close();
 });

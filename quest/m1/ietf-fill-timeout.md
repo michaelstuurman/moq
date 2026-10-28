@@ -41,8 +41,9 @@ wire behaviors identical; JS does the following:
   ([moq-wg/moq-transport#1861](https://github.com/moq-wg/moq-transport/issues/1861)).
   The next object's Group ID Delta counts from the marker, as moxygen does.
 
-JS sends no IETF FETCH, so this half also adds the Rust-requester to
-JS-responder interop of these markers.
+The JS subscriber fetches only the head of the group it joins (a joining
+FETCH on draft 18, a fill on draft 22) and sends no FILL_TIMEOUT, so this
+half also adds the Rust-requester to JS-responder interop of these markers.
 
 Propagate an explicit FETCH max-delay as the upstream wait budget where
 the draft supports it. For omitted max-delay, retain the wire's omitted

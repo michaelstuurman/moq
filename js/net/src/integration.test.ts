@@ -214,7 +214,6 @@ test("integration: lite subscription options and updates reach the publisher", a
 	expect(producer.subscription.peek()).toEqual({
 		priority: 3,
 		maxDelay: Milli(250),
-		join: "current",
 		order: "descending",
 		groups: { start: { included: 1 }, end: { excluded: 9 } },
 	});
@@ -228,7 +227,6 @@ test("integration: lite subscription options and updates reach the publisher", a
 	expect(await updated).toEqual({
 		priority: 8,
 		maxDelay: Milli(500),
-		join: "current",
 		order: "descending",
 		groups: { start: { included: 2 }, end: { excluded: 12 } },
 	});

@@ -303,7 +303,7 @@ export class Frame {
 	 *
 	 * `offset` lets a stream's first object start past zero, reporting its absolute Object ID
 	 * in `idDelta` rather than throwing {@link ObjectIdGap}: that is the live tail of a group
-	 * whose head a joining FETCH brings.
+	 * whose head a joining FETCH or a fill brings.
 	 */
 	static decode(c: Cursor, flags: GroupFlags, timescale: Timescale | undefined, offset = false): Frame {
 		// The first object's delta is its absolute Object ID; every later one is the prior ID

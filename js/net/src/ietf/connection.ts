@@ -527,7 +527,7 @@ export class Connection implements Established {
 			return;
 		}
 
-		// The head of a draft-18 join, answering our joining FETCH.
+		// The head of a join, answering our draft-18 joining FETCH or draft-22 fill.
 		if (type === BigInt(FetchHeader.type)) {
 			await this.#subscriber.handleFetch(stream);
 			return;

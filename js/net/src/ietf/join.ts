@@ -8,7 +8,7 @@ export interface Head {
 }
 
 type State =
-	/** The joining FETCH is out, or about to be: a head may still come. */
+	/** The joining FETCH or the fill is out, or about to be: a head may still come. */
 	| { kind: "pending" }
 	/** The fetch stream is writing the head into the group. */
 	| { kind: "writing"; producer: netGroup.Producer; next: number }
@@ -20,16 +20,16 @@ type State =
 	| { kind: "ended" };
 
 /**
- * The draft-18 join of one live group: the head a joining FETCH brings and the live tail the
- * subscription delivers, stitched into one group.
+ * The join of one live group: the head a draft-18 joining FETCH or a draft-22 fill brings and
+ * the live tail the subscription delivers, stitched into one group.
  *
- * A Largest Object subscription starts after the Largest SUBSCRIBE_OK names, `{G, k}`, and
- * the joining FETCH ends at it, so the head carries objects `0..=k` and the tail starts at
+ * A Next Object subscription starts after the Largest SUBSCRIBE_OK names, `{G, k}`, and the
+ * head's fetch stream ends at it, so the head carries objects `0..=k` and the tail starts at
  * `k + 1`. The track has one producer per group, so the fetch stream creates group G and
  * writes the head as it arrives (readers see it at once: a catalog written once needs no
  * tail at all), and the tail takes that producer over here. A tail that arrives first waits.
  *
- * Mirrors the Rust subscriber's `Fill`. A refused, empty, or failed FETCH costs only G's
+ * Mirrors the Rust subscriber's `Fill`. A refused, empty, or failed head costs only G's
  * head: its mid-group tail is dropped like any headless stream, and later groups are whole.
  *
  * @internal
@@ -41,7 +41,8 @@ export class Join {
 	#state: State = { kind: "pending" };
 	// Tails parked on the head, woken synchronously so they hold the end before the head lets go.
 	#waiters: (() => void)[] = [];
-	// The subscription's end stays open while a head may still come.
+	// The subscription's end stays open while a head may still come, unless the Stream Count
+	// already waits for the head's stream.
 	#release: () => void;
 	#tail: Tail;
 	#settled: Promise<void>;
@@ -49,10 +50,15 @@ export class Join {
 	// A head still being written when the subscription ended cleanly, finished with its stream.
 	#ended?: netGroup.Producer;
 
-	constructor(sequence: number, tail: Tail) {
+	/**
+	 * `counted` says the head's stream is one of the subscription's own, which PUBLISH_DONE's
+	 * Stream Count includes: a draft-22 fill. A draft-18 joining FETCH is a request of its own,
+	 * so the join holds the end open for it instead.
+	 */
+	constructor(sequence: number, tail: Tail, { counted = false }: { counted?: boolean } = {}) {
 		this.sequence = sequence;
 		this.#tail = tail;
-		this.#release = tail.hold();
+		this.#release = counted ? () => {} : tail.hold();
 		this.#settled = new Promise((resolve) => {
 			this.#settle = resolve;
 		});
@@ -109,7 +115,7 @@ export class Join {
 		if (state.kind === "writing") {
 			this.#transition({ kind: "ready", producer: state.producer, next: state.next });
 		} else if (state.kind === "pending") {
-			// FETCH_OK and an empty stream: there is no head.
+			// An empty fetch stream: there is no head.
 			this.#transition({ kind: "done" });
 		}
 	}
@@ -127,7 +133,7 @@ export class Join {
 	}
 
 	/**
-	 * The FETCH was refused, timed out, or its request failed. A head already written stands;
+	 * The joining FETCH was refused or its request failed. A head already written stands;
 	 * one still being written cannot be trusted to finish.
 	 */
 	refuse(err: Error): void {
@@ -155,7 +161,7 @@ export class Join {
 			return true;
 		}
 		if (state.kind === "writing" || state.kind === "ready") {
-			console.warn(`a whole group arrived for one the joining FETCH already headed: group=${this.sequence}`);
+			console.warn(`a whole group arrived for one its fetch stream already headed: group=${this.sequence}`);
 			state.producer.abort(new Error("the publisher served the group's head twice"));
 			this.#transition({ kind: "done" });
 			return false;
@@ -188,7 +194,7 @@ export class Join {
 		if (state.kind !== "ready") return undefined;
 		if (start !== undefined && start !== state.next) {
 			console.warn(
-				`the joining FETCH does not meet the live tail: group=${this.sequence} head=${state.next} tail=${start}`,
+				`the head does not meet the live tail: group=${this.sequence} head=${state.next} tail=${start}`,
 			);
 			state.producer.abort(new Error("the head and the live tail do not meet"));
 			this.#transition({ kind: "done" });

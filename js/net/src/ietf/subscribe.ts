@@ -1,7 +1,7 @@
 import type * as Epoch from "../epoch.ts";
 import type * as Path from "../path.ts";
 import type { Reader, Writer } from "../stream.ts";
-import type { Join, Order } from "../track.ts";
+import type { Order } from "../track.ts";
 import * as Filter from "./filter.ts";
 import * as Message from "./message.ts";
 import * as Namespace from "./namespace.ts";
@@ -46,17 +46,19 @@ function decodeGroupOrder(value: number): Order {
 }
 
 /**
- * The filter this implementation joins a live track with.
+ * How this implementation joins a live track: at the current group, from its first object,
+ * as the Rust subscriber does.
  *
- * A `"next"` join asks for the next group on every draft (draft 18's Next Group Start). For
- * the `"current"` group, draft 18 joins at Largest Object, as the Rust subscriber does, and a
- * joining FETCH brings the group's head; spelling the filter keeps a peer from reading an
- * absent one its own way. Draft-22's relative form is the first that names the group start
- * without a FETCH.
+ * The subscription itself starts at the next object (draft 18's Largest Object), and the
+ * group's head comes on a fetch stream. Draft 22 asks for it with a fill one group back from
+ * the next, its current-group join (section 3.5); earlier drafts have no fill, so the
+ * subscriber sends a Relative Joining FETCH once SUBSCRIBE_OK names Largest. Spelling the
+ * filter keeps a peer from reading an absent one its own way.
  */
-export function joinFilter(version: IetfVersion, join: Join = "current"): Filter.Filter {
-	if (join === "next") return { kind: "relative", groups: 0n };
-	return Filter.isDraft22(version) ? { kind: "relative", groups: 1n } : { kind: "nextObject" };
+export function joinFilter(version: IetfVersion): { filter: Filter.Filter; fill?: Filter.Fill } {
+	const filter: Filter.Filter = { kind: "nextObject" };
+	if (!Filter.isDraft22(version)) return { filter };
+	return { filter, fill: { filter: { kind: "relative", groups: 1n }, rangeFilters: false } };
 }
 
 export class Subscribe {
