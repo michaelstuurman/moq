@@ -4,11 +4,6 @@ How to update your code for each breaking change, newest first.
 
 ## Unreleased
 
-### Bitrate and group duration hints
-
-`moq_audio_init` gains `hint` (a `moq_audio_hint` with `bitrate`/`has_bitrate` and `group_duration_us`/`has_group_duration`), `moq_video_hint` gains `group_duration_us`/`has_group_duration`, and `moq_json_snapshot_config`, `moq_json_stream_config`, and `moq_binary_config` gain `bitrate`/`has_bitrate`.
-The fields are appended, so a zero- or designated-initialized struct behaves as before: a bitrate it leaves out is still estimated, and HLS records still declare their duration from the first group. The struct layouts grow, so rebuild against the matching header and library.
-
 ### Paths with an empty segment are refused ([#6648](https://github.com/moq-dev/moq/pull/6648))
 
 Every function taking a path, such as `moq_origin_create_broadcast` and `moq_origin_request`, returns an error for a path with a leading, trailing, or doubled `/` instead of collapsing it. Pass the canonical path, such as `room/cam`.
