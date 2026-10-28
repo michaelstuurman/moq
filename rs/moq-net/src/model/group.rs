@@ -18,7 +18,7 @@ use super::flate;
 mod content;
 use crate::cache;
 use crate::frame::{self, Cached, FrameBuf, Payload};
-use crate::{Timescale, stats, track};
+use crate::{Timescale, stats, track, util::SendCell};
 use bytes::Bytes;
 #[cfg(all(feature = "async", any(test, feature = "fuzz")))]
 pub(crate) use content::StorageBench;
@@ -1090,7 +1090,9 @@ pub struct Producer {
 #[derive(Clone)]
 // Sessions need an abortable observer while public callers use Demand.
 pub(crate) struct Handle {
-	state: kio::Producer<GroupState>,
+	// The group's frames reach its track and cache account, so the cell proves `Send`
+	// once here instead of inside every session machine holding a group.
+	state: SendCell<kio::Producer<GroupState>>,
 	info: Info,
 	track: track::Info,
 	cache: Arc<cache::Track>,
@@ -1100,7 +1102,7 @@ pub(crate) struct Handle {
 /// A group the track no longer caches, held without keeping it open or allocated, so a
 /// track abort can still end it while its writer adds to it.
 pub(super) struct Detached {
-	state: kio::Weak<GroupState>,
+	state: SendCell<kio::Weak<GroupState>>,
 	info: Info,
 	track: track::Info,
 	cache: Arc<cache::Track>,
@@ -1111,7 +1113,7 @@ impl Detached {
 	/// The group, while it is neither finished nor aborted.
 	pub(super) fn writing(&self) -> Option<Handle> {
 		let handle = Handle {
-			state: self.state.upgrade()?,
+			state: SendCell::new(self.state.upgrade()?),
 			info: self.info,
 			track: self.track.clone(),
 			cache: self.cache.clone(),
@@ -1295,7 +1297,7 @@ impl Producer {
 		Self {
 			handle: Handle {
 				info,
-				state,
+				state: SendCell::new(state),
 				track,
 				cache,
 				alive,
@@ -1865,7 +1867,10 @@ impl Producer {
 		// An empty group counts as content once it ends.
 		self.handle.start(None);
 		// A finished group can no longer raise the track's largest, which may end its stream.
-		self.handle.cache.finish_largest(self.sequence);
+		// A copy a transport bound cut short finished only its own range.
+		if original_fin.is_some() {
+			self.handle.cache.finish_largest(self.sequence);
+		}
 		Ok(())
 	}
 
@@ -2257,7 +2262,7 @@ impl Handle {
 	/// This group as [`Detached`], for the track to end once it stops caching it.
 	pub(super) fn detach(&self) -> Detached {
 		Detached {
-			state: self.state.downgrade(),
+			state: SendCell::new(self.state.downgrade()),
 			info: self.info,
 			track: self.track.clone(),
 			cache: self.cache.clone(),
@@ -2579,6 +2584,9 @@ fn settle(poll: Poll<std::result::Result<Result<()>, kio::Ref<'_, GroupState>>>)
 
 /// A cloneable, watch-only handle to a group's readers.
 ///
+/// A frame being read counts as a reader of its group, and a group a track subscription
+/// or fetch handed out keeps that track wanted until a reader reads its end
+/// ([`track::Demand`]).
 /// Once every handle to a finished group is gone, demand waits end with
 /// [`Error::Dropped`]; an aborted group's keep its abort reason. Each clone watches on
 /// its own, so its first [`poll_wanted_changed`](Self::poll_wanted_changed) reports the
@@ -2916,11 +2924,15 @@ pub struct Consumer {
 	recover: Option<Box<super::resume::Recover>>,
 }
 
-/// Subscriber-specific policy for expiring a group after it was handed out.
+/// Subscriber-specific policy for a group after it was handed out: when it expires, and
+/// the track demand its readers hold until they read its end.
 ///
 /// Unwind safe so the [`Consumer`] holding it is, and so the published
 /// [`track::Fetching`] that holds a consumer stays unwind safe too.
 pub(super) trait Expiry: Send + Sync + std::panic::UnwindSafe + std::panic::RefUnwindSafe {
+	/// A reader read the group's end, so it no longer keeps the track wanted.
+	fn ended(&self) {}
+
 	/// Return whether the group is stale, registering `waiter` for anything that
 	/// could change the answer while the group remains live.
 	/// A logical reader supplies its current budget after the original copy is gone.
@@ -3324,7 +3336,8 @@ impl Consumer {
 	/// passed the [`Self::with_range`] cap.
 	pub fn poll_next_frame(&mut self, waiter: &kio::Waiter) -> Poll<Result<Option<frame::Consumer>>> {
 		if self.recover.is_none() {
-			return self.poll_next_frame_once(waiter);
+			let res = self.poll_next_frame_once(waiter);
+			return self.ended_on(res);
 		}
 		let res = self.poll_resumed(waiter, Self::poll_next_frame_once);
 		match (res, &self.recover) {
@@ -3332,7 +3345,25 @@ impl Consumer {
 			(Poll::Ready(Ok(Some(frame))), Some(recover)) => Poll::Ready(Ok(Some(
 				frame.with_recover((**recover).clone(), self.cursor.index as u64 - 1),
 			))),
-			(res, _) => res,
+			(res, _) => self.ended_on(res),
+		}
+	}
+
+	/// Pass a read through, releasing the track demand once it reached the group's end.
+	fn ended_on<T>(&self, res: Poll<Result<Option<T>>>) -> Poll<Result<Option<T>>> {
+		if let Poll::Ready(Ok(None)) = res {
+			self.release_if_finished();
+		}
+		res
+	}
+
+	/// Release the track demand this group holds once it finished, since the track owes it
+	/// nothing more. A range cap ends only this reader, and can be raised, so it keeps it.
+	fn release_if_finished(&self) {
+		if let Some(expiry) = &self.expiry
+			&& self.cursor.state.read().fin.is_some()
+		{
+			expiry.ended();
 		}
 	}
 
@@ -3366,10 +3397,11 @@ impl Consumer {
 		waiter: &kio::Waiter,
 		take: impl Fn(&mut Prefetch) -> Option<T> + Copy,
 	) -> Poll<Result<Option<T>>> {
-		if self.recover.is_none() {
-			return self.poll_read_frame_once(waiter, take);
-		}
-		self.poll_resumed(waiter, |this, waiter| this.poll_read_frame_once(waiter, take))
+		let res = match self.recover.is_none() {
+			true => self.poll_read_frame_once(waiter, take),
+			false => self.poll_resumed(waiter, |this, waiter| this.poll_read_frame_once(waiter, take)),
+		};
+		self.ended_on(res)
 	}
 
 	/// Read the next frame with its relay metadata, for wire egress.
@@ -3463,13 +3495,18 @@ impl Consumer {
 	/// An error means the frames this cursor has yet to read are gone (evicted, cut, or
 	/// failed upstream) and no route will continue them.
 	pub fn poll_finished(&mut self, waiter: &kio::Waiter) -> Poll<Result<u64>> {
-		if self.recover.is_none() {
-			return self.poll_finished_once(waiter);
+		let res = match self.recover.is_none() {
+			true => self.poll_finished_once(waiter),
+			false => self
+				.poll_resumed(waiter, |this, waiter| {
+					this.poll_finished_once(waiter).map(|res| res.map(Some))
+				})
+				.map(|res| res.map(|index| index.expect("finished with an index"))),
+		};
+		if let Poll::Ready(Ok(_)) = res {
+			self.release_if_finished();
 		}
-		let res = self.poll_resumed(waiter, |this, waiter| {
-			this.poll_finished_once(waiter).map(|res| res.map(Some))
-		});
-		res.map(|res| res.map(|index| index.expect("finished with an index")))
+		res
 	}
 
 	fn poll_finished_once(&mut self, waiter: &kio::Waiter) -> Poll<Result<u64>> {
