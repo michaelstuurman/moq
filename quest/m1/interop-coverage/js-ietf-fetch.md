@@ -19,7 +19,10 @@ Decided 2026-10-28 (maintainer): one [M] quest in m1, after
 [JS ranges](/quest/m1/subscribe-ranges/js.md), which turns `fetchGroup` into
 a one-range subscription. Map a past range to a standalone FETCH, the way
 Rust's subscriber does. Then add the native JS runtimes as subscribers to the
-`run_fetch_round` cells in the tail suite.
+`run_fetch_round` cells in the tail suite. Our publishers answer only one
+group ([one group](/quest/m1/ietf-publisher-one-group.md), 2026-10-28), so a
+past-range FETCH against them is refused. Test ranges against a third-party
+publisher, and one group against ours.
 
 Public API: none beyond JS ranges' surface. Wire: none.
 
