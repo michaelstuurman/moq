@@ -287,7 +287,7 @@ pub struct moq_video_hint {
 	/// Whether `coded_width` and `coded_height` are present.
 	pub has_coded: bool,
 
-	/// Maximum bitrate in bits per second when `has_bitrate` is true.
+	/// Maximum bitrate in bits per second when `has_bitrate` is true; it must not be 0.
 	pub bitrate: u64,
 	/// Whether `bitrate` is present.
 	pub has_bitrate: bool,
@@ -313,23 +313,21 @@ pub struct moq_video_hint {
 }
 
 impl moq_video_hint {
-	/// The catalog hint these flags describe.
-	fn resolve(&self) -> moq_mux::catalog::VideoHint {
+	/// The catalog hint these flags describe, or an error for a bitrate flag set with 0.
+	fn resolve(&self) -> Result<moq_mux::catalog::VideoHint, Error> {
 		let mut out = moq_mux::catalog::VideoHint::default();
 		if self.has_coded {
 			out.coded_width = Some(self.coded_width);
 			out.coded_height = Some(self.coded_height);
 		}
-		if self.has_bitrate {
-			out.bitrate = Some(self.bitrate);
-		}
+		out.bitrate = supplied_bitrate(self.has_bitrate, self.bitrate)?;
 		if self.has_framerate {
 			out.framerate = Some(self.framerate);
 		}
 		if self.has_optimize_for_latency {
 			out.optimize_for_latency = Some(self.optimize_for_latency);
 		}
-		out
+		Ok(out)
 	}
 
 	/// The supplied group duration, for the track's HLS records.
@@ -2433,7 +2431,7 @@ unsafe fn parse_video_init(
 
 	let mut video = moq_mux::import::VideoInit::new(video_format_from_u32(config.format)?, init.to_vec());
 	video.label = label.map(str::to_string);
-	video.hint = config.hint.resolve();
+	video.hint = config.hint.resolve()?;
 	Ok((video, config.hint.group_duration()?))
 }
 

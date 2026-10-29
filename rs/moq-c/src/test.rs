@@ -6955,6 +6955,14 @@ fn invalid_hints_are_refused() {
 		invalid,
 		"video group duration 0"
 	);
+	assert_eq!(
+		video(moq_video_hint {
+			has_bitrate: true,
+			..moq_video_hint::default()
+		}),
+		invalid,
+		"video bitrate 0"
+	);
 
 	let name = b"status";
 	let snapshot = |config: moq_json_snapshot_config| unsafe {
@@ -6971,10 +6979,9 @@ fn invalid_hints_are_refused() {
 		"data bitrate 0"
 	);
 
-	assert!(
-		published_catalog(broadcast).audio.renditions.is_empty(),
-		"nothing published"
-	);
+	let catalog = published_catalog(broadcast);
+	assert!(catalog.audio.renditions.is_empty(), "no audio published");
+	assert!(catalog.video.renditions.is_empty(), "no video published");
 	assert_eq!(moq_publish_close(broadcast), 0);
 	assert_eq!(moq_origin_close(origin), 0);
 }
