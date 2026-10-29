@@ -370,6 +370,66 @@ test("a head that does not meet its tail is refused", async () => {
 	expect(await group?.closed).toBeInstanceOf(Error);
 });
 
+/** A head whose objects after the first spell Object ID Delta `delta` (flag 0x04, no Group ID). */
+async function deltaHead(requestId: bigint, payloads: string[], delta: number) {
+	const bytes = await Writer.collect(VERSION, async (w) => {
+		await w.u62(requestId);
+		for (const [object, payload] of payloads.entries()) {
+			if (object === 0) {
+				await new FetchFrame({ payload: text(payload) }).encode(
+					w,
+					{ group: GROUP, object, first: true },
+					undefined,
+					VERSION,
+				);
+				continue;
+			}
+			const p = text(payload);
+			await w.write(new Uint8Array([0x04, delta, p.byteLength, ...p]));
+		}
+	});
+	return new Reader(undefined, bytes, VERSION);
+}
+
+test("a head that spells Object ID Delta 1 is contiguous", async () => {
+	const { subscriber, consumer, fetching, fetch } = await join();
+	if (!fetch) throw new Error("no fetch");
+	await accept(fetching);
+
+	await subscriber.handleFetch(await deltaHead(fetch.requestId, ["h0", "h1"], 1));
+	await subscriber.handleGroup(...liveStream(GROUP, 2, ["t2"]));
+
+	const group = await consumer.ordered().nextGroup();
+	expect(await frames(group)).toEqual(["h0", "h1", "t2"]);
+});
+
+test("a head that repeats an Object ID is dropped", async () => {
+	const { subscriber, consumer, fetching, fetch } = await join();
+	if (!fetch) throw new Error("no fetch");
+	await accept(fetching);
+
+	await subscriber.handleFetch(await deltaHead(fetch.requestId, ["h0", "h0"], 0));
+
+	const group = await consumer.ordered().nextGroup();
+	expect(await group?.closed).toBeInstanceOf(Error);
+});
+
+test("a tail that is only an End of Group finishes the head", async () => {
+	const { subscriber, consumer, fetching, fetch } = await join();
+	if (!fetch) throw new Error("no fetch");
+	await accept(fetching);
+
+	await subscriber.handleFetch(await head(fetch.requestId, ["h0", "h1"]));
+	const [header] = liveStream(GROUP, 2, []);
+	header.flags = flags(false);
+	// Object ID 2, an empty payload, then status End of Group.
+	await subscriber.handleGroup(header, new Reader(undefined, new Uint8Array([2, 0, 3]), VERSION));
+
+	const group = await consumer.ordered().nextGroup();
+	expect(await frames(group)).toEqual(["h0", "h1"]);
+	expect(await group?.closed).toBeNull();
+});
+
 test("a joining FETCH spanning another group drops the head", async () => {
 	const { subscriber, consumer, fetching, fetch } = await join();
 	if (!fetch) throw new Error("no fetch");

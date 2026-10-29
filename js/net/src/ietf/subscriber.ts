@@ -1594,8 +1594,12 @@ export class Subscriber {
 					const suspend = () => tail.suspend();
 					// No producer yet, so a closing group or track already returned above.
 					const object = frame instanceof Error ? undefined : (frame ?? undefined);
-					// The first object's ID is absolute: where in the group this stream starts.
-					const start = object?.payload !== undefined || object?.endOfTrack ? object.idDelta : undefined;
+					// The first object's ID is absolute: where in the group this stream starts. An End
+					// of Group there names where the group ends, past the head's last object.
+					const start =
+						object?.payload !== undefined || object?.endOfTrack || (object?.idDelta ?? 0) > 0
+							? object?.idDelta
+							: undefined;
 					if (start === 0 && object?.payload !== undefined) {
 						// The whole group: it stands alone unless the head already took the sequence.
 						if (!join.whole()) {
@@ -1765,7 +1769,8 @@ export class Subscriber {
 				}
 
 				// The first object names its group and Object ID outright; a later Group ID names
-				// another group, which a head of one group does not have.
+				// another group, which a head of one group does not have. A later Object ID Delta
+				// is added to the prior ID, so only 1 is the next object.
 				if (first) {
 					if (object.group !== join.sequence) {
 						throw new JoinUnsupported(`the head answered group ${object.group}, not ${join.sequence}`);
@@ -1773,7 +1778,7 @@ export class Subscriber {
 					if (object.object !== 0) throw new JoinUnsupported("the head does not start at object 0");
 				} else if (object.group !== undefined) {
 					throw new JoinUnsupported("a head spanning several groups cannot be stitched");
-				} else if (object.object !== undefined && object.object !== 0) {
+				} else if (object.object !== undefined && object.object !== 1) {
 					throw new JoinUnsupported("a gap in the head cannot be stitched");
 				}
 

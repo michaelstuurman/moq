@@ -351,10 +351,14 @@ export class Frame {
 			frame.hasProperties = hasProperties;
 			return frame;
 		}
-		if (delta !== 0 && !(offset && status === 0)) throw new ObjectIdGap(delta);
+		if (delta !== 0 && !(offset && (status === 0 || status === GROUP_END))) throw new ObjectIdGap(delta);
 		// Allowed even when the header marks the group's end: that bit only lets a FIN imply it,
 		// and imquic sends both.
-		if (status === GROUP_END) return new Frame();
+		if (status === GROUP_END) {
+			const frame = new Frame();
+			frame.idDelta = delta;
+			return frame;
+		}
 
 		if (status === 0) {
 			const frame = new Frame({ payload: new Uint8Array(0), timestamp });
