@@ -289,6 +289,49 @@ test("a joining FETCH has no deadline of its own", async () => {
 	expect(await frames(group)).toEqual(["h0", "h1", "t2"]);
 });
 
+test("a joining FETCH reset after FETCH_OK costs only the head", async () => {
+	const { subscriber, consumer, fetching, peer } = await join();
+	const started = performance.now();
+
+	const tail = subscriber.handleGroup(...liveStream(GROUP, 2, ["t2"]));
+	await accept(fetching);
+	// No fetch stream ever comes.
+	fetching?.writer.reset(new Error("gone"));
+	await tail;
+	await subscriber.handleGroup(...liveStream(GROUP + 1, 0, ["n0"]));
+	await peer.writer.u53(PublishDone.id);
+	const done = new PublishDone({ statusCode: PublishDoneStatus.TRACK_ENDED, streamCount: 2n, reasonPhrase: "done" });
+	await done.encode(peer.writer, VERSION);
+
+	// The parked tail was dropped and nothing holds the end open.
+	const group = await consumer.recvGroup();
+	expect(group?.sequence).toBe(GROUP + 1);
+	expect(await consumer.recvGroup()).toBeUndefined();
+	expect(await consumer.closed).toBeNull();
+	expect(performance.now() - started).toBeLessThan(GRACE);
+});
+
+test("SUBSCRIPTION_ENDED cancels a head nothing claimed", async () => {
+	const { subscriber, consumer, fetching, fetch, peer } = await join();
+	if (!fetch) throw new Error("no fetch");
+	await accept(fetching);
+	await subscriber.handleFetch(await head(fetch.requestId, ["h0", "h1"]));
+	const group = await consumer.ordered().nextGroup();
+	expect(group?.sequence).toBe(GROUP);
+
+	// The group may run past the head upstream, so it must not read as whole.
+	await subscriber.handleGroup(...liveStream(GROUP + 1, 0, ["n0"]));
+	await peer.writer.u53(PublishDone.id);
+	const done = new PublishDone({
+		statusCode: PublishDoneStatus.SUBSCRIPTION_ENDED,
+		streamCount: 1n,
+		reasonPhrase: "done",
+	});
+	await done.encode(peer.writer, VERSION);
+	expect(await consumer.closed).toBeInstanceOf(Error);
+	await expect(frames(group)).rejects.toThrow();
+});
+
 test("a whole group that precedes the head wins the sequence", async () => {
 	const { subscriber, consumer, fetching, fetch } = await join();
 	if (!fetch) throw new Error("no fetch");

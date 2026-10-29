@@ -977,7 +977,7 @@ export class Subscriber {
 			);
 		} finally {
 			joining.abort();
-			// A clean end already settled the head; anything else leaves it for a later join.
+			// A track end already settled the head; anything else leaves it for a later join.
 			subscription.join?.cancel(new Error("subscription ended"));
 			for (const id of subscription.fetchIds) this.#fetches.delete(id);
 			disposeGrant?.();
@@ -1034,14 +1034,16 @@ export class Subscriber {
 		const { tail, track, join } = subscription;
 		const complete = () => count > 0n && BigInt(tail.streams) >= count;
 		await tail.settle(complete, hooks.trackReleased(track));
-		// Every stream is accounted for, so no tail is coming: a head nothing claimed is its
-		// whole group. A draft-18 joining FETCH is not in the Stream Count; its head held the settle.
-		if (hooks.trackReleased(track).peek() === undefined) join?.end();
 		// SUBSCRIPTION_ENDED ends just this subscription, so the copy fails rather than declare an
 		// end the track may run past: a later reader subscribes afresh, and its groups continue.
+		// A head nothing claimed may be run past the same way, so it is cancelled, not finished.
 		if (done.statusCode !== PublishDoneStatus.TRACK_ENDED) {
 			throw new Error(`publish done: subscription ended reason=${done.reasonPhrase}`);
 		}
+		// The track ended and every stream is accounted for, so no tail is coming: a head nothing
+		// claimed is its whole group. A draft-18 joining FETCH is not in the Stream Count; its
+		// head held the settle.
+		if (hooks.trackReleased(track).peek() === undefined) join?.end();
 	}
 
 	/**
@@ -1177,8 +1179,16 @@ export class Subscriber {
 				throw new ProtocolViolation(`malformed FETCH_OK: ${reason(error(err))}`);
 			}
 
-			// The answer is in; the head arrives on the fetch stream, or never.
-			await untilAborted(join.settled, signal);
+			// The answer is in; the head arrives on the fetch stream, or never. The request stays
+			// read meanwhile: a reset means its fetch stream cannot be trusted to come, while a
+			// FIN only ends the publisher's half.
+			const ended = request.next().then((framed) => {
+				if (framed !== undefined) {
+					throw new ProtocolViolation(`unexpected message after FETCH_OK: 0x${framed.type.toString(16)}`);
+				}
+				return join.settled;
+			});
+			await untilAborted(Promise.race([join.settled, ended]), signal);
 			request.close();
 		} catch (err) {
 			const e = error(err);

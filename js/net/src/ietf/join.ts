@@ -16,7 +16,7 @@ type State =
 	| { kind: "ready"; producer: netGroup.Producer; next: number }
 	/** No head is coming: refused, empty, failed, claimed, or the subscription went. */
 	| { kind: "done" }
-	/** The subscription ended cleanly, so no tail is coming and a head is the whole group. */
+	/** The track ended, so no tail is coming and a head is the whole group. */
 	| { kind: "ended" };
 
 /**
@@ -47,7 +47,7 @@ export class Join {
 	#tail: Tail;
 	#settled: Promise<void>;
 	#settle!: () => void;
-	// A head still being written when the subscription ended cleanly, finished with its stream.
+	// A head still being written when the track ended, finished with its stream.
 	#ended?: netGroup.Producer;
 
 	/**
@@ -88,7 +88,7 @@ export class Join {
 	 */
 	open(create: () => netGroup.Producer): netGroup.Producer | undefined {
 		const { kind } = this.#state;
-		// After a clean end the head still lands, as the whole group.
+		// After the track ended the head still lands, as the whole group.
 		if (kind !== "pending" && kind !== "ended") return undefined;
 		const producer = create();
 		if (kind === "ended") {
@@ -205,7 +205,7 @@ export class Join {
 	}
 
 	/**
-	 * The subscription ended cleanly and its streams are accounted for, so no tail is coming:
+	 * The track ended and the subscription's streams are accounted for, so no tail is coming:
 	 * a head nothing claimed is the whole group, and one still being written will be.
 	 */
 	end(): void {
@@ -216,7 +216,7 @@ export class Join {
 	}
 
 	/**
-	 * The subscription went without a clean end. Abort a head nothing claimed rather than
+	 * The subscription went without the track ending. Abort a head nothing claimed rather than
 	 * finish it: the group may still be open upstream, and a later join can serve it whole.
 	 */
 	cancel(err: Error): void {
