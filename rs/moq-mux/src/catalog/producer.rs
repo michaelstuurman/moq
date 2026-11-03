@@ -1541,7 +1541,63 @@ fn to_msf_media<E: CatalogExt>(catalog: &hang::Catalog, base: &moq_net::Path) ->
 			}
 		}
 	}
-	moq_msf::Catalog::with_ext(unique, E::default())
+	let mut msf = moq_msf::Catalog::with_ext(unique, E::default());
+	protect(&mut msf.tracks, &mut msf.content_protections);
+	msf
+}
+
+/// Signal the Common Encryption of every track whose CMAF init segment is encrypted
+/// (draft-ietf-moq-cmsf section 4): one root entry per DRM system, scheme and default key,
+/// which each protected track references.
+///
+/// The entries come from the init segment's `schm`, `tenc` and `pssh` boxes; a license or
+/// certificate URL is deployment configuration that the media doesn't carry.
+fn protect(tracks: &mut [moq_msf::Track], entries: &mut Vec<moq_msf::ContentProtection>) {
+	for track in tracks {
+		let Some(init) = track
+			.init_data
+			.as_deref()
+			.and_then(|data| base64::engine::general_purpose::STANDARD.decode(data).ok())
+		else {
+			continue;
+		};
+		let Some(protection) = crate::container::fmp4::cenc::protection(&init) else {
+			continue;
+		};
+		if protection.systems.is_empty() {
+			tracing::warn!(track = %track.name, "encrypted track has no pssh box, so its DRM system can't be signalled");
+			continue;
+		}
+		let kid = vec![protection.default_kid];
+		for (system_id, pssh) in protection.systems {
+			let existing = entries
+				.iter()
+				.find(|entry| {
+					entry.drm_system.system_id == system_id
+						&& entry.scheme == protection.scheme
+						&& entry.default_kid == kid
+				})
+				.map(|entry| entry.ref_id.clone());
+			let ref_id = match existing {
+				Some(ref_id) => ref_id,
+				None => {
+					let ref_id = (entries.len() + 1).to_string();
+					let mut entry = moq_msf::ContentProtection::new(
+						ref_id.clone(),
+						kid.clone(),
+						protection.scheme.clone(),
+						system_id,
+					);
+					entry.drm_system.pssh = Some(pssh);
+					entries.push(entry);
+					ref_id
+				}
+			};
+			if !track.content_protection_ref_ids.contains(&ref_id) {
+				track.content_protection_ref_ids.push(ref_id);
+			}
+		}
+	}
 }
 
 #[cfg(test)]

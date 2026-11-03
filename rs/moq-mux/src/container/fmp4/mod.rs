@@ -6,6 +6,7 @@
 //! container; [`Import`] parses external fMP4 streams and [`Export`]
 //! produces them.
 
+pub(crate) mod cenc;
 mod edit;
 mod export;
 pub mod fragment;
@@ -154,6 +155,15 @@ pub enum Error {
 	/// The sample entry has an unrecognized codec four-character code.
 	#[error("unknown codec: {0:?}")]
 	UnknownCodec(mp4_atom::FourCC),
+
+	/// An encrypted (`encv`/`enca`) sample entry that doesn't describe its original format.
+	#[error("invalid protected sample entry: {0}")]
+	InvalidProtection(&'static str),
+
+	/// Encrypted samples carry their per-sample IVs in the fragment's `senc`, which only
+	/// passthrough keeps; unwrapped samples would be undecryptable.
+	#[error("encrypted fMP4 needs passthrough (CMAF) import")]
+	ProtectedNeedsPassthrough,
 
 	/// A `colr` box code point past H.273's 255.
 	#[error("invalid colr code point: {0}")]

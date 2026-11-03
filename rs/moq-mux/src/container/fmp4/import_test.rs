@@ -3940,3 +3940,94 @@ async fn declared_boundaries_do_not_split_passthrough_fragments() {
 		);
 	}
 }
+
+/// An encrypted (CENC) fMP4 imports in passthrough under its original codecs; each track's init
+/// segment keeps the encrypted sample entry and the ClearKey `pssh`, and the MSF catalog signals
+/// the protection (draft-ietf-moq-cmsf section 4).
+#[test]
+fn encrypted_passthrough_signals_content_protection() {
+	let catalog = run_fmp4_passthrough(include_bytes!("test_data/cenc-clearkey.mp4"));
+	let (_, video) = catalog.video.renditions.iter().next().expect("the video track imports");
+	let (_, audio) = catalog.audio.renditions.iter().next().expect("the audio track imports");
+	assert!(video.codec.to_string().starts_with("avc1"), "{}", video.codec);
+	assert!(audio.codec.to_string().starts_with("mp4a"), "{}", audio.codec);
+
+	let hang::catalog::Container::Cmaf { init, .. } = &video.container else {
+		panic!("passthrough publishes CMAF");
+	};
+	assert!(
+		init.windows(4).any(|w| w == b"encv"),
+		"the init keeps the encrypted entry"
+	);
+	assert!(init.windows(4).any(|w| w == b"pssh"), "the init keeps the pssh");
+
+	let msf = crate::catalog::to_msf(&catalog, &moq_net::Path::empty());
+	assert_eq!(msf.content_protections.len(), 1, "both tracks share one key and system");
+	let entry = &msf.content_protections[0];
+	assert_eq!(entry.scheme, "cenc");
+	assert_eq!(entry.default_kid, ["a1b2c3d4-e5f6-0718-293a-4b5c6d7e8f90"]);
+	assert_eq!(entry.drm_system.system_id, "1077efec-c0b2-4d02-ace3-3c1e52e2fb4b");
+	assert!(entry.drm_system.pssh.is_some());
+	for track in &msf.tracks {
+		assert_eq!(
+			track.content_protection_ref_ids,
+			std::slice::from_ref(&entry.ref_id),
+			"{}",
+			track.name
+		);
+	}
+	// What a reader parses back is what was written.
+	let wire: moq_msf::Catalog = msf.to_json().unwrap().parse().unwrap();
+	assert_eq!(wire.content_protections, msf.content_protections);
+}
+
+/// Without passthrough the importer would unwrap samples and lose their per-sample IVs, so an
+/// encrypted file is refused rather than published undecryptable.
+#[test]
+fn encrypted_unwrapped_import_is_refused() {
+	let mut broadcast = moq_net::broadcast::Info::new().produce();
+	let catalog = crate::catalog::Producer::new(&mut broadcast, crate::catalog::Config::default()).unwrap();
+	let mut fmp4 = crate::container::fmp4::Import::new(broadcast, catalog.reserve());
+	let err = fmp4
+		.decode(&include_bytes!("test_data/cenc-clearkey.mp4")[..])
+		.unwrap_err();
+	assert!(
+		matches!(
+			err,
+			crate::Error::Cmaf(crate::container::fmp4::Error::ProtectedNeedsPassthrough)
+		),
+		"{err:?}"
+	);
+}
+
+/// Passthrough re-encodes each encrypted fragment, which moves `senc`; every published fragment's
+/// `saio` still points at its first IV, so a player that reads the IVs through `saio` decrypts.
+#[tokio::test]
+async fn encrypted_fragments_keep_saio_on_their_ivs() {
+	let mut broadcast = moq_net::broadcast::Info::new().produce();
+	let consumer = broadcast.consume();
+	let catalog = crate::catalog::Producer::new(&mut broadcast, crate::catalog::Config::default()).unwrap();
+	let mut fmp4 = crate::container::fmp4::Import::new(broadcast, catalog.reserve()).with_passthrough(true);
+	fmp4.decode(&include_bytes!("test_data/cenc-clearkey.mp4")[..]).unwrap();
+	fmp4.finish().unwrap();
+
+	let snapshot = catalog.snapshot();
+	let names = [
+		snapshot.video.renditions.keys().next().unwrap().clone(),
+		snapshot.audio.renditions.keys().next().unwrap().clone(),
+	];
+	for name in names {
+		let mut track = consumer.track(&name).unwrap().subscribe(replay()).await.unwrap();
+		let mut checked = 0;
+		while let Some(mut group) = track.recv_group().now_or_never().and_then(|r| r.ok().flatten()) {
+			while let Some(frame) = group.read_frame().now_or_never().and_then(|r| r.ok().flatten()) {
+				let moof = mp4_atom::Moof::decode(&mut frame.payload.as_ref()).unwrap();
+				let saio = &moof.traf[0].saio[0];
+				let ivs = super::cenc::senc_iv_offset(&frame.payload).unwrap();
+				assert_eq!(saio.offsets, [ivs], "{name}");
+				checked += 1;
+			}
+		}
+		assert!(checked > 0, "{name} published fragments");
+	}
+}

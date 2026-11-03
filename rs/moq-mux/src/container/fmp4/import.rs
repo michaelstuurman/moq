@@ -67,6 +67,8 @@ pub struct Import<E: crate::catalog::hang::CatalogExt = ()> {
 
 	// The moov atom at the start of the file.
 	moov: Option<Moov>,
+	/// The moov's `pssh` boxes, which `Moov` doesn't keep, for each passthrough track's init.
+	pssh: Vec<bytes::Bytes>,
 
 	// The latest moof header
 	moof: Option<Moof>,
@@ -274,6 +276,7 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 			text: HashMap::default(),
 			skipped: HashSet::default(),
 			moov: None,
+			pssh: Vec::new(),
 			moof: None,
 			moof_span: 0,
 			broadcast,
@@ -503,6 +506,7 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 	// Parse a held moov or moof body once its last byte has arrived.
 	fn end_metadata(&mut self, kind: mp4_atom::FourCC, body: Bytes, header_size: usize) -> Result<()> {
 		if kind == Moov::KIND {
+			self.pssh = super::cenc::pssh_boxes(&body);
 			return self.init(Moov::decode_body(&mut body.as_ref())?);
 		}
 		if self.moof.is_some() {
@@ -742,6 +746,13 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 			// again would shift the track twice.
 			let mut trak = trak.clone();
 			trak.edts = None;
+			// mp4-atom can't encode an encrypted entry: encode the original, then swap it back.
+			let entry = trak.mdia.minf.stbl.stsd.codecs.first().cloned();
+			let original = entry.as_ref().map(super::cenc::unwrap).transpose()?.flatten();
+			let encrypted = original.is_some().then_some(entry).flatten();
+			if let Some(original) = original {
+				trak.mdia.minf.stbl.stsd.codecs[0] = original;
+			}
 
 			let single_moov = Moov {
 				mvhd: moov.mvhd.clone(),
@@ -758,6 +769,13 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 			let mut buf = Vec::new();
 			ftyp.encode(&mut buf)?;
 			single_moov.encode(&mut buf)?;
+			if let Some(encrypted) = &encrypted {
+				super::cenc::restore_entry(&mut buf, encrypted)?;
+			}
+			// A protected track's DRM systems need their pssh boxes to start a license request.
+			if encrypted.is_some() {
+				super::cenc::append_to_moov(&mut buf, &self.pssh);
+			}
 
 			Ok(Container::Cmaf { init: buf.into() })
 		}
@@ -772,6 +790,8 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 			1 => &stsd.codecs[0],
 			_ => return Err(Error::MultipleCodecs.into()),
 		};
+		let unwrapped = self.unprotect(codec)?;
+		let codec = unwrapped.as_ref().unwrap_or(codec);
 
 		let (mut config, colr, pasp, spatial) = match codec {
 			mp4_atom::Codec::Avc1(avc1) => (
@@ -922,6 +942,25 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 		Ok(config)
 	}
 
+	/// The original sample entry behind an encrypted (`encv`/`enca`) one, `None` for a clear one.
+	///
+	/// The catalog describes the protected track by its real codec; the init segment keeps the
+	/// encrypted entry and its `sinf`, which a decrypting player needs.
+	fn unprotect(&self, codec: &mp4_atom::Codec) -> Result<Option<mp4_atom::Codec>> {
+		let Some(original) = super::cenc::unwrap(codec)? else {
+			return Ok(None);
+		};
+		if !self.passthrough {
+			return Err(Error::ProtectedNeedsPassthrough.into());
+		}
+		// Without a pssh the catalog can't name a DRM system, and a track it lists without
+		// protection references reads as clear (CMSF 4.1.2).
+		if self.pssh.is_empty() {
+			return Err(Error::InvalidProtection("encrypted track without a pssh box").into());
+		}
+		Ok(Some(original))
+	}
+
 	fn init_audio(&mut self, trak: &Trak, moov: &Moov) -> Result<AudioConfig> {
 		let container = self.container(trak, moov)?;
 		let stsd = &trak.mdia.minf.stbl.stsd;
@@ -931,6 +970,8 @@ impl<E: crate::catalog::hang::CatalogExt> Import<E> {
 			1 => &stsd.codecs[0],
 			_ => return Err(Error::MultipleCodecs.into()),
 		};
+		let unwrapped = self.unprotect(codec)?;
+		let codec = unwrapped.as_ref().unwrap_or(codec);
 
 		let config = match codec {
 			mp4_atom::Codec::Mp4a(mp4a) => {
@@ -1491,6 +1532,35 @@ fn fragment(traf: &mp4_atom::Traf, moof: &Moof, run: &Run, defaults: &sample::De
 		}
 	}
 
+	// An encrypted fragment's saio addresses its IVs in senc, which re-encoding moves. mp4-atom
+	// writes senc ahead of trun and saio, so pointing saio there leaves the IVs where they are.
+	if let Some(traf) = adjusted_moof.traf.first() {
+		let cenc = traf.saio.iter().filter(|saio| super::cenc::is_cenc_saio(saio)).count();
+		match (traf.senc.is_some(), cenc) {
+			(_, 0) => {}
+			(true, 1) => {
+				let mut probe = Vec::new();
+				adjusted_moof.encode(&mut probe)?;
+				let ivs = super::cenc::senc_iv_offset(&probe)
+					.ok_or(Error::InvalidProtection("rebuilt fragment has no senc"))?;
+				for saio in adjusted_moof.traf[0]
+					.saio
+					.iter_mut()
+					.filter(|saio| super::cenc::is_cenc_saio(saio))
+				{
+					// The IVs in senc are contiguous, so one offset addresses every run's.
+					saio.offsets = vec![ivs];
+				}
+			}
+			// The IVs sit in the source's mdat or a box mp4-atom drops, so the rebuilt fragment
+			// would lose them.
+			(false, _) => return Err(Error::InvalidProtection("encryption information outside senc").into()),
+			(true, _) => {
+				return Err(Error::InvalidProtection("several saio boxes for the encryption information").into());
+			}
+		}
+	}
+
 	let mut moof_buf = Vec::new();
 	adjusted_moof.encode(&mut moof_buf)?;
 	let new_moof_size = moof_buf.len();
@@ -1524,6 +1594,7 @@ fn fragment(traf: &mp4_atom::Traf, moof: &Moof, run: &Run, defaults: &sample::De
 	adjusted_moof.encode(&mut moof_buf)?;
 	// Each data_offset was reserved above, so restating them keeps the moof's size.
 	debug_assert_eq!(moof_buf.len(), new_moof_size);
+
 	moof_buf.extend_from_slice(&mdat);
 
 	Ok(Bytes::from(moof_buf))
@@ -1533,9 +1604,13 @@ fn fragment(traf: &mp4_atom::Traf, moof: &Moof, run: &Run, defaults: &sample::De
 ///
 /// Each sample keeps its decode and composition time: `tfdt` starts at the first kept sample, and
 /// each kept sample lasts until the next one decodes. The per-sample tables (`sbgp`,
-/// `subs`, sample auxiliary information) would index the wrong samples, and no consumer reads
-/// them, so they go.
+/// `subs`, sample auxiliary information) would index the wrong samples, and no consumer of a
+/// clear track reads them, so they go. An encrypted track needs its per-sample IVs, so it is
+/// refused instead.
 fn kept(traf: &mp4_atom::Traf, run: &Run) -> Result<mp4_atom::Traf> {
+	if traf.senc.is_some() || traf.saio.iter().any(super::cenc::is_cenc_saio) {
+		return Err(Error::InvalidProtection("an edit list drops samples from an encrypted track").into());
+	}
 	let mut entries = Vec::with_capacity(run.samples.len());
 	for (index, sample) in run.samples.iter().enumerate() {
 		let duration = match run.samples.get(index + 1) {
